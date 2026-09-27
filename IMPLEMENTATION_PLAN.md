@@ -10,7 +10,7 @@ A browser-based, **FAA ERAM-styled** monitor for VATSIM traffic. The user picks 
 
 1. **Inbound list** – aircraft outside the airspace predicted to enter it, sorted by time-to-entry.
 2. **Outbound list** – aircraft inside the airspace, with predicted time-to-exit and the facility they will exit into.
-3. **Exit alert** – when an aircraft is **≤ 2:00** from exiting, play an **aural alert** and show a **visual alert** that identifies the aircraft, the time remaining, the **exit point** on the boundary, and the **next facility** (e.g. `DAL123 EXIT ZME→ZID 01:52`).
+3. **Exit alert** – when an aircraft is **≤ 2:00** from exiting, play an **aural alert** and show a **visual alert** that identifies the aircraft, the time remaining, the **exit point** on the boundary, the **direction of exit**, and the **airspace it is exiting into** (e.g. `DAL123 ZME→ZKC N 01:52` = leaving ZME northbound into Kansas City Center). The exit-into airspace is a first-class requirement — see §5.9.
 4. **Scope** – a radar-style display of the selected airspace, neighboring boundaries, targets, datablocks, and exit points.
 
 The user MUST be able to switch airspaces at any time, across the whole United States, without reloading.
@@ -173,7 +173,8 @@ if inside:
     exit = crossings[0]                    # first crossing leaves the airspace
     timeToExit = exit.distAlong / gs * 3600
     exitPoint  = exit.point
-    nextFacility = facilityAt(point 1 nm beyond exitPoint along path)
+    nextFacility = resolveExitInto(exitPoint, track)   # §5.9
+    exitDir      = compass8(track at exitPoint)        # §5.9
 else:
     entry = crossings[0]                   # first crossing enters it
     timeToEntry = entry.distAlong / gs * 3600
@@ -196,6 +197,41 @@ Optional floor/ceiling filter (default: none). E.g. a user can hide aircraft bel
 ### 5.8 Accuracy expectations (document in the UI's About text)
 Straight-line dead reckoning is accurate within ~±15–30 s for aircraft on a straight segment, and poor for aircraft about to turn. That is acceptable for v1. Route-based prediction is Phase 2 (§11).
 
+### 5.9 Exit-into airspace (REQUIRED)
+Every outbound aircraft MUST show which airspace it will exit into, e.g. an aircraft leaving ZME to the north shows **ZKC** (Kansas City).
+
+**`resolveExitInto(exitPoint, track)`** in `core/facilityLookup.ts`:
+1. Probe points just past the boundary along the aircraft's projected path at **1 nm, 3 nm, 5 nm** beyond `exitPoint`.
+2. For each probe, run `facilityAt(probe)` against base ARTCCs + neighboring non-US FIRs (sub-areas excluded, §3.2), **ignoring the selected airspace itself** (guards against numeric noise right on the line).
+3. Return the first hit. If the probes disagree (exit near a corner where 3 ARTCCs meet), use the 3 nm result.
+4. If none contains the probe: return `{ id: "OCN" }` when the probe is over water within an oceanic feature, else `{ id: "UNK" }`.
+
+Returned object (stored on the prediction):
+```ts
+interface ExitInto {
+  id: string;        // bundle id, e.g. "KZKC", "CZWG", "KZNY-OCN"
+  label: string;     // display id: FAA 3-letter for US ("ZKC"), ICAO for foreign ("CZWG"), "OCN"/"UNK"
+  name: string;      // "KANSAS CITY", "WINNIPEG"
+  staffed: boolean;  // a CTR controller for it is online (§5.5)
+  controller?: { callsign: string; frequency: string }; // first online CTR, e.g. KC_12_CTR 127.900
+}
+```
+**Exit direction:** `compass8(track)` → `N NE E SE S SW W NW` from the aircraft's track at the exit point (for straight-line prediction, that is the current track).
+
+**Where the exit-into airspace MUST appear:**
+| Place | Format |
+|---|---|
+| OUTBOUND list | `TO` column = `ZKC`, plus `DIR` column = `N`; staffed → normal text, unstaffed → dimmed |
+| Datablock line 4 | `ZKC 01:52` (alert color when ≤ 2:00) |
+| Alert list | `DAL123  B738  350  ZME→ZKC  N  01:52  KC_12_CTR 127.90` (controller only if staffed) |
+| Scope exit marker | `X` on boundary at `exitPoint` labeled `ZKC` |
+| Voice (optional) | "Delta one two three, exiting north into Kansas City, two minutes." |
+| Flight plan readout | `EXIT ZKC (KANSAS CITY) N 01:52` |
+
+**Exit summary strip** (top of OUTBOUND window): count of outbound aircraft per exit-into airspace within the horizon, e.g. `ZKC 3  ZID 5  ZTL 1  ZHU 2`. Clicking an entry filters the list to that airspace; click again to clear. This gives a quick "who is handing off where" picture.
+
+**Stability:** the exit-into value is recomputed every poll. If it changes (aircraft turned), update it; if the aircraft is in ACTIVE/ACKED alert state, the alert line updates in place and does **not** re-fire the sound.
+
 ---
 
 ## 6. Alerts
@@ -215,13 +251,13 @@ ACTIVE|ACKED ──(timeToExit > EXIT_ALERT_S + 30 s, e.g. aircraft turned)─�
 
 ### 6.2 Visual
 - Outbound list row: alert color background/flash (1 Hz) while ACTIVE; steady alert-color text when ACKED.
-- **Alert List window** (styled like ERAM's Conflict Alert list): `DAL123  B738  FL350  EXIT ZID  01:52` sorted by time.
-- Scope: datablock time field flashes; draw an **exit marker** (small `X` or circle) at `exitPoint` on the boundary, and a thin line from the target to it; label the neighboring facility near the marker (`ZID`).
+- **Alert List window** (styled like ERAM's Conflict Alert list): `DAL123  B738  350  ZME→ZKC  N  01:52  KC_12_CTR 127.90` sorted by time (format per §5.9).
+- Scope: datablock time field flashes; draw an **exit marker** (small `X` or circle) at `exitPoint` on the boundary, and a thin line from the target to it; label the exit-into airspace near the marker (`ZKC`), and briefly brighten that neighbor's boundary while any alert into it is ACTIVE.
 - Top-of-screen banner is NOT ERAM-like; don't add one.
 
 ### 6.3 Aural (`alertAudio.ts`)
 - Synthesize with Web Audio: default = two-tone chime (e.g. 880 Hz 150 ms, 660 Hz 150 ms, sine with short attack/release). Provide 2–3 selectable tones and a volume slider.
-- Optional voice (`speechSynthesis`, default off): "Delta one two three, exiting to Indianapolis, two minutes." Use phonetic callsign expansion for airline ICAO codes only if trivial; otherwise speak the letters.
+- Optional voice (`speechSynthesis`, default off): "Delta one two three, exiting north into Kansas City, two minutes." Use phonetic callsign expansion for airline ICAO codes only if trivial; otherwise speak the letters.
 - **Browsers block audio until a user gesture.** On load, show an ERAM-styled overlay "CLICK TO ENABLE AURAL ALERTS"; resume the `AudioContext` on click. If the context is suspended later, show an `AUDIO OFF` indicator in the toolbar.
 - Global mute toggle in the toolbar.
 
@@ -270,7 +306,7 @@ Goal: it should *feel* like an ERAM display (as seen in vNAS CRC's ERAM mode, th
   DAL123
   350C            ← altitude in hundreds; C = level, ↑/↓ climbing/descending (from altitude history)
   B738 452        ← type, ground speed
-  X ZID 01:52     ← outbound: exit facility + ETX   |   inbound: "E 07:14" = time to entry
+  ZKC 01:52       ← outbound: exit-into airspace + ETX   |   inbound: "E 07:14" = time to entry
   ```
   Leader line from target to datablock; allow click-drag to reposition a datablock (nice-to-have).
 - Limited datablock (callsign + altitude only) for everything else inside the prefilter area.
@@ -281,7 +317,9 @@ Goal: it should *feel* like an ERAM display (as seen in vNAS CRC's ERAM mode, th
   `CALLSIGN  TYPE  ALT  GS   FROM  ETE    DEST`
   e.g. `AAL456    A321  340  478  ZTL   07:14  KORD`
 - **OUTBOUND** (sorted by ETX ascending):
-  `CALLSIGN  TYPE  ALT  GS   TO    ETX    DEST  FLG`
+  `CALLSIGN  TYPE  ALT  GS   TO    DIR  ETX    DEST  FLG`
+  e.g. `DAL123    B738  350  452  ZKC   N    01:52  KMCI`
+  `TO` = exit-into airspace (§5.9). Summary strip above the header (§5.9).
   `FLG` = `ARR` (landing inside), `TRN` (turning / low confidence).
 - Times `MM:SS`; above 60 min show `H+MM`.
 - Header shows counts: `INBOUND 12 / 30 MIN`.
@@ -322,6 +360,8 @@ User-changeable settings (persisted): horizon, alert threshold, entry alert on/o
    - `track.ts`: track derived from positions vs. heading fallback; turn detection.
    - `alerts.ts`: NONE→ACTIVE at 120 s, no re-fire while jittering 118–125 s, re-arm after > 150 s, EXITED transition, one sound for simultaneous alerts.
    - `facilityLookup.ts`: known points (e.g. Memphis airport 35.04,-89.98 → KZME; Indianapolis 39.72,-86.29 → KZID; a point in Canada → CZ**).
+   - `resolveExitInto`: aircraft in ZME near 36.5N/-90.0W tracking 360° → `ZKC` + `N`; tracking 045° from near the ZME/ZID line → `ZID`; aircraft in ZMP tracking north → a Canadian FIR (`CZWG`); aircraft in ZJX tracking east off the coast → the oceanic/`OCN` or ZNY/ZMA oceanic label, never the selected airspace itself; tripoint case uses the 3 nm probe.
+   - Verify the test coordinates against the bundled boundaries before asserting (boundaries are VATSpy's, not FAA's).
    - KZNY domestic vs oceanic keying.
 2. **Replay mode (required — live traffic is unpredictable):**
    - `npm run record` (Node script) saves a feed snapshot every 15 s to `recordings/<date>/NNN.json` for a chosen duration.
@@ -346,13 +386,13 @@ User-changeable settings (persisted): horizon, alert threshold, entry alert on/o
 ✅ Accept: all core tests pass.
 
 **M4 — Lists + airspace switching.** Store wiring, INBOUND and OUTBOUND windows with 1 s countdown ticks, AIRSPACE menu, persistence.
-✅ Accept: switching between ZME, ZNY, ZLA, ZAN updates lists immediately; countdowns tick every second.
+✅ Accept: switching between ZME, ZNY, ZLA, ZAN updates lists immediately; countdowns tick every second; every OUTBOUND row shows a `TO` airspace and `DIR`, and the exit summary strip counts and filters correctly.
 
 **M5 — Scope.** Canvas projection, boundaries, labels, targets, vectors, history dots, datablocks, pan/zoom/auto-fit, click-select + flight plan readout.
 ✅ Accept: scope visually matches ERAM feel (owner review with screenshots); 60 fps not required, but no jank when panning with 300 targets.
 
 **M6 — Alerts.** `alerts.ts` state machine, alert list window, visual flashes, exit markers, Web Audio tones, audio unlock overlay, mute, acknowledge.
-✅ Accept: using replay fixture, alerts fire exactly once per exit, sound plays once per batch, ack stops flashing.
+✅ Accept: using replay fixture, alerts fire exactly once per exit, sound plays once per batch, ack stops flashing; each alert shows the correct exit-into airspace (spot-check ≥ 5 exits against where the aircraft actually went on the next polls).
 
 **M7 — Replay & polish.** Recorder script, replay mode, settings window (all §8 user settings), About line (data release tag, accuracy note), window positions persisted, README with run instructions.
 ✅ Accept: owner can run `npm install && npm run dev` from README and use everything above.
