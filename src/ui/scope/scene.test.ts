@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import type { AlertEntry } from "../../core/alerts";
 import type { FacilityStatus, Prediction, PredictionSet, ScopeTarget } from "../../data/types";
 import { makeProjection } from "./projection";
-import { buildScene, datablockLines, datablockRect, hitTest, type SceneTarget } from "./scene";
+import {
+  DEFAULT_DATABLOCK,
+  buildScene,
+  datablockAt,
+  datablockLines,
+  datablockRect,
+  hitTest,
+  leaderLine,
+  type SceneTarget,
+} from "./scene";
 
 const T0 = Date.UTC(2026, 8, 27, 18, 0, 0);
 const zkc: FacilityStatus = {
@@ -148,6 +157,14 @@ describe("buildScene", () => {
     expect(unselected!.route).toBeNull();
   });
 
+  it("uses a dragged datablock offset for that aircraft only", () => {
+    const s = set({ scope: [target(), target({ cid: 2, lat: 37 })] });
+    const offsets = new Map([[2, { dx: -80, dy: 40 }]]);
+    const [a, b] = buildScene({ ...input(s), datablockOffsets: offsets });
+    expect(a!.db).toEqual(DEFAULT_DATABLOCK);
+    expect(b!.db).toEqual({ dx: -80, dy: 40 });
+  });
+
   it("corner clips and clipped inbound draw dim", () => {
     const s = set({
       outbound: [pred({ exit: { ...exit, clip: true } })],
@@ -176,5 +193,54 @@ describe("hitTest", () => {
 
   it("unlisted (limited datablock) targets are not selectable", () => {
     expect(hitTest([at(1, 100, 100, false)], 100, 100, 8, 15)).toBeNull();
+  });
+});
+
+describe("dragged datablocks", () => {
+  const t = (over: Partial<SceneTarget> = {}): SceneTarget =>
+    ({
+      cid: 1,
+      x: 100,
+      y: 100,
+      full: true,
+      lines: ["DAL123", "350C", "B738 452", "ZKC 01:52 1801Z"],
+      db: DEFAULT_DATABLOCK,
+      ...over,
+    }) as SceneTarget;
+
+  it("the offset moves the rectangle; its bottom line stays anchored", () => {
+    const a = datablockRect(t(), 8, 15);
+    const b = datablockRect(t({ db: { dx: -150, dy: 60 } }), 8, 15);
+    expect(b.x - a.x).toBe(-164);
+    expect(b.y - a.y).toBe(70);
+    // A limited block (2 lines) shares the bottom line with a full one (4 lines).
+    const lim = datablockRect(t({ lines: ["DAL123", "350C"] }), 8, 15);
+    expect(lim.y + lim.h).toBe(a.y + a.h);
+  });
+
+  it("default leader matches the original: from the symbol to the bottom line's left", () => {
+    const r = datablockRect(t(), 8, 15);
+    const [, end] = leaderLine(t(), r, 15)!;
+    expect(end).toEqual([r.x - 3, r.y + r.h - 7.5]);
+  });
+
+  it("the leader follows the block to the left, above, or not at all when overlapping", () => {
+    const left = datablockRect(t({ db: { dx: -200, dy: 0 } }), 8, 15);
+    expect(leaderLine(t(), left, 15)![1][0]).toBe(left.x + left.w + 3);
+    const above = datablockRect(t({ db: { dx: -20, dy: -80 } }), 8, 15);
+    expect(leaderLine(t(), above, 15)![1]).toEqual([100, above.y + above.h + 3]);
+    const over = datablockRect(t({ db: { dx: -10, dy: 20 } }), 8, 15);
+    expect(leaderLine(t(), over, 15)).toBeNull();
+  });
+
+  it("datablockAt finds limited and full blocks, topmost (full) first", () => {
+    const limited = t({ cid: 2, full: false, lines: ["N123AB", "045C"] });
+    const full = t({ cid: 1 });
+    const r = datablockRect(full, 8, 15);
+    // Both blocks overlap at the bottom-left; the full one is drawn on top.
+    expect(datablockAt([full, limited], r.x + 1, r.y + r.h - 1, 8, 15)?.cid).toBe(1);
+    const lr = datablockRect(limited, 8, 15);
+    expect(datablockAt([limited], lr.x + 1, lr.y + 1, 8, 15)?.cid).toBe(2);
+    expect(datablockAt([full], 0, 0, 8, 15)).toBeNull();
   });
 });

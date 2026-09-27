@@ -41,7 +41,7 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 ### 5. LOAD and SCOPE (optional)
 
 - **LOAD** forecasts how many aircraft will be in your airspace: `TACT` in 5-minute bins for the next hour, `STRAT` in 15-minute bins for two hours. A bar turns red at your threshold (set it in the window header, default 20). Click a bar to list the aircraft in it.
-- **SCOPE** is a simple map of your airspace with targets, datablocks and predicted exit points. Drag to pan, scroll to zoom. CRC stays the real scope; this is for a quick look.
+- **SCOPE** is a simple map of your airspace with targets, datablocks and predicted exit points. Drag to pan, scroll to zoom. **Drag a datablock** to move it off its neighbors (the leader line follows it); double-click it to put it back, or `DB RESET` to reset them all. Moved datablocks keep their place when you pan and zoom. CRC stays the real scope; this is for a quick look.
 
 ### Toolbar
 

@@ -32,6 +32,14 @@ export interface SceneTarget {
   route: [number, number][] | null;
   /** Exit marker on screen for outbound, with its label (§5.9). */
   exit: { x: number; y: number; label: string; clip: boolean } | null;
+  /** Datablock offset from the symbol, screen px (dragged by the user, else the default). */
+  db: DatablockOffset;
+}
+
+/** Where a datablock sits relative to its target, screen px (see `datablockRect`). */
+export interface DatablockOffset {
+  dx: number;
+  dy: number;
 }
 
 export interface SceneInput {
@@ -45,6 +53,8 @@ export interface SceneInput {
   now: number;
   vectorMin: number;
   showRoutes: boolean;
+  /** Datablocks the user dragged, by CID; others use DEFAULT_DATABLOCK. */
+  datablockOffsets?: ReadonlyMap<number, DatablockOffset>;
 }
 
 /** Datablock text (§7.5): full for listed aircraft, callsign + altitude otherwise. */
@@ -132,24 +142,91 @@ export function buildScene(input: SceneInput): SceneTarget[] {
       // Skip the first point: it is the (older) reported position, not the extrapolated one.
       route: showRoute ? [[x, y], ...screenPath(t.routeAhead!, 2, input)] : null,
       exit,
+      db: input.datablockOffsets?.get(t.cid) ?? DEFAULT_DATABLOCK,
     });
   }
   return out;
 }
 
-/** Datablock placement relative to the target, px: up and to the right, with a leader. */
-export const DATABLOCK_DX = 14;
-export const DATABLOCK_DY = -10;
+/**
+ * Default datablock placement: up and to the right of the target. The offset anchors the
+ * block's bottom line, so it stays put when a limited block becomes a full one.
+ */
+export const DEFAULT_DATABLOCK: DatablockOffset = Object.freeze({ dx: 14, dy: -10 });
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /** Screen rectangle of a target's datablock, for hit-testing and drawing. */
 export function datablockRect(
-  t: Pick<SceneTarget, "x" | "y" | "lines">,
+  t: Pick<SceneTarget, "x" | "y" | "lines"> & { db?: DatablockOffset },
   charPx: number,
   linePx: number,
-): { x: number; y: number; w: number; h: number } {
+): Rect {
+  const { dx, dy } = t.db ?? DEFAULT_DATABLOCK;
   const w = Math.max(...t.lines.map((l) => l.length)) * charPx;
   const h = t.lines.length * linePx;
-  return { x: t.x + DATABLOCK_DX, y: t.y + DATABLOCK_DY - h + linePx, w, h };
+  return { x: t.x + dx, y: t.y + dy - h + linePx, w, h };
+}
+
+/** Leader gap: the line stops this far short of the symbol and the text, px. */
+const LEADER_GAP_PX = 3;
+
+/**
+ * Leader line from the target to its datablock, wherever the user dragged it: to the
+ * near side of the block, level with the closest line of text; to the top or bottom edge
+ * when the block sits straight above or below. Null when the block covers the target or
+ * is too close to need one.
+ */
+export function leaderLine(
+  t: { x: number; y: number },
+  r: Rect,
+  linePx: number,
+): [[number, number], [number, number]] | null {
+  const g = LEADER_GAP_PX;
+  let ex: number;
+  let ey: number;
+  if (t.x < r.x - g || t.x > r.x + r.w + g) {
+    ex = t.x < r.x ? r.x - g : r.x + r.w + g;
+    ey = Math.min(Math.max(t.y, r.y + linePx / 2), r.y + r.h - linePx / 2);
+  } else if (t.y < r.y - g || t.y > r.y + r.h + g) {
+    ex = t.x;
+    ey = t.y < r.y ? r.y - g : r.y + r.h + g;
+  } else {
+    return null;
+  }
+  const d = Math.hypot(ex - t.x, ey - t.y);
+  if (d < 2 * g) return null;
+  return [
+    [t.x + ((ex - t.x) / d) * g, t.y + ((ey - t.y) / d) * g],
+    [ex, ey],
+  ];
+}
+
+/** Paint order: limited datablocks first, listed (full) ones on top. */
+export function drawOrder(targets: readonly SceneTarget[]): SceneTarget[] {
+  return [...targets].sort((a, b) => Number(a.full) - Number(b.full));
+}
+
+/** The datablock (full or limited) under the pointer, topmost first, or null. */
+export function datablockAt(
+  targets: readonly SceneTarget[],
+  sx: number,
+  sy: number,
+  charPx: number,
+  linePx: number,
+): SceneTarget | null {
+  const ordered = drawOrder(targets);
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const t = ordered[i]!;
+    const r = datablockRect(t, charPx, linePx);
+    if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) return t;
+  }
+  return null;
 }
 
 /** Pick radius around a target symbol, px. */

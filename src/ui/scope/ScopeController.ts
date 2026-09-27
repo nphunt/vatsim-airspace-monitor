@@ -1,13 +1,36 @@
 import { engineNow, useStore } from "../../store/store";
 import { drawScope } from "./drawScope";
 import { fitView, panBy, zoomAt, type View } from "./projection";
-import { buildScene, hitTest, type SceneTarget } from "./scene";
+import { buildScene, datablockAt, hitTest, type DatablockOffset, type SceneTarget } from "./scene";
 import type { ScopeMap } from "./scopeMap";
 
 /** Idle redraw interval: countdowns, extrapolated positions and the 1 Hz blink (§6.2). */
 const IDLE_REDRAW_MS = 500;
 /** Pointer travel below this is a click, not a pan, px. */
 const CLICK_SLOP_PX = 4;
+
+/**
+ * Datablocks the user dragged, by CID, screen px from the target (so they keep their place
+ * when zooming). Module-level: kept for the session, including when SCOPE is closed and
+ * reopened; entries go when the aircraft leaves the scope.
+ */
+const datablockOffsets = new Map<number, DatablockOffset>();
+
+/** Puts every dragged datablock back in its default place. */
+export function resetDatablocks(): void {
+  datablockOffsets.clear();
+}
+
+type Drag =
+  | { kind: "pan"; x: number; y: number; moved: boolean }
+  | {
+      kind: "datablock";
+      x: number;
+      y: number;
+      moved: boolean;
+      cid: number;
+      start: DatablockOffset;
+    };
 
 export interface ScopeOptions {
   vectorMin: number;
@@ -36,7 +59,7 @@ export class ScopeController {
   private scene: SceneTarget[] = [];
   private needsFit = true;
   private frame: number | null = null;
-  private drag: { x: number; y: number; moved: boolean } | null = null;
+  private drag: Drag | null = null;
   private readonly cleanup: (() => void)[] = [];
 
   private readonly canvas: HTMLCanvasElement;
@@ -52,11 +75,14 @@ export class ScopeController {
     const onWheel = (e: WheelEvent) => this.onWheel(e);
     // Non-passive, so zooming doesn't scroll the page.
     canvas.addEventListener("wheel", onWheel, { passive: false });
+    const onDblClick = (e: MouseEvent) => this.onDoubleClick(e);
+    canvas.addEventListener("dblclick", onDblClick);
     this.cleanup.push(
       () => ro.disconnect(),
       unsub,
       () => clearInterval(id),
       () => canvas.removeEventListener("wheel", onWheel),
+      () => canvas.removeEventListener("dblclick", onDblClick),
     );
     this.resize();
   }
@@ -138,8 +164,15 @@ export class ScopeController {
           now: engineNow(s.engine.clock, Date.now()),
           vectorMin: this.opts.vectorMin,
           showRoutes: this.opts.showRoutes,
+          datablockOffsets,
         })
       : [];
+    // Forget dragged datablocks of aircraft no longer on the scope.
+    const onScope = s.engine.predictions?.scope;
+    if (onScope && datablockOffsets.size > 0) {
+      const live = new Set(onScope.map((t) => t.cid));
+      for (const cid of datablockOffsets.keys()) if (!live.has(cid)) datablockOffsets.delete(cid);
+    }
     const alertInto = new Set(
       s.engine.alerts
         .filter((a) => a.kind === "exit" && a.state === "ACTIVE")
@@ -168,24 +201,48 @@ export class ScopeController {
     this.schedule();
   }
 
-  // Drag pans; a press without movement selects the aircraft under it (§7.3).
+  private datablockUnder(e: MouseEvent): SceneTarget | null {
+    const { charPx, linePx } = this.metrics;
+    return datablockAt(this.scene, e.offsetX, e.offsetY, charPx, linePx);
+  }
+
+  // Dragging a datablock moves it (to make room for the others); dragging anywhere else
+  // pans. A press without movement selects the aircraft under it (§7.3).
   pointerDown(e: PointerEvent): void {
     if (e.button !== 0) return;
     this.canvas.setPointerCapture(e.pointerId);
-    this.drag = { x: e.clientX, y: e.clientY, moved: false };
+    const db = this.datablockUnder(e);
+    this.drag = db
+      ? { kind: "datablock", x: e.clientX, y: e.clientY, moved: false, cid: db.cid, start: db.db }
+      : { kind: "pan", x: e.clientX, y: e.clientY, moved: false };
   }
 
   pointerMove(e: PointerEvent): void {
     const d = this.drag;
-    if (!d || !this.view) return;
+    if (!d) {
+      // Hover: show that a datablock can be dragged.
+      this.canvas.style.cursor = this.datablockUnder(e) ? "move" : "";
+      return;
+    }
+    if (!this.view) return;
     const dx = e.clientX - d.x;
     const dy = e.clientY - d.y;
     if (!d.moved && Math.hypot(dx, dy) < CLICK_SLOP_PX) return;
     d.moved = true;
-    this.view = panBy(this.view, dx, dy);
-    d.x = e.clientX;
-    d.y = e.clientY;
+    if (d.kind === "datablock") {
+      datablockOffsets.set(d.cid, { dx: d.start.dx + dx, dy: d.start.dy + dy });
+    } else {
+      this.view = panBy(this.view, dx, dy);
+      d.x = e.clientX;
+      d.y = e.clientY;
+    }
     this.schedule();
+  }
+
+  /** Double-click a datablock: back to its default place. */
+  private onDoubleClick(e: MouseEvent): void {
+    const db = this.datablockUnder(e);
+    if (db && datablockOffsets.delete(db.cid)) this.schedule();
   }
 
   pointerUp(e: PointerEvent): void {

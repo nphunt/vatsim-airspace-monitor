@@ -3,7 +3,7 @@ import type { AirspaceRegistry } from "../../data/airspaces";
 import { SCOPE_VECTOR_CHOICES } from "../../store/settings";
 import { useStore } from "../../store/store";
 import { loadScopeAirspaces } from "../scope/mapData";
-import { ScopeController } from "../scope/ScopeController";
+import { ScopeController, resetDatablocks } from "../scope/ScopeController";
 import { buildScopeMap } from "../scope/scopeMap";
 
 export function ScopeTitle() {
@@ -89,12 +89,22 @@ export function ScopeWindow() {
         >
           FIT
         </button>
+        <button
+          type="button"
+          title="Put every dragged datablock back in its default place"
+          onClick={() => {
+            resetDatablocks();
+            controller.current?.schedule();
+          }}
+        >
+          DB RESET
+        </button>
       </div>
       <div className="eram-scope-canvas" ref={wrapRef}>
         <canvas
           ref={canvasRef}
           role="img"
-          aria-label="Scope: selected airspace, neighbors and traffic. Drag to pan, wheel to zoom, click an aircraft to select it."
+          aria-label="Scope: selected airspace, neighbors and traffic. Drag to pan, wheel to zoom, click an aircraft to select it. Drag a datablock to move it; double-click it to put it back."
           onPointerDown={(e) => controller.current?.pointerDown(e.nativeEvent)}
           onPointerMove={(e) => controller.current?.pointerMove(e.nativeEvent)}
           onPointerUp={(e) => controller.current?.pointerUp(e.nativeEvent)}

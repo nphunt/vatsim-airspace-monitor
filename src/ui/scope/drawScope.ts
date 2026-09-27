@@ -1,6 +1,6 @@
 import { ERAM_COLORS } from "../theme/colors";
 import { toScreen, type View } from "./projection";
-import { datablockRect, DATABLOCK_DX, DATABLOCK_DY, type SceneTarget } from "./scene";
+import { datablockRect, drawOrder, leaderLine, type SceneTarget } from "./scene";
 import type { MapFeature, ScopeMap } from "./scopeMap";
 
 // SCOPE painter (§7.5). Draw order: neighbor boundaries (dim) -> selected boundary
@@ -143,7 +143,7 @@ export function drawScope(
 
   // Targets: history trail, velocity vector, symbol. Limited first, listed on top.
   ctx.globalAlpha = dbA;
-  const ordered = [...targets].sort((a, b) => Number(a.full) - Number(b.full));
+  const ordered = drawOrder(targets);
   for (const t of ordered) {
     const color = LEVEL_COLOR[t.level];
     ctx.fillStyle = ERAM_COLORS.datablockDim;
@@ -164,10 +164,8 @@ export function drawScope(
     const color = LEVEL_COLOR[t.level];
     const rect = datablockRect(t, o.charPx, o.linePx);
     ctx.strokeStyle = color;
-    polyline(ctx, [
-      [t.x + 3, t.y - 3],
-      [t.x + DATABLOCK_DX - 2, t.y + DATABLOCK_DY + o.linePx / 2],
-    ]);
+    const leader = leaderLine(t, rect, o.linePx);
+    if (leader) polyline(ctx, leader);
     t.lines.forEach((line, i) => {
       let c: string = color;
       if (i === t.timeLine && t.alert === "ACKED") c = ERAM_COLORS.alert;
