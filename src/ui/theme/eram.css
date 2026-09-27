@@ -1,0 +1,111 @@
+/*
+ * ERAM look (IMPLEMENTATION_PLAN §7.1): black, flat, square, monospace, uppercase.
+ * Starting values; calibrate against CRC ERAM screenshots.
+ * Mirrored for canvas drawing in colors.ts (a test keeps the two in sync).
+ */
+:root {
+  --eram-bg: #000000;
+  --eram-toolbar-btn: #004848;
+  --eram-toolbar-text: #e0e0e0;
+  --eram-toolbar-active: #00a0a0;
+  --eram-window-border: #808080;
+  --eram-text: #d0d0d0;
+  --eram-datablock: #e0e0e0;
+  --eram-datablock-dim: #7a7a7a;
+  --eram-map-own: #5a7da0;
+  --eram-map-other: #3a3a3a;
+  --eram-alert: #ff3030;
+  --eram-caution: #ffd000;
+
+  --eram-font: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --eram-font-size: 13px;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--eram-bg);
+  color: var(--eram-text);
+  font-family: var(--eram-font);
+  font-size: var(--eram-font-size);
+  line-height: 1.3;
+  text-transform: uppercase;
+  overflow-x: hidden;
+}
+
+button {
+  font: inherit;
+  text-transform: inherit;
+  border-radius: 0;
+}
+
+/* ---- Master Toolbar (§7.2) ---- */
+
+.eram-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-bottom: 1px solid var(--eram-window-border);
+}
+
+.eram-tb-btn {
+  background: var(--eram-toolbar-btn);
+  color: var(--eram-toolbar-text);
+  border: 1px solid var(--eram-toolbar-btn);
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.eram-tb-btn:hover {
+  border-color: var(--eram-toolbar-text);
+}
+
+.eram-tb-btn[aria-pressed="true"] {
+  background: var(--eram-toolbar-active);
+  color: var(--eram-bg);
+}
+
+.eram-tb-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.eram-tb-btn:disabled:hover {
+  border-color: var(--eram-toolbar-btn);
+}
+
+.eram-tb-readout {
+  color: var(--eram-toolbar-text);
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.eram-tb-readout.dim {
+  color: var(--eram-datablock-dim);
+}
+
+.eram-tb-readout.alert {
+  color: var(--eram-alert);
+}
+
+/* ---- Docked window stack (placeholder until M4) ---- */
+
+.eram-dock {
+  padding: 8px;
+  color: var(--eram-datablock-dim);
+}

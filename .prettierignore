@@ -1,0 +1,7 @@
+dist
+coverage
+package-lock.json
+public/data
+tests/fixtures
+# Planning docs are hand-formatted.
+*.md
