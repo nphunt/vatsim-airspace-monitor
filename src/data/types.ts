@@ -185,6 +185,8 @@ export interface PredictionSet {
   inbound: Prediction[];
   /** Inside with no exit within the horizon (occupancy for load, M7). */
   resident: Prediction[];
+  /** CIDs of every eligible aircraft currently inside (alerts: "exited" vs "no exit"). */
+  insideCids: number[];
   stats: { eligible: number; prefiltered: number; ms: number };
 }
 

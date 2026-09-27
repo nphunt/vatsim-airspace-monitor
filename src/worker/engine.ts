@@ -1,9 +1,11 @@
 import { FALLBACK_FEED_URL, HORIZON_MIN, UI_TICK_MS } from "../config";
+import { AlertMachine, DEFAULT_ALERT_CONFIG, type AlertConfig } from "../core/alerts";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
 import { buildStaffing } from "../core/facilityLookup";
 import { MyPositionTracker, findMyPosition } from "../core/myPosition";
 import {
   computePredictions,
+  eligiblePilots,
   selectAirspace,
   type AirportIndex,
   type SelectedAirspace,
@@ -12,7 +14,7 @@ import { TrackStore } from "../core/track";
 import { loadAirspaces, type AirspaceRegistry } from "../data/airspaces";
 import { FeedPoller, type FeedStatus } from "../data/feed";
 import { dataUrl } from "../data/paths";
-import type { FeedSnapshot } from "../data/types";
+import type { FeedSnapshot, PredictionSet } from "../data/types";
 import type { EngineConfig, FromEngine, InitMessage, ToEngine } from "./protocol";
 import type { ReplayFeed } from "./replay";
 
@@ -39,7 +41,20 @@ export const DEFAULT_CONFIG: EngineConfig = {
   horizonMin: HORIZON_MIN,
   myCid: null,
   autoSelect: true,
+  repeatTone: false,
+  entryAlerts: false,
 };
+
+/** Repeat interval when the repeat-tone setting is on (§6.1). */
+const REPEAT_TONE_S = 30;
+
+function alertConfig(c: EngineConfig): AlertConfig {
+  return {
+    ...DEFAULT_ALERT_CONFIG,
+    repeatToneS: c.repeatTone ? REPEAT_TONE_S : null,
+    entryAlerts: c.entryAlerts,
+  };
+}
 
 /**
  * The worker-side engine (§4.3): owns the feed (live polling or dev replay), the clock,
@@ -70,6 +85,9 @@ export class Engine {
   /** A selection that arrived before the boundary data finished loading. */
   private pendingSelect: string | null = null;
   private readonly myPosition = new MyPositionTracker();
+  readonly alerts = new AlertMachine();
+  private lastSet: PredictionSet | null = null;
+  private eligibleCids: ReadonlySet<number> = new Set();
 
   constructor(post: (m: FromEngine) => void, deps: EngineDeps = {}) {
     this.post = post;
@@ -91,6 +109,10 @@ export class Engine {
       case "config":
         this.setConfig(msg.config);
         return Promise.resolve();
+      case "ack":
+        if (msg.cid === null ? this.alerts.ackAll() : this.alerts.ack(msg.cid))
+          this.postAlerts(false);
+        return Promise.resolve();
       case "replayRate":
         this.replay?.setRate(msg.rate);
         this.tick();
@@ -106,6 +128,7 @@ export class Engine {
     if (this.started) return;
     this.started = true;
     this.config = { ...msg.config };
+    this.alerts.config = alertConfig(this.config);
     const base = msg.dataBaseUrl;
 
     // Tick first, so the watchdog sees a live worker even while data is loading.
@@ -184,6 +207,8 @@ export class Engine {
     }
     this.replay = replay;
     this.clock = replay.clock!;
+    // Replay start primes silently like a page load (§6.1).
+    this.alerts.reset();
     replay.start();
     this.tick();
   }
@@ -232,6 +257,7 @@ export class Engine {
     const cidChanged = config.myCid !== this.config.myCid;
     const horizonChanged = config.horizonMin !== this.config.horizonMin;
     this.config = { ...config };
+    this.alerts.config = alertConfig(this.config);
     if (cidChanged) {
       // Re-evaluate at once, so entering a CID while logged on auto-selects immediately.
       this.myPosition.reset();
@@ -247,7 +273,10 @@ export class Engine {
   private select(idOrKey: string | null): void {
     if (idOrKey === null) {
       this.selected = null;
+      this.lastSet = null;
+      this.alerts.reset();
       this.post({ type: "predictions", set: null });
+      this.postAlerts(false);
       return;
     }
     if (!this.airspaces) {
@@ -263,6 +292,9 @@ export class Engine {
       return;
     }
     this.selected = selectAirspace(a);
+    // A switch resets alerts and primes silently (§4.2, §6.1).
+    this.alerts.reset();
+    this.lastSet = null;
     this.recompute();
   }
 
@@ -270,22 +302,44 @@ export class Engine {
   private recompute(): void {
     if (!this.selected || !this.snapshot || !this.airspaces) return;
     try {
+      const now = this.clock.now();
       const set = computePredictions({
         snapshot: this.snapshot,
         selected: this.selected,
         registry: this.airspaces,
         airports: this.airports,
         tracks: this.tracks,
-        now: this.clock.now(),
+        now,
         horizonMin: this.config.horizonMin,
       });
+      this.lastSet = set;
+      this.eligibleCids = new Set(eligiblePilots(this.snapshot.pilots, now).map((p) => p.cid));
       this.post({ type: "predictions", set });
+      this.evaluateAlerts(true);
     } catch (e) {
       this.error(`prediction failed: ${String(e)}`);
     }
   }
 
+  /** Runs the alert state machine; posts on change or tone (§6.1). */
+  private evaluateAlerts(forcePost = false): void {
+    if (!this.lastSet) return;
+    const r = this.alerts.evaluate({
+      set: this.lastSet,
+      eligibleCids: this.eligibleCids,
+      now: this.clock.now(),
+    });
+    if (r.changed || r.tone || forcePost) this.postAlerts(r.tone);
+  }
+
+  private postAlerts(tone: boolean): void {
+    this.post({ type: "alerts", alerts: this.alerts.list(), tone });
+  }
+
   private tick(): void {
+    // The 1 Hz alert evaluation lives here, in the worker, so it keeps running while the
+    // page is covered and its main-thread timers are throttled (§4.3).
+    this.evaluateAlerts();
     this.post({
       type: "tick",
       now: this.clock.now(),

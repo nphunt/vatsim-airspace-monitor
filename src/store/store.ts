@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import type { AudioState, OutputDevice } from "../audio/alertAudio";
+import type { AlertEntry } from "../core/alerts";
 import { parseCid } from "../core/myPosition";
 import type { MyPositionStatus } from "../core/myPosition";
 import type { FeedStatus } from "../data/feed";
@@ -8,7 +10,9 @@ import type { ReplayStatus } from "../worker/replay";
 import {
   loadSettings,
   saveSettings,
+  type AudioDevice,
   type Settings,
+  type ToneId,
   type WindowId,
   type WindowState,
 } from "./settings";
@@ -36,11 +40,21 @@ export interface EngineView {
   myPosition: MyPositionStatus | null;
   errors: string[];
   predictions: PredictionSet | null;
+  alerts: AlertEntry[];
+}
+
+export interface AudioView {
+  state: AudioState;
+  sinkSupported: boolean;
+  devices: OutputDevice[];
+  /** The saved output device is gone; playing on the default (toolbar AUDIO DEV?). */
+  deviceMissing: boolean;
 }
 
 interface AppState {
   engine: EngineView;
   settings: Settings;
+  audio: AudioView;
   /** OUTBOUND summary-strip filter: an exit-into label, or null (§5.9). Not persisted. */
   exitFilter: string | null;
 
@@ -56,6 +70,16 @@ interface AppState {
   setExitFilter(label: string | null): void;
   patchWindow(id: WindowId, patch: Partial<WindowState>): void;
   setWindows(windows: Settings["windows"]): void;
+
+  /** Acknowledge one aircraft's ACTIVE alert, or all (null). */
+  ack(cid: number | null): void;
+  setTone(tone: ToneId): void;
+  setVolume(v: number): void;
+  setMuted(m: boolean): void;
+  setAudioDevice(d: AudioDevice | null): void;
+  setRepeatTone(on: boolean): void;
+  setEntryAlerts(on: boolean): void;
+  patchAudio(patch: Partial<AudioView>): void;
 }
 
 const initialEngine: EngineView = {
@@ -71,6 +95,7 @@ const initialEngine: EngineView = {
   myPosition: null,
   errors: [],
   predictions: null,
+  alerts: [],
 };
 
 // The engine port is injected by the worker client, so the store never imports it.
@@ -79,12 +104,20 @@ export function setEngineSender(fn: (msg: ToEngine) => void): void {
   send = fn;
 }
 
+// Likewise the audio player, so the store never imports Web Audio.
+let playTone: () => void = () => {};
+export function setTonePlayer(fn: () => void): void {
+  playTone = fn;
+}
+
 export function engineConfig(s: Settings): EngineConfig {
   const cid = parseCid(s.myCid);
   return {
     horizonMin: s.horizonMin,
     myCid: cid.kind === "ok" ? cid.cid : null,
     autoSelect: s.autoSelect,
+    repeatTone: s.repeatTone,
+    entryAlerts: s.entryAlerts,
   };
 }
 
@@ -104,6 +137,7 @@ export const useStore = create<AppState>()((set, get) => {
   return {
     engine: initialEngine,
     settings: loadSettings(),
+    audio: { state: "locked", sinkSupported: false, devices: [], deviceMissing: false },
     exitFilter: null,
 
     engineStarted: (localNow) => set({ engine: { ...initialEngine, startedAt: localNow } }),
@@ -134,6 +168,10 @@ export const useStore = create<AppState>()((set, get) => {
         case "predictions":
           e.predictions = msg.set;
           break;
+        case "alerts":
+          e.alerts = msg.alerts;
+          if (msg.tone) playTone();
+          break;
         case "error":
           e.errors = [...e.errors, msg.message].slice(-10);
           break;
@@ -157,5 +195,14 @@ export const useStore = create<AppState>()((set, get) => {
       updateSettings({ windows: { ...windows, [id]: { ...windows[id], ...patch } } });
     },
     setWindows: (windows) => updateSettings({ windows }),
+
+    ack: (cid) => send({ type: "ack", cid }),
+    setTone: (tone) => updateSettings({ tone }),
+    setVolume: (volume) => updateSettings({ volume: Math.min(1, Math.max(0, volume)) }),
+    setMuted: (muted) => updateSettings({ muted }),
+    setAudioDevice: (audioDevice) => updateSettings({ audioDevice }),
+    setRepeatTone: (repeatTone) => updateSettings({ repeatTone }, true),
+    setEntryAlerts: (entryAlerts) => updateSettings({ entryAlerts }, true),
+    patchAudio: (patch) => set({ audio: { ...get().audio, ...patch } }),
   };
 });

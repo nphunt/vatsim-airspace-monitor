@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { WindowId } from "../../store/settings";
 import { useStore } from "../../store/store";
 import { AirspaceMenu, AirspaceMenuTitle } from "./AirspaceMenu";
+import { AlertsList, AlertsTitle } from "./AlertsList";
 import { EramWindow } from "./EramWindow";
 import { InboundList, InboundTitle } from "./InboundList";
 import { clampAll, dockedOrder, floatingIds, splitWeights, toggleDock } from "./layout";
@@ -10,6 +11,7 @@ import { SettingsWindow } from "./SettingsWindow";
 
 const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode }> = {
   outbound: { title: () => <OutboundTitle />, body: () => <OutboundList /> },
+  alerts: { title: () => <AlertsTitle />, body: () => <AlertsList /> },
   inbound: { title: () => <InboundTitle />, body: () => <InboundList /> },
   airspace: { title: () => <AirspaceMenuTitle />, body: () => <AirspaceMenu /> },
   settings: { title: () => "SETTINGS", body: () => <SettingsWindow /> },

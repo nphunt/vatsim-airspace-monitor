@@ -42,11 +42,11 @@ const feedDoc = {
   ],
 };
 
-function fakeFetch(requested: string[]): typeof fetch {
+function fakeFetch(requested: string[], doc: unknown = feedDoc): typeof fetch {
   return (async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     requested.push(url.href);
-    if (url.hostname === "data.vatsim.net") return Response.json(feedDoc);
+    if (url.hostname === "data.vatsim.net") return Response.json(doc);
     const prefix = new URL("data/", BASE).pathname;
     if (url.origin !== new URL(BASE).origin || !url.pathname.startsWith(prefix)) {
       return new Response("not found", { status: 404 });
@@ -132,5 +132,36 @@ describe("Engine", () => {
     expect(ready?.type === "ready" && ready.feedUrl).toBe(
       "https://data.vatsim.net/v3/vatsim-data.json",
     );
+  });
+
+  it("alerts an aircraft about to exit silently on load/select, and ack makes it ACKED", async () => {
+    // Just south of the ZME/ZKC line at 90W, northbound: exit well inside 2:00.
+    const nearLine = {
+      ...feedDoc,
+      pilots: [{ ...feedDoc.pilots[0], latitude: 37.05, longitude: -90 }],
+    };
+    const messages: FromEngine[] = [];
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl: fakeFetch([], nearLine),
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
+    await engine.handle({ type: "select", airspace: "KZME" });
+    await waitFor(() =>
+      messages.some((m) => m.type === "alerts" && m.alerts.some((a) => a.state === "ACTIVE")),
+    );
+    const alerts = messages.filter((m) => m.type === "alerts");
+    expect(alerts.some((m) => m.type === "alerts" && m.tone)).toBe(false); // primed: silent
+    const active = alerts.at(-1);
+    expect(active?.type === "alerts" && active.alerts[0]).toMatchObject({
+      callsign: "DAL123",
+      state: "ACTIVE",
+      other: { label: "ZKC" },
+    });
+
+    await engine.handle({ type: "ack", cid: 7 });
+    const last = messages.filter((m) => m.type === "alerts").at(-1);
+    expect(last?.type === "alerts" && last.alerts[0]?.state).toBe("ACKED");
   });
 });

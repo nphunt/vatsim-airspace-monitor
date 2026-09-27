@@ -386,3 +386,83 @@ input[aria-invalid="true"] {
 .eram-settings input[inputmode] {
   width: 12ch;
 }
+
+/* ---- Alerts (§6.2): blinking is the only animation allowed ---- */
+
+@keyframes eram-blink {
+  50% {
+    background: var(--eram-bg);
+    color: var(--eram-alert);
+  }
+}
+
+.eram-list tr.alert-active td {
+  background: var(--eram-alert);
+  color: var(--eram-bg);
+  animation: eram-blink 1s steps(1) infinite;
+  cursor: pointer;
+}
+
+.eram-list tr.alert-acked td {
+  color: var(--eram-alert);
+}
+
+.eram-list tr.alert-active:focus-visible {
+  outline: 1px solid var(--eram-toolbar-text);
+}
+
+.eram-alerts .dim-cell {
+  opacity: 0.75;
+}
+
+.eram-tb-btn.alert {
+  color: var(--eram-alert);
+  border-color: var(--eram-alert);
+}
+
+.eram-tb-btn.alert[aria-pressed="true"] {
+  background: var(--eram-alert);
+  color: var(--eram-bg);
+}
+
+.eram-tb-readout.caution,
+.caution {
+  color: var(--eram-caution);
+}
+
+.eram-audio-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgb(0 0 0 / 0.85);
+  padding: 16px;
+  text-align: center;
+}
+
+.eram-audio-overlay button {
+  font-size: 1.2em;
+  padding: 8px 16px;
+  border: 1px solid var(--eram-toolbar-text);
+}
+
+.eram-settings h3 {
+  font-size: 1em;
+  font-weight: normal;
+  color: var(--eram-datablock-dim);
+  margin: 8px 0 4px;
+  border-bottom: 1px solid var(--eram-map-other);
+}
+
+.eram-settings select {
+  font: inherit;
+  text-transform: inherit;
+  background: var(--eram-bg);
+  color: var(--eram-text);
+  border: 1px solid var(--eram-window-border);
+  max-width: 100%;
+}

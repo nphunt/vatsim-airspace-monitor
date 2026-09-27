@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "./store/store";
+import { AudioController } from "./ui/AudioController";
 import { Toolbar } from "./ui/Toolbar";
 import { WindowManager } from "./ui/windows/WindowManager";
 import { startEngine } from "./worker/client";
@@ -19,6 +20,7 @@ export function App() {
         </div>
       )}
       <WindowManager />
+      <AudioController />
     </div>
   );
 }

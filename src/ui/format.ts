@@ -1,4 +1,13 @@
+import type { AlertEntry } from "../core/alerts";
 import type { Prediction, VerticalTrend } from "../data/types";
+
+/** Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). */
+export function alertClass(a: AlertEntry | undefined): string | undefined {
+  if (!a) return undefined;
+  if (a.state === "ACTIVE") return "alert-active";
+  if (a.state === "ACKED") return "alert-acked";
+  return undefined;
+}
 
 /** Toolbar UTC clock, ERAM style: "HHMM SS". */
 export function formatUtcClock(ms: number): string {

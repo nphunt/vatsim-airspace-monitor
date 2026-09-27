@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { Prediction } from "../../data/types";
 import { useStore } from "../../store/store";
-import { exitSummary, formatCountdown, listColumns } from "../format";
+import { alertClass, exitSummary, formatCountdown, listColumns } from "../format";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -35,6 +35,9 @@ export function OutboundList() {
   const horizonMin = useStore((s) => s.settings.horizonMin);
   const filter = useStore((s) => s.exitFilter);
   const setFilter = useStore((s) => s.setExitFilter);
+  const alerts = useStore((s) => s.engine.alerts);
+  const ack = useStore((s) => s.ack);
+  const alertByCid = new Map(alerts.filter((a) => a.kind === "exit").map((a) => [a.cid, a]));
 
   const summary = exitSummary(rows);
   const active = filter && summary.some((x) => x.label === filter) ? filter : null;
@@ -74,8 +77,14 @@ export function OutboundList() {
             <tbody>
               {shown.map((p) => {
                 const exit = p.exit!;
+                const alert = alertByCid.get(p.cid);
+                // Row click acknowledges an ACTIVE alert (§7.3; FP readout arrives in M6).
                 return (
-                  <tr key={p.cid} className={exit.clip ? "dim" : undefined}>
+                  <tr
+                    key={p.cid}
+                    className={alertClass(alert) ?? (exit.clip ? "dim" : undefined)}
+                    onClick={() => alert?.state === "ACTIVE" && ack(p.cid)}
+                  >
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>
                         {commonCell(c, p, {

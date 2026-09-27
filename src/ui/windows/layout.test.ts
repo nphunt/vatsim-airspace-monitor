@@ -14,14 +14,14 @@ import {
 const windows = () => structuredClone(DEFAULT_SETTINGS.windows);
 
 describe("window layout", () => {
-  it("opens OUTBOUND docked by default", () => {
-    expect(dockedOrder(windows())).toEqual(["outbound"]);
+  it("opens OUTBOUND and ALERTS docked by default (§7.2)", () => {
+    expect(dockedOrder(windows())).toEqual(["outbound", "alerts"]);
     expect(floatingIds(windows())).toEqual([]);
   });
 
   it("appends newly docked windows at the bottom of the stack", () => {
     const w = openWindow(windows(), "inbound", 1200);
-    expect(dockedOrder(w)).toEqual(["outbound", "inbound"]);
+    expect(dockedOrder(w)).toEqual(["outbound", "alerts", "inbound"]);
   });
 
   it("opens a never-placed floating window docked on a narrow viewport", () => {
@@ -38,7 +38,8 @@ describe("window layout", () => {
   it("undock marks it placed; re-dock returns it to the stack", () => {
     const undocked = toggleDock(windows(), "outbound");
     expect(undocked.outbound).toMatchObject({ docked: false, positioned: true });
-    expect(dockedOrder(toggleDock(undocked, "outbound"))).toEqual(["outbound"]);
+    // Re-docking puts it back at the bottom of the stack.
+    expect(dockedOrder(toggleDock(undocked, "outbound"))).toEqual(["alerts", "outbound"]);
   });
 
   it("clamps floating windows into the viewport", () => {

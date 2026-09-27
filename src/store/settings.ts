@@ -10,8 +10,23 @@ import {
 
 export const SETTINGS_KEY = `${STORAGE_PREFIX}settings`;
 
-export type WindowId = "outbound" | "inbound" | "airspace" | "settings";
-export const WINDOW_IDS: readonly WindowId[] = ["outbound", "inbound", "airspace", "settings"];
+export type WindowId = "outbound" | "alerts" | "inbound" | "airspace" | "settings";
+export const WINDOW_IDS: readonly WindowId[] = [
+  "outbound",
+  "alerts",
+  "inbound",
+  "airspace",
+  "settings",
+];
+
+export type ToneId = "chime" | "high" | "low";
+export const TONE_IDS: readonly ToneId[] = ["chime", "high", "low"];
+
+/** Saved output device (§6.3): by id and label, since ids can change. */
+export interface AudioDevice {
+  id: string;
+  label: string;
+}
 
 export interface WindowState {
   open: boolean;
@@ -39,6 +54,14 @@ export interface Settings {
   myCid: string;
   autoSelect: boolean;
   inboundLimit: number;
+  tone: ToneId;
+  /** 0..1 */
+  volume: number;
+  muted: boolean;
+  /** null = system default output. */
+  audioDevice: AudioDevice | null;
+  repeatTone: boolean;
+  entryAlerts: boolean;
   windows: Record<WindowId, WindowState>;
 }
 
@@ -65,12 +88,19 @@ export const DEFAULT_SETTINGS: Settings = {
   myCid: "",
   autoSelect: true,
   inboundLimit: 25,
+  tone: "chime",
+  volume: 0.7,
+  muted: false,
+  audioDevice: null,
+  repeatTone: false,
+  entryAlerts: false,
   windows: {
-    // Default open: OUTBOUND (ALERTS joins it in M5). Lists dock; menus float.
+    // Default open: OUTBOUND and ALERTS (§7.2). Lists dock; menus float.
     outbound: win({ open: true, order: 0 }),
-    inbound: win({ order: 1 }),
-    airspace: win({ docked: false, order: 2, w: 380, h: 400 }),
-    settings: win({ docked: false, order: 3, x: 40, y: 96, w: 340, h: 240 }),
+    alerts: win({ open: true, order: 1, weight: 0.5 }),
+    inbound: win({ order: 2 }),
+    airspace: win({ docked: false, order: 3, w: 380, h: 400 }),
+    settings: win({ docked: false, order: 4, x: 40, y: 96, w: 380, h: 360 }),
   },
 };
 
@@ -115,6 +145,17 @@ export function parseSettings(raw: unknown): Settings {
     inboundLimit: (INBOUND_LIMIT_CHOICES as readonly number[]).includes(raw.inboundLimit as number)
       ? (raw.inboundLimit as number)
       : d.inboundLimit,
+    tone: (TONE_IDS as readonly unknown[]).includes(raw.tone) ? (raw.tone as ToneId) : d.tone,
+    volume: Math.min(1, Math.max(0, finite(raw.volume, d.volume))),
+    muted: bool(raw.muted, d.muted),
+    audioDevice:
+      isObj(raw.audioDevice) &&
+      typeof raw.audioDevice.id === "string" &&
+      typeof raw.audioDevice.label === "string"
+        ? { id: raw.audioDevice.id.slice(0, 256), label: raw.audioDevice.label.slice(0, 256) }
+        : null,
+    repeatTone: bool(raw.repeatTone, d.repeatTone),
+    entryAlerts: bool(raw.entryAlerts, d.entryAlerts),
     windows: Object.fromEntries(
       WINDOW_IDS.map((id) => [id, readWindow(windows[id], d.windows[id])]),
     ) as Record<WindowId, WindowState>,

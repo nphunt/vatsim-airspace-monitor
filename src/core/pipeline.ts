@@ -99,6 +99,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
   const outbound: Prediction[] = [];
   const inbound: Prediction[] = [];
   const resident: Prediction[] = [];
+  const insideCids: number[] = [];
   let prefiltered = 0;
 
   for (const p of eligible) {
@@ -109,6 +110,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     const lengthNm = (p.groundspeed * horizonMin) / 60;
     const path = buildDrPath(p, derived.trackDeg, lengthNm, prepared.centerLon);
     const summary = summarizeCrossings(path, prepared, p.groundspeed);
+    if (summary.inside) insideCids.push(p.cid);
     if (summary.inside === false && !summary.entry) continue;
 
     const fp = p.flightPlan!;
@@ -187,6 +189,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     outbound,
     inbound,
     resident,
+    insideCids,
     stats: { eligible: eligible.length, prefiltered, ms: perfNow() - started },
   };
 }

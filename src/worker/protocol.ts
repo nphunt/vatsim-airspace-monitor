@@ -1,4 +1,5 @@
 // Messages between the main thread and the engine worker (§4.3).
+import type { AlertEntry } from "../core/alerts";
 import type { MyPositionStatus } from "../core/myPosition";
 import type { FeedStatus } from "../data/feed";
 import type { PredictionSet } from "../data/types";
@@ -23,6 +24,10 @@ export interface EngineConfig {
   /** Parsed My Position CID, or null when off/invalid (§5.12). */
   myCid: number | null;
   autoSelect: boolean;
+  /** Repeat the tone every 30 s while unacknowledged (§6.1, default off). */
+  repeatTone: boolean;
+  /** Entry alerts (§6.1, default off). */
+  entryAlerts: boolean;
 }
 
 /** Select the airspace (id "KZME", key, or label "ZME"), or null for none. Recomputes immediately (§4.2). */
@@ -41,7 +46,13 @@ export interface ReplayRateMessage {
   rate: number;
 }
 
-export type ToEngine = InitMessage | SelectMessage | ConfigMessage | ReplayRateMessage;
+/** Acknowledge an ACTIVE alert (row click), or all of them (cid null). */
+export interface AckMessage {
+  type: "ack";
+  cid: number | null;
+}
+
+export type ToEngine = InitMessage | SelectMessage | ConfigMessage | ReplayRateMessage | AckMessage;
 
 export interface SelectableAirspace {
   key: string;
@@ -97,6 +108,14 @@ export interface ErrorMessage {
   message: string;
 }
 
+/** Alert list after any change, and whenever a tone should play (§6). */
+export interface AlertsMessage {
+  type: "alerts";
+  alerts: AlertEntry[];
+  /** Play the alert tone now (already debounced to once per second). */
+  tone: boolean;
+}
+
 /** Posted after each recompute (new snapshot, airspace switch, config change). */
 export interface PredictionsMessage {
   type: "predictions";
@@ -104,4 +123,10 @@ export interface PredictionsMessage {
 }
 
 export type FromEngine =
-  ReadyMessage | PollMessage | TickMessage | StatusMessage | ErrorMessage | PredictionsMessage;
+  | ReadyMessage
+  | PollMessage
+  | TickMessage
+  | StatusMessage
+  | ErrorMessage
+  | PredictionsMessage
+  | AlertsMessage;

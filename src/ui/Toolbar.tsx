@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { alertAudio } from "../audio/alertAudio";
 import { HORIZON_CHOICES_MIN } from "../config";
 import { parseCid } from "../core/myPosition";
 import type { WindowId } from "../store/settings";
@@ -8,7 +9,7 @@ import { useLocalNow } from "./hooks";
 import { dataIndicator, isEngineStalled } from "./status";
 import { openWindow } from "./windows/layout";
 
-function WindowButton({ id, label }: { id: WindowId; label: string }) {
+function WindowButton({ id, label, alert }: { id: WindowId; label: string; alert?: boolean }) {
   const open = useStore((s) => s.settings.windows[id].open);
   const toggle = () => {
     const { settings, setWindows, patchWindow } = useStore.getState();
@@ -16,7 +17,12 @@ function WindowButton({ id, label }: { id: WindowId; label: string }) {
     else setWindows(openWindow(settings.windows, id, window.innerWidth));
   };
   return (
-    <button type="button" className="eram-tb-btn" aria-pressed={open} onClick={toggle}>
+    <button
+      type="button"
+      className={`eram-tb-btn${alert ? " alert" : ""}`}
+      aria-pressed={open}
+      onClick={toggle}
+    >
       {label}
     </button>
   );
@@ -29,6 +35,9 @@ export function Toolbar() {
   const settings = useStore((s) => s.settings);
   const setHorizon = useStore((s) => s.setHorizon);
   const setReplayRate = useStore((s) => s.setReplayRate);
+  const setMuted = useStore((s) => s.setMuted);
+  const audio = useStore((s) => s.audio);
+  const activeAlerts = engine.alerts.filter((a) => a.state === "ACTIVE").length;
 
   const now = engineNow(engine.clock, localNow);
   const stalled = isEngineStalled(localNow, engine.lastMessageAt, engine.startedAt);
@@ -59,9 +68,11 @@ export function Toolbar() {
     <nav className="eram-toolbar" aria-label="Master toolbar">
       <WindowButton id="airspace" label={`AIRSPACE ${selectedLabel}`} />
       <WindowButton id="outbound" label="OUTBOUND" />
-      <button type="button" className="eram-tb-btn" disabled>
-        ALERTS
-      </button>
+      <WindowButton
+        id="alerts"
+        label={activeAlerts > 0 ? `ALERTS ${activeAlerts}` : "ALERTS"}
+        alert={activeAlerts > 0}
+      />
       <WindowButton id="inbound" label="INBOUND" />
       {["LOAD", "SCOPE"].map((l) => (
         <button key={l} type="button" className="eram-tb-btn" disabled>
@@ -76,12 +87,39 @@ export function Toolbar() {
       >
         HORIZON {settings.horizonMin}
       </button>
-      {["BRIGHT", "FONT", "MUTE"].map((l) => (
+      {["BRIGHT", "FONT"].map((l) => (
         <button key={l} type="button" className="eram-tb-btn" disabled>
           {l}
         </button>
       ))}
+      <button
+        type="button"
+        className="eram-tb-btn"
+        aria-pressed={settings.muted}
+        title={settings.muted ? "Muted: alerts are visual only" : "Mute aural alerts"}
+        onClick={() => setMuted(!settings.muted)}
+      >
+        MUTE
+      </button>
       <WindowButton id="settings" label="SETTINGS" />
+      {audio.state === "suspended" && (
+        <button
+          type="button"
+          className="eram-tb-btn alert"
+          title="The browser suspended audio. Click to turn it back on."
+          onClick={() => void alertAudio.unlock()}
+        >
+          AUDIO OFF
+        </button>
+      )}
+      {audio.deviceMissing && (
+        <span
+          className="eram-tb-readout caution"
+          title={`Saved output ${settings.audioDevice?.label} not found; using the default device`}
+        >
+          AUDIO DEV?
+        </span>
+      )}
       {engine.myPosition && (
         <span className="eram-tb-readout" title={`My Position: ${engine.myPosition.frequency}`}>
           ON {engine.myPosition.callsign}
