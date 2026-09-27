@@ -4,11 +4,13 @@
 
 > **Revision 2 (2026-09-27)** — reviewed with the owner. Changes: primary use case is a *companion window next to CRC while controlling* → lists-first layout, scope demoted to an optional window; **route-based prediction (FAA NASR) moved into v1**; new **traffic load forecast** window; new **My Position** (auto-select airspace from the owner's CID); aural alerts are short tones only, no voice; fixed several spec bugs (oceanic keying, replay clock, countdown anchoring, prefilter sizing, oceanic lookup, alert state gaps, fixture size).
 
+> **Revision 3 (2026-09-27)** — second owner review. Changes: audience is now **VATUSA-wide, hosted on GitHub Pages** (§12); lists/alerts cover **flight-plan aircraft only** (IFR + VFR with FP); **selectable audio output device**; unstaffed neighbors alert the same as staffed (decided); core engine and timers moved into a **Web Worker** (background-throttling and performance, §4.3); fixed: Guam `PGZU` missing from the feature inventory and dropped by the bundle bbox, unreadable `Date` header for server-time offset, track history lost on airspace switch, DR trust horizon coupled to the user's list horizon, space-separated SID/STAR transitions, recordings shipped in the public build and containing real CIDs.
+
 ---
 
 ## 1. Product summary
 
-A browser-based, **FAA ERAM-styled** monitor for VATSIM traffic, designed to sit in a **small window beside CRC** while the owner is controlling. CRC already provides the radar scope, so this app is **lists-first**: it answers "who is about to leave my airspace, where to, and when" and "how busy will it get".
+A browser-based, **FAA ERAM-styled** monitor for VATSIM traffic, designed to sit in a **small window beside CRC** while controlling. It is built for the owner (ZME) and published for **any VATUSA controller** to use (GitHub Pages, §12). CRC already provides the radar scope, so this app is **lists-first**: it answers "who is about to leave my airspace, where to, and when" and "how busy will it get".
 
 The user picks one airspace (a US ARTCC) from a menu — or it is picked automatically when the owner logs on (§5.12). The app continuously shows:
 
@@ -57,7 +59,7 @@ The user MUST be able to switch airspaces at any time, across the whole United S
   - `pilots[]` – fields used: `cid, callsign, latitude, longitude, altitude` (ft), `groundspeed` (kt), `heading` (deg, this is *heading* not *track*), `transponder`, `last_updated`, `flight_plan` (may be `null`) with `aircraft_short, aircraft_faa, departure, arrival, altitude, route, flight_rules, assigned_transponder`. **Do not store or display `name`.**
   - `controllers[]` – `cid`, `callsign` (e.g. `MEM_22_CTR`), `facility` (6 = CTR), `frequency`. Used for staffing and My Position (§5.12).
   - `prefiles[]` – ignore in v1.
-- **Server time:** record the offset between the HTTP `Date` response header (or `update_timestamp`) and `Date.now()` on each poll; the live clock (§4.1) uses server-corrected time so a wrong PC clock doesn't break staleness or countdowns.
+- **Server time:** the live clock (§4.1) uses server-corrected time so a wrong PC clock doesn't break staleness or countdowns. ⚠ The HTTP `Date` header is **not readable** from JS (verified: no `Access-Control-Expose-Headers`, and `Date` is not CORS-safelisted). Also the CDN serves copies up to ~15 s old (`Age:` header observed at 11). So estimate the offset from `update_timestamp` only: per poll compute `sample = update_timestamp − localReceiveTime`; `serverOffset = max(sample)` over the last 20 polls (the freshest copy has the least CDN age, so the max is the tightest bound). Expected error: a few seconds, acceptable for 60 s staleness and MM:SS countdowns. Note: the `DATA Ns` indicator shows `clock.now() − update_timestamp`.
 
 Sample pilot object (trimmed):
 ```json
@@ -74,21 +76,23 @@ Sample pilot object (trimmed):
   - `VATSpy.dat` (airports, FIR names, **callsign prefixes**)
 - Feature properties: `{ id, oceanic ("0"/"1"), label_lon, label_lat, region, division }`.
 - ⚠ **`oceanic` is a string.** `"0"` is truthy in JS. Always test `oceanic === "1"`.
-- US features (`division == "VATUSA"`), 36 total. **Base ARTCC IDs** for the v1 selector:
+- US features (`division == "VATUSA"`), **37** total (verified v2609.2). **Base ARTCC IDs** for the v1 selector:
   - CONUS (20): `KZAB KZAU KZBW KZDC KZDV KZFW KZHU KZID KZJX KZKC KZLA KZLC KZMA KZME KZMP KZNY KZOA KZOB KZSE KZTL`
   - Alaska / Hawaii: `PAZA` (Anchorage), `PHZH` (Honolulu)
   - Oceanic (not selectable in v1, but **used for exit-into lookup**): `KZAK`, `KZNY` with `oceanic=="1"`, `PAZA-A`, `PAZA-P`
+  - **Guam `PGZU`** (prefixes `GU`, `GUM`, `GUAM`, `UAM`): **not selectable in v1** (owner decision), but include it in the **domestic** lookup tier so ZAK traffic resolves to it. Display label `ZUA`.
+  - **San Juan `TJZS`** is tagged `division == "VATCAR"` in VATSpy → it lands in the **foreign** tier automatically; exits from ZMA/ZNY into it must resolve to `TJZS` (label `ZSU`, add to the explicit label map). Not selectable in v1.
   - Sub-areas / splits: `KZJX-A`, `KZJX-C`, `KZJX-P`, `KZKC-E`, `KZKC-W`, `KZMA-N`, `KZMA-OCN`, `KZNY-BDA`, `KZNY-W`, `PAZA-D`. **Not selectable.** For lookup, M1 MUST classify each one by inspecting the geometry:
     - **Overlapping split** (lies inside a base ARTCC, e.g. likely `KZKC-E/W`, `KZMA-N`, `KZNY-W`, `PAZA-D`) → exclude from lookup; it would shadow the base ARTCC.
     - **Oceanic / non-overlapping area** (e.g. likely `KZMA-OCN`, `KZNY-BDA`, `KZJX-A/C/P` if they lie offshore) → include in the **oceanic tier** of lookup, because ZJX/ZMA eastbound traffic exits into them.
     - Record the classification as an explicit table in `scripts/update-data.mjs` (with a comment on how it was verified) and in `firs.json` (`tier` field). Do not guess — check overlap area with turf.
 - ⚠ **`KZNY` appears twice** (domestic and oceanic). Key features by `` `${id}#${oceanic === "1" ? "ocn" : "dom"}` `` internally. Do **not** use an `-OCN` suffix: `KZMA-OCN` is already a real id and could collide.
 - Geometry may be `Polygon` or `MultiPolygon`; handle both, including holes.
-- `VATSpy.dat` `[FIRs]` section format: `ICAO|NAME|CALLSIGN PREFIX|FIR BOUNDARY`, e.g. `KZME|Memphis|MEM|KZME`. **The same boundary can appear on several rows with different prefixes** — collect a *set* of prefixes per boundary. Use NAME for display ("Memphis") and the prefix set to match online controllers (`MEM_*_CTR`). Ignore empty prefixes.
+- `VATSpy.dat` `[FIRs]` section format: `ICAO|NAME|CALLSIGN PREFIX|FIR BOUNDARY`, e.g. `KZME|Memphis|MEM|KZME`. **The same boundary can appear on several rows with different prefixes** (verified: `KZKC` has both `MCI` and `KC`) — collect a *set* of prefixes per boundary. Use NAME for display ("Memphis") and the prefix set to match online controllers (`MEM_*_CTR`). Ignore empty prefixes.
 - `VATSpy.dat` `[Airports]` section gives ICAO + lat/lon — used to detect "destination is inside the airspace" (§5.6).
 
 **Bundle, don't fetch at runtime.** GitHub release downloads are not reliable CORS sources. `scripts/update-data.mjs` (Node) downloads the latest release assets via the GitHub API (`/repos/vatsimnetwork/vatspy-data-project/releases/latest`), filters, and writes:
-- `public/data/boundaries.us.geojson` – all VATUSA features **plus every feature that borders the US or US oceanic**, so exit-into works at every border. Keep features whose bbox intersects **either** lon −180…−30, lat 0…80 **or** lon 120…180, lat 20…80 (Russian/Japanese FIRs across the antimeridian that border PAZA/KZAK). Normalize antimeridian-crossing geometries (see §5.5) before computing bboxes; a naive bbox of such a feature is [−180, 180].
+- `public/data/boundaries.us.geojson` – all VATUSA features **plus every feature that borders the US or US oceanic**, so exit-into works at every border. Keep features whose bbox intersects **either** lon −180…−30, lat 0…80 **or** lon 120…180, lat **0**…80 (Russian/Japanese FIRs across the antimeridian that border PAZA/KZAK, plus Guam `PGZU` at ~13°N and the FIRs around it — a lat-20 floor would drop Guam). Always keep every `VATUSA` feature regardless of bbox. Normalize antimeridian-crossing geometries (see §5.5) before computing bboxes; a naive bbox of such a feature is [−180, 180].
 - `public/data/firs.json` – `{ key, id, name, prefixes: string[], oceanic, tier: "domestic"|"oceanic"|"foreign"|"excluded", labelLat, labelLon }[]`
 - `public/data/airports.json` – `{ icao: [lat, lon] }` (US + neighbors is fine)
 - `public/data/meta.json` – release tag + download date (show in the About line, with VATSpy attribution).
@@ -119,10 +123,13 @@ vatsim-airspace-monitor/
 ├─ scripts/update-data.mjs          # §3.2 VATSpy bundler
 ├─ scripts/update-nav.mjs           # §3.3 NASR bundler
 ├─ scripts/record.mjs               # §9.2 feed recorder
-├─ public/data/**                   # generated, committed
+├─ public/data/**                   # generated, committed (shipped in the build)
+├─ tests/fixtures/recordings/**     # replay fixtures — NOT under public/, never shipped
+├─ .github/workflows/               # CI (test+build), Pages deploy, scheduled data refresh (§10 M9)
 ├─ src/
 │  ├─ main.tsx, App.tsx
 │  ├─ config.ts                     # all tunables (§8) in one place
+│  ├─ worker/engine.worker.ts       # §4.3 — owns feed polling, clock ticks, core/ pipeline, alert state
 │  ├─ data/
 │  │  ├─ feed.ts                    # discovery, polling, backoff, dedupe, server-time offset; OR replay source
 │  │  ├─ airspaces.ts               # load bundled geojson/firs; build Airspace objects + bbox index
@@ -177,7 +184,16 @@ feed.ts / replay (every 15 s of clock time) ──► track.ts (update history p
 
 - **Two clocks:** the *feed cycle* (15 s, recompute predictions) and a *UI tick* (1 s, decrement countdowns & extrapolate positions). Countdowns MUST tick smoothly each second, not jump every 15 s.
 - **Countdown anchoring:** every predicted time is stored as an absolute time, anchored to the **position timestamp** (`pilot.last_updated`), not to when the prediction was computed: `tExit = lastUpdated + distAlong / gs`. Displayed remaining time = `tExit − clock.now()`, clamped at `00:00`. (Anchoring to compute time silently adds the feed age — often 15–30 s — to every countdown.)
-- **Switching airspace:** set `selectedAirspaceId` → recompute all predictions immediately from the latest snapshot, reset alert state (with silent priming, §6.1), re-fit the scope. Persist selection in `localStorage` (wrapped in try/catch).
+- **Switching airspace:** set `selectedAirspaceId` → recompute all predictions immediately from the latest snapshot, reset alert state (with silent priming, §6.1), re-fit the scope. Persist selection in `localStorage` (wrapped in try/catch). Track history (§5.3) and RTE/DR mode state are **not** reset — they are kept for all pilots in the recording region (lon −180…−30 & 120…180, lat 0…80), independent of the prefilter, so aircraft in the new airspace already have derived track and conformance state.
+- **Persistence:** all `localStorage` data lives under one key prefix with a `schemaVersion`; on mismatch, migrate or fall back to defaults — never crash on old data.
+
+### 4.3 Web Worker engine (REQUIRED)
+The page will often be **fully covered by CRC**. On Windows, Chrome/Edge then treat it as hidden and throttle main-thread timers; after ~5 min, "intensive throttling" limits chained timers to **once per minute** — polling and the 1 Hz alert tick would silently stall, which is exactly when the app matters.
+- Run `feed.ts`, the clock ticks, the whole `core/` pipeline, and `alerts.ts` in a **dedicated Web Worker** (dedicated-worker timers are not subject to intensive throttling). This also keeps the prediction work (§5.2 — potentially ~1,000 aircraft with LOAD open) off the UI thread.
+- The worker posts compact snapshots to the main thread: on each feed cycle (predictions, load) and on each 1 s tick (alert state changes + "play tone" events). The main thread only renders and plays audio. Countdown text is computed on the main thread from absolute times, so a delayed frame never shows a wrong value.
+- `core/` stays pure and DOM-free so it runs identically in the worker, in Vitest, and in replay.
+- **Watchdog:** the main thread tracks the time since the last worker tick; if > 5 s, show `DATA` in alert color and log it. The `DATA Ns` indicator must never read "fresh" while the pipeline is stalled.
+- **Performance budget:** a full recompute (prefilter → paths → crossings → exit-into → load) on the busiest fixture snapshot MUST take < 500 ms in the worker with LOAD open. Techniques: clip each path to the airspace bbox before intersecting; pre-build a segment index (rbush) for the selected airspace's rings once per switch; only run `resolveExitInto` for the first EXIT crossing.
 
 ---
 
@@ -189,6 +205,7 @@ All distances in **nautical miles**, times in **seconds**, speeds in **knots**.
 Ignore a pilot if any:
 - `groundspeed < MIN_GS_KT` (40; on ground / taxiing).
 - Stale: `clock.now() − last_updated > STALE_PILOT_S` (60 s).
+- **No flight plan** (`flight_plan == null`). Owner decision: lists, alerts, and load cover **IFR and VFR aircraft with a filed flight plan**; aircraft without a flight plan are ignored for display, alerts, and load (they are still tracked for history so a later-filed plan works immediately).
 Key tracked aircraft by **`cid`** (not callsign — callsigns change on reconnect and are not a stable identity). If the callsign for a cid changes, reset its history.
 Remove tracked aircraft not seen for 2 consecutive *new* snapshots.
 
@@ -232,6 +249,8 @@ else:
     tEntry = lastUpdated + entry.distAlong / gs * 3600
     fromFacility = facilityAt(pos)
     exitAfterEntry = next EXIT → transit time (also used by load, §5.11)
+    clip = exitAfterEntry within CLIP_REENTRY_S of entry → flag CLP (inbound corner shave:
+           listed dimmed, never triggers an entry alert)
 if no relevant crossing within horizon → not listed
 ```
 - Classifying ENTER/EXIT by probing replaces the old "drop crossings < 0.1 nm" rule, which could relabel a re-entry as an exit when the aircraft was sitting on the line.
@@ -289,15 +308,20 @@ interface ExitInto {
 - Strip speed/altitude groups (`/N0450F350`, `N0450F350`), `DCT`, `+`, `.`-only tokens, and anything after the ICAO `RMK` convention if present.
 - **Fix / navaid / airport:** look up in `points.json`. If an ident has several locations, pick the one closest to the previous resolved point (or to the departure airport for the first token).
 - **Airway** (`J6`, `Q34`, `V16`, `T290`): expand the ordered segment between the previous fix and the next token's fix (either direction). If either end isn't on the airway, skip the airway token.
-- **SID** `NAME#.TRANS` (e.g. `DARTZ3.XYZ`) and **STAR** `TRANS.NAME#`: expand via `procedures.json` (common route + named transition). A bare procedure name without transition → common route only.
+- **SID** and **STAR**: expand via `procedures.json` (common route + transition). Accept every common VATSIM form:
+  - Dotted: `DARTZ3.XYZ` (SID) / `XYZ.VNKNN1` (STAR).
+  - **Space-separated (most common on VATSIM):** `KMEM PLMMR2 SIDNE J6 …` → SID transition = the **next** token if it is a transition of that SID; `… KAYLN VNKNN1 KATL` → STAR transition = the **previous** token if it is a transition of that STAR.
+  - Name without a version digit (`PLMMR`) → match the single current version if unambiguous.
+  - Bare procedure with no usable transition → common route only.
+  - Key `procedures.json` by the filed name (`PLMMR2`), mapped from NASR's computer codes (`PLMMR2.SIDNE` / `VNKNN.VNKNN1` style) in `update-nav.mjs`.
 - **Lat/lon waypoints:** `3500N09000W`, `35N090W`, `3530N`/`09015W` style ICAO formats. Parse; no lookup needed.
 - **Unknown tokens** (foreign fixes, typos): skip, and mark the route `partial`. If fewer than 2 points resolve within `LOAD_STRATEGIC_MIN × gs` of the aircraft, treat the route as unusable.
 - Cache the expanded route per `cid + route string`; re-parse only when the route changes.
 
 **Conformance (choosing RTE vs DR), each poll:**
-- Find the route leg the aircraft is on: the leg ahead of it with the smallest cross-track distance.
+- Find the route leg the aircraft is on: among legs where the aircraft's **along-track position lies within the leg** (0 ≤ along ≤ leg length, with a 2 nm tolerance at the ends), pick the one with the smallest cross-track distance. Search forward from the previously matched leg first, so a zig-zag route can't jump back to an earlier leg.
 - **RTE** if cross-track ≤ `ROUTE_CONFORM_NM` (5) **and** track is within `ROUTE_CONFORM_DEG` (30°) of the leg course. Otherwise **DR** (e.g. vectors, direct-to shortcuts, off-route).
-- Hysteresis: require 2 consecutive polls to switch mode, to prevent flicker.
+- Hysteresis: require 2 consecutive polls to switch mode, to prevent flicker. **Initial mode** (first time a cid is seen, or after its route changes): use the raw evaluation of the first poll directly, with no hysteresis.
 - RTE path = current position → along the rest of the current leg → subsequent waypoints → destination. Past the last resolved waypoint, continue straight along the final course (or stop at the destination airport).
 - Timing along the route uses current `gs` (no wind/speed modeling in v1).
 
@@ -306,7 +330,8 @@ For each aircraft in (or predicted to enter) the selected airspace, compute **oc
 - **Strategic:** 15-min bins, out to `LOAD_STRATEGIC_MIN` (120).
 - **Tactical:** 5-min bins, out to `LOAD_TACTICAL_MIN` (60).
 - **Metric per bin = peak simultaneous count** within the bin (like TFMS monitor alert "peak"), computed with a sweep over interval endpoints. Also keep the list of aircraft per bin for drill-down.
-- **Confidence:** DR paths are only trusted for `HORIZON_MIN`; beyond that, include only RTE aircraft. Show the untrusted portion as hatched/dim.
+- **Confidence:** DR paths are only trusted for `DR_TRUST_MIN` (20) — a fixed constant, **not** the user's list horizon (otherwise setting the list to 60 min would silently trust an hour of straight-line DR). Beyond it, include only RTE aircraft. Show the untrusted portion as hatched/dim.
+- **Altitude filter** (§5.7) uses the aircraft's *current* altitude for all future bins; note this in About.
 - **Known gap (show in About):** aircraft not yet airborne are not counted, so future bins under-count departures from airports inside the airspace.
 - **Threshold:** user-set per airspace (default 20), persisted. Bin color: normal < 80% of threshold, caution ≥ 80%, alert ≥ 100%.
 - Recompute on each feed cycle (not every UI tick).
@@ -332,6 +357,7 @@ ACTIVE|ACKED ──(remaining > EXIT_ALERT_S + ALERT_REARM_MARGIN_S, OR no exit 
 ANY ──(aircraft dropped: disconnected, stale, or GS < MIN_GS_KT)──► removed (no sound)
 ```
 - **Hysteresis is required**: the 30 s re-arm margin prevents flapping around 2:00.
+- **Staffing does not change alerting** (owner decision): an exit into an unstaffed neighbor alerts exactly like a staffed one; only the display dims the `TO` facility and omits the controller/frequency.
 - An aircraft alerts **at most once per exit event** (an exit event ends at EXITED or NONE).
 - **Countdown past zero:** if remaining reaches 0 but the next snapshot still shows the aircraft inside, display `00:00` (flashing) — never negative — until the next snapshot resolves it.
 - **Silent priming:** on page load, airspace switch, and replay start, the first evaluation puts qualifying aircraft straight into ACTIVE **without sound** (visual only). Otherwise a switch fires a burst of tones.
@@ -350,6 +376,8 @@ ANY ──(aircraft dropped: disconnected, stale, or GS < MIN_GS_KT)──► re
 - The owner will be on frequency, so the tone MUST be short and not mask a transmission: default two-tone chime, total ≤ 300 ms (e.g. 880 Hz 120 ms, 660 Hz 120 ms, sine, short attack/release). Provide 2–3 selectable tones and a volume slider. **No speech.**
 - **Browsers block audio until a user gesture.** On load, show an ERAM-styled overlay "CLICK TO ENABLE AURAL ALERTS"; resume the `AudioContext` on click. If the context is suspended later, show `AUDIO OFF` in the toolbar.
 - Global mute toggle in the toolbar (mute = visual-only alerts).
+- **Output device picker** (Settings): controllers run CRC/TrackAudio into a headset, so the user MUST be able to send tones to a specific device independent of the Windows default. Use `AudioContext.setSinkId(deviceId)` (Chrome/Edge 110+); list devices with `navigator.mediaDevices.enumerateDevices()` filtered to `audiooutput`. Persist by device **label** as well as id (ids can change), and fall back to the default device with a toolbar note `AUDIO DEV?` if the saved device is gone. If `setSinkId` is unsupported (Firefox/Safari), hide the picker and use the default. Include a `TEST` button that plays the selected tone.
+  - Device labels are only exposed after a media permission grant in some browsers; if labels are blank, show "Device 1/2/…" rather than requesting microphone permission. Do NOT request mic permission.
 
 ---
 
@@ -380,15 +408,16 @@ Goal: it should *feel* like an ERAM display (as seen in vNAS CRC's ERAM mode). R
 ### 7.2 Layout — lists-first, compact
 - The app MUST be fully usable in a **narrow window (≈ 480 × 700 px)** placed beside CRC. No horizontal scrolling at that size.
 - **Master Toolbar** along the top (wraps to two rows when narrow): `AIRSPACE <ZME>` · `OUTBOUND` · `ALERTS <n>` · `INBOUND` · `LOAD` · `SCOPE` · `HORIZON <30>` · `BRIGHT` · `FONT` · `MUTE` · `SETTINGS` · `ON MEM_22_CTR` (when online) · UTC clock (HHMM SS) · feed status (`DATA 12s`, alert color if > 60 s) · `NAV DATA EXPIRED` (if applicable).
-- **Default open windows:** OUTBOUND and ALERTS, docked/stacked to fill the page.
+- **Default open windows:** OUTBOUND and ALERTS.
 - Toggleable windows: INBOUND, LOAD, SCOPE, AIRSPACE, SETTINGS, FLIGHT PLAN READOUT.
-- Windows are **draggable and resizable** ERAM-style frames (title bar with name, minimize `-`, close `X`); open/closed state, positions and sizes saved to `localStorage`. Windows MUST be kept inside the viewport when the browser window is resized.
+- **Window model:** windows are **docked by default** — a vertical stack below the toolbar that fills the page, with a draggable splitter between docked windows. Each ERAM-style frame (title bar with name, minimize `-`, close `X`) has an **undock** control that makes it a free-floating, draggable, resizable window over the stack; re-dock returns it. Dock/float state, order, positions and sizes are saved to `localStorage`. Floating windows MUST be kept inside the viewport when the browser window is resized. At ≤ 600 px width, new windows open docked.
 
 ### 7.3 Lists (tabular, ERAM list look: bordered window, fixed-width columns, header row)
 - **OUTBOUND** (sorted by ETX ascending):
   `CALLSIGN  TYPE  ALT   TO    DIR  ETX    DEST  FLG`
   e.g. `DAL123    B738  350C  ZKC   N    01:52  KMCI  RTE`
-  Summary strip above the header (§5.9). `FLG` = `RTE`/`DR` plus `ARR` (landing inside), `TRN` (turning), `CLP` (corner clip). GS column shown when the window is wide enough.
+  Summary strip above the header (§5.9). `FLG` = `RTE`/`DR` plus `ARR` (landing inside), `TRN` (turning), `CLP` (corner clip), `V` (VFR flight plan). GS column shown when the window is wide enough.
+  - **Narrow-width rules** (≤ 480 px): `FLG` shows single letters (`R`/`D`, `A`, `T`, `C`, `V`) with a tooltip; `DEST` is dropped before `TYPE`; `CALLSIGN`, `TO`, `DIR`, `ETX` are never dropped.
 - **INBOUND** (sorted by ETE ascending, limit configurable, default 25):
   `CALLSIGN  TYPE  ALT   FROM  ETE    DEST  FLG`
 - `ALT` = hundreds of feet + trend (`C` level, `↑` climbing, `↓` descending).
@@ -445,9 +474,13 @@ ROUTE_CONFORM_DEG = 30
 LOAD_STRATEGIC_MIN = 120      // 15-min bins
 LOAD_TACTICAL_MIN = 60        // 5-min bins
 LOAD_THRESHOLD_DEFAULT = 20
+DR_TRUST_MIN = 20             // load forecast: DR paths trusted this far only (§5.11)
 UI_TICK_MS = 1000
+WORKER_WATCHDOG_S = 5         // §4.3
+SERVER_OFFSET_WINDOW = 20     // polls used for the server-time offset max (§3.1)
+SETTINGS_SCHEMA_VERSION = 1
 ```
-User-changeable settings (persisted): horizon, alert threshold, entry alert on/off, tone, volume, repeat tone, altitude floor/ceiling, font size, brightness, vector length, load threshold per airspace, My Position CID, auto-select on/off.
+User-changeable settings (persisted): horizon, alert threshold, entry alert on/off, tone, volume, **audio output device**, repeat tone, altitude floor/ceiling, font size, brightness, vector length, load threshold per airspace, My Position CID, auto-select on/off.
 
 ---
 
@@ -458,9 +491,13 @@ User-changeable settings (persisted): horizon, alert threshold, entry alert on/o
    - `predict.ts` with a synthetic square airspace (1°×1°): inside heading east at 360 kt → exit time matches analytic value within 2 s; outside heading toward it → entry; heading away → none; MultiPolygon; hole; tangent/grazing path; aircraft sitting on the boundary (ENTER/EXIT classification); zero crossings within horizon; corner clip → `CLP`; a bent (RTE-style) path crossing twice.
    - Countdown anchoring: prediction from a 20 s-old position shows 20 s less remaining than from a fresh one.
    - `track.ts`: track vs heading fallback; turn detection; vertical trend; history reset on callsign change for the same cid.
-   - `route.ts`: fixes; airway expansion both directions; SID `NAME#.TRANS` and STAR `TRANS.NAME#`; duplicate idents resolved by proximity; lat/lon formats; speed/alt groups stripped; unknown tokens → `partial`; unusable route.
-   - `path.ts`: conformance → RTE; off-route/vectored → DR; mode hysteresis (2 polls).
-   - `load.ts`: peak-count sweep; bin boundaries; DR aircraft excluded beyond `HORIZON_MIN`; altitude filter applied.
+   - `route.ts`: fixes; airway expansion both directions; SID `NAME#.TRANS` and STAR `TRANS.NAME#`; **space-separated SID + next-token transition and previous-token transition + STAR**; procedure name without version digit; duplicate idents resolved by proximity; lat/lon formats; speed/alt groups stripped; unknown tokens → `partial`; unusable route.
+   - `path.ts`: conformance → RTE; off-route/vectored → DR; mode hysteresis (2 polls); initial mode needs no hysteresis; zig-zag route matches the correct (forward) leg.
+   - `load.ts`: peak-count sweep; bin boundaries; DR aircraft excluded beyond `DR_TRUST_MIN` **even when `HORIZON_MIN` = 60**; altitude filter applied.
+   - Filtering: pilots with `flight_plan == null` never appear in lists/alerts/load; VFR with a flight plan does, flagged `V`.
+   - Server-time offset: max-of-window estimator converges to within the minimum CDN age on synthetic samples.
+   - Prefixes: a boundary with several prefixes (`KZKC`: `MCI`, `KC`) matches `KC_12_CTR` and `MCI_CTR`.
+   - Switching airspace keeps track history: after switching, an aircraft in the new airspace has a derived track (not the heading fallback).
    - `alerts.ts`: NONE→ACTIVE at 120 s; no re-fire while jittering 118–125 s; re-arm after > 150 s; → NONE when exit disappears; EXITED transition; dropped aircraft removed silently; one tone for simultaneous alerts; silent priming on switch; CLP and ARR never alert; countdown clamps at 00:00.
    - `myPosition.ts`: `MEM_22_CTR` → KZME; auto-select only on transition; non-CTR ignored.
    - `facilityLookup.ts`: known points (Memphis airport 35.04, −89.98 → KZME; Indianapolis 39.72, −86.29 → KZID; a point in Canada → CZ**); tier order; excluded splits never match.
@@ -468,10 +505,11 @@ User-changeable settings (persisted): horizon, alert threshold, entry alert on/o
    - Verify all test coordinates against the bundled boundaries before asserting (boundaries are VATSpy's, not FAA's).
    - Keying: KZNY domestic vs oceanic are distinct; `oceanic: "0"` is treated as domestic; no collision with `KZMA-OCN`.
 2. **Replay mode (required — live traffic is unpredictable):**
-   - `npm run record -- --minutes 10` saves snapshots to `public/recordings/<date>/NNN.json.gz`, **filtered** to pilots/controllers within lon −180…−30 & 120…180, lat 0…80, **with `name` removed**. Target: a 10-min recording ≤ ~5 MB.
-   - In the app, `?replay=<folder>` (dev only) feeds snapshots at 1× or 4× using the replay clock instead of live polling. The toolbar shows `REPLAY 4×` in caution color.
+   - `npm run record -- --minutes 10` saves snapshots to `tests/fixtures/recordings/<date>/NNN.json.gz` (**not** `public/` — anything there ships in the Pages build), **filtered** to pilots/controllers within lon −180…−30 & 120…180, lat 0…80, **with `name` removed** and **`cid` replaced by a consistent pseudonym** (sequential ids, same mapping across all snapshots of one recording) since the repo is public. `--keep-cid <cid>` preserves one real CID for My Position testing. Target: a 10-min recording ≤ ~5 MB.
+   - In the app, `?replay=<folder>` (dev server only; Vite serves the fixtures dir via a dev-only middleware or `server.fs.allow`) feeds snapshots at 1× or 4× using the replay clock instead of live polling. The toolbar shows `REPLAY 4×` in caution color.
    - Commit one ~10 min recording from a busy time (e.g. Friday evening US) as a fixture.
-3. **Manual acceptance:** with live data, select ZME, pick an aircraft near the boundary; verify ETX counts down smoothly, the alert fires at 2:00 with tone and visuals, the exit-into is correct, and RTE/DR mode is sensible. Repeat for a coastal ARTCC (ZJX/ZMA) and a Canada-bordering one (ZMP/ZSE). Log on (or use a friend's CID) to verify My Position auto-select.
+3. **Background throttling check:** with live data, cover the browser window completely with another app for ≥ 10 min; the recorded poll log must show a poll every ~15 s throughout and alert tones must still fire on time.
+4. **Manual acceptance:** with live data, select ZME, pick an aircraft near the boundary; verify ETX counts down smoothly, the alert fires at 2:00 with tone and visuals, the exit-into is correct, and RTE/DR mode is sensible. Repeat for a coastal ARTCC (ZJX/ZMA) and a Canada-bordering one (ZMP/ZSE). Log on (or use a friend's CID) to verify My Position auto-select.
 
 ---
 
@@ -483,16 +521,16 @@ User-changeable settings (persisted): horizon, alert threshold, entry alert on/o
 **M1 — Boundary data.** `scripts/update-data.mjs` produces the four `public/data` files (§3.2), including the sub-area classification table. `airspaces.ts` exposes `getSelectableAirspaces()`, `getAirspace(id)`, `facilityAt(lat, lon)`.
 ✅ Accept: `facilityAt` and keying tests pass; selector list has exactly 22 airspaces; the sub-area classification is documented.
 
-**M2 — Feed, clock, recorder.** `feed.ts` with discovery, 15 s polling, `no-cache`, dedupe, server-time offset, exponential backoff (15→30→60 s max), `DATA Ns` in toolbar. `clock.ts`. `scripts/record.mjs` (start recording fixtures early).
-✅ Accept: `DATA Ns` ticks; network tab shows ≤ 1 request / 15 s; a 10-min recording is ≤ ~5 MB and contains no `name` fields.
+**M2 — Worker, feed, clock, recorder.** `engine.worker.ts` hosting `feed.ts` with discovery, 15 s polling, `no-cache`, dedupe, server-time offset (§3.1 estimator), exponential backoff (15→30→60 s max), `DATA Ns` in toolbar, main-thread watchdog (§4.3). `clock.ts`. `scripts/record.mjs` with pseudonymized CIDs (start recording fixtures early).
+✅ Accept: `DATA Ns` ticks; network tab shows ≤ 1 request / 15 s; polling continues every ~15 s with the window fully covered for 10 min (§9.3); a 10-min recording is ≤ ~5 MB, lives under `tests/fixtures/`, and contains no `name` fields and no real CIDs.
 
 **M3 — Core prediction (dead reckoning).** `track.ts`, `path.ts` (DR mode), `predict.ts`, prefilter, arrivals, exit-into, CLP. Fully unit-tested.
-✅ Accept: all core tests for these modules pass.
+✅ Accept: all core tests for these modules pass; the §4.3 performance budget is met on the busiest fixture snapshot (measured in a Vitest benchmark).
 
 **M4 — Lists, switching, replay, My Position.** Store wiring; OUTBOUND and INBOUND windows with 1 s countdowns; AIRSPACE menu; window frame (drag/resize/persist); replay player; My Position.
 ✅ Accept: switching ZME/ZNY/ZLA/ZAN updates lists immediately; countdowns tick every second; every OUTBOUND row shows `TO` and `DIR`; summary strip counts and filters; layout works at 480 × 700 with no horizontal scroll; replay of the fixture works at 1× and 4×.
 
-**M5 — Alerts.** `alerts.ts`, ALERTS window, flashing, acknowledge, Web Audio tones, audio unlock overlay, mute.
+**M5 — Alerts.** `alerts.ts` (in the worker), ALERTS window, flashing, acknowledge, Web Audio tones, output device picker + `TEST` button, audio unlock overlay, mute.
 ✅ Accept: with the replay fixture, alerts fire exactly once per exit, the tone plays once per batch, switching airspace is silent, ack stops flashing; spot-check ≥ 5 exits' exit-into against where the aircraft actually went on later snapshots.
 
 **M6 — Nav data & route-based prediction.** `scripts/update-nav.mjs`, `navdata.ts` (lazy), `route.ts`, RTE mode in `path.ts`, conformance + hysteresis, `RTE`/`DR` flags, Flight Plan Readout.
@@ -504,8 +542,10 @@ User-changeable settings (persisted): horizon, alert threshold, entry alert on/o
 **M8 — Scope window.** Canvas projection, boundaries, labels, targets, vectors, trails, datablocks, exit markers, pan/zoom/auto-fit, click-select.
 ✅ Accept: owner review with screenshots; no jank panning with 300 targets.
 
-**M9 — Polish.** Settings window (all §8 settings), About (data release tag, AIRAC cycle, accuracy note, load gap note, attribution), README with run and data-update instructions.
-✅ Accept: owner can run `npm install && npm run dev` from the README and use everything above.
+**M9 — Polish & publish.** Settings window (all §8 settings), About (data release tag, AIRAC cycle, accuracy note, load gap note, attribution, "not for real-world navigation"), README aimed at **non-developer controllers** (how to open the hosted page, place it beside CRC, pick an audio device) plus a developer section (run, data-update).
+- **GitHub Actions:** (1) CI on PRs: lint, test, build. (2) Deploy `main` to **GitHub Pages** (Vite `base` = `/<repo-name>/`). (3) A **scheduled workflow** (weekly) that runs `update-data` and `update-nav` and opens a PR when files change — NASR is on a 28-day cycle and VATSpy releases irregularly.
+- Before going public: check VATSIM's data-feed usage/attribution requirements and add whatever attribution they ask for to About.
+✅ Accept: owner can run `npm install && npm run dev` from the README and use everything above; the Pages URL serves the app with all data loading under the subpath; the scheduled refresh workflow has run once successfully.
 
 Deliver each milestone as a separate git commit.
 
@@ -533,10 +573,18 @@ Deliver each milestone as a separate git commit.
 - Load forecast: both strategic and tactical views, toggleable.
 - Browser only for v1 (no always-on-top).
 
+**Decided with the owner (2026-09-27, revision 3):**
+- Audience: **VATUSA-wide public tool**, hosted on **GitHub Pages** with a scheduled data-refresh workflow.
+- Scope of traffic: **IFR + VFR with a filed flight plan**; no-FP aircraft ignored.
+- Unstaffed neighbor: **alert the same** as staffed (display dims only).
+- Audio: **selectable output device** (headset vs speakers).
+- Selectable facilities stay at **22** (no Guam/San Juan selection in v1; both still resolve as exit-into).
+- Always-on-top (Document PiP) stays **deferred**.
+- No per-ARTCC shipped defaults and no settings export/import in v1.
+
 **Open (implementing agent: use the stated default and continue; don't block):**
 1. Entry alerts? **Default:** available in settings, off.
 2. Aircraft landing inside ever trigger exit alerts? **Default:** suppressed (§5.6).
 3. Alert repeat while unacknowledged? **Default:** off.
-4. Hosting: local `npm run dev` only, or deploy (e.g. GitHub Pages)? **Default:** local; `npm run build` must work as static files.
-5. Color calibration: owner to provide CRC ERAM screenshots for M8 review.
-6. Load threshold defaults per ARTCC? **Default:** 20 for all, user-editable.
+4. Color calibration: owner to provide CRC ERAM screenshots for M8 review.
+5. Load threshold defaults per ARTCC? **Default:** 20 for all, user-editable (decided: no shipped table).
