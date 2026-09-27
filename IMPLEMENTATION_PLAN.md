@@ -113,7 +113,7 @@ Commit the generated files. `npm run update-data` refreshes them.
 - `npm run update-nav` refreshes; add it to the README with a note to run every 28 days.
 
 ### 3.4 Researched but deferred
-- **vNAS data API** `https://data-api.vnas.vatsim.net/api/artccs/{ZME}` (returns 200) – `facility.neighboringFacilityIds`, ERAM sector list, positions/callsigns/frequencies, `videoMaps`. Phase 2 (sector-level airspace). Verify CORS before relying on it.
+- **vNAS data API** `https://data-api.vnas.vatsim.net/api/artccs/{ZME}` (returns 200) – `facility.neighboringFacilityIds`, ERAM sector list, positions/callsigns/frequencies, `videoMaps`. Phase 2 (sector-level airspace). ⚠ No CORS (verified 2026-09-27) — build-time only; see `SECTOR_PLAN.md` §3.
 - **SimAware TRACON Project** (`github.com/vatsimnetwork/simaware-tracon-project`, release v1.2.13, `TRACONBoundaries.geojson`) – Phase 3.
 
 ---
@@ -555,7 +555,7 @@ Deliver each milestone as a separate git commit.
 
 ## 11. Future phases (do not build in v1; keep architecture compatible)
 
-- **Phase 2 – Sector-level airspace:** vNAS data API (ERAM sectors, positions, neighbors) + sector boundaries with altitude strata; 3D crossing check; My Position filters to the owner's sector/stratum.
+- **Phase 2 – Sector-level airspace:** vNAS data API (ERAM sectors, positions, neighbors) + sector boundaries with altitude strata; 3D crossing check; My Position filters to the owner's sector/stratum. **Planned in `SECTOR_PLAN.md` (M10–M14).**
 - **Phase 2 – Better route timing:** climb/descent and speed profiles by aircraft type; departures-not-yet-airborne in the load forecast (from prefiles + ground aircraft).
 - **Phase 2 – Extra alerts:** emergency squawks (7500/7600/7700), squawk ≠ `assigned_transponder`, wrong altitude for direction of flight, neighbor staffing changes.
 - **Phase 3 – TRACONs:** SimAware TRACON boundaries in the selector (with floor/ceiling); APP positions in My Position.
