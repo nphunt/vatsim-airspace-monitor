@@ -205,6 +205,10 @@ input[aria-invalid="true"] {
   opacity: 0.85;
 }
 
+.eram-window.lifted .eram-window-body {
+  display: none;
+}
+
 /* Where a dragged window will dock if dropped now. */
 .eram-snap-preview {
   position: fixed;
@@ -215,6 +219,15 @@ input[aria-invalid="true"] {
   pointer-events: none;
   border: 2px solid var(--eram-toolbar-active);
   background: rgb(0 160 160 / 0.15);
+}
+
+/* Where a window being reordered drops back into its stack. */
+.eram-insert-line {
+  position: fixed;
+  height: 3px;
+  z-index: 1001;
+  pointer-events: none;
+  background: var(--eram-toolbar-active);
 }
 
 .eram-snap-preview.left {

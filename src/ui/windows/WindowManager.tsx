@@ -68,6 +68,8 @@ export function WindowManager() {
   const setColumns = useStore((s) => s.setColumns);
   const [zOrder, setZOrder] = useState<WindowId[]>([]);
   const [snapPreview, setSnapPreview] = useState<DockColumn | null>(null);
+  /** Where a window being reordered would drop back into its stack, px (fixed). */
+  const [insertLine, setInsertLine] = useState<{ x: number; y: number; w: number } | null>(null);
   const sectionRefs = useRef(new Map<WindowId, HTMLDivElement>());
   const columnRefs = useRef(new Map<DockColumn, HTMLDivElement>());
 
@@ -89,16 +91,41 @@ export function WindowManager() {
   const floating = floatingIds(windows);
   const focus = (id: WindowId) => setZOrder((z) => [...z.filter((x) => x !== id), id]);
 
-  /** Dock `id` into a side column where it was dropped, between the windows around it. */
-  function snap(id: WindowId, column: DockColumn, clientY: number) {
+  /** The other docked windows of `column`, top to bottom, with their slot rectangles. */
+  function stackRects(id: WindowId, column: DockColumn) {
     const current = useStore.getState().settings.windows;
-    const mids = dockedOrder(current, column)
+    return dockedOrder(current, column)
       .filter((x) => x !== id)
-      .map((x) => {
-        const r = sectionRefs.current.get(x)?.getBoundingClientRect();
-        return r ? r.top + r.height / 2 : Infinity;
-      });
-    setWindows(dockTo(current, id, column, dropIndex(mids, clientY)));
+      .map((x) => ({ id: x, r: sectionRefs.current.get(x)?.getBoundingClientRect() }));
+  }
+
+  /** Where in `column` a drop at `clientY` lands, between the windows around it. */
+  function dropSlot(id: WindowId, column: DockColumn, clientY: number) {
+    const others = stackRects(id, column);
+    const mids = others.map(({ r }) => (r ? r.top + r.height / 2 : Infinity));
+    return { others, index: dropIndex(mids, clientY) };
+  }
+
+  /** Dock `id` into `column` where it was dropped (side-edge snap, or a stack reorder). */
+  function dropInto(id: WindowId, column: DockColumn, clientY: number) {
+    const { index } = dropSlot(id, column, clientY);
+    setWindows(dockTo(useStore.getState().settings.windows, id, column, index));
+  }
+
+  /** Insertion line for a reorder drag: the gap above/below the window it lands next to. */
+  function previewReorder(id: WindowId, clientY: number | null) {
+    if (clientY === null) {
+      setInsertLine(null);
+      return;
+    }
+    const column = useStore.getState().settings.windows[id].column;
+    const col = columnRefs.current.get(column)?.getBoundingClientRect();
+    if (!col) return;
+    const { others, index } = dropSlot(id, column, clientY);
+    const below = others[index]?.r;
+    const above = others[index - 1]?.r;
+    const y = below ? below.top - 3 : above ? above.bottom + 2 : col.top + 2;
+    setInsertLine({ x: col.left + 2, y, w: col.width - 4 });
   }
 
   function frame(id: WindowId) {
@@ -116,8 +143,10 @@ export function WindowManager() {
           focus(id);
           patchWindow(id, { ...g, docked: false, positioned: true });
         }}
-        onSnap={(column, y) => snap(id, column, y)}
+        onSnap={(column, y) => dropInto(id, column, y)}
         onSnapPreview={setSnapPreview}
+        onReorderPreview={(y) => previewReorder(id, y)}
+        onReorder={(y) => dropInto(id, windows[id].column, y)}
       >
         {WINDOWS[id].body()}
       </EramWindow>
@@ -228,6 +257,13 @@ export function WindowManager() {
         <Fragment key={id}>{frame(id)}</Fragment>
       ))}
       {snapPreview && <div className={`eram-snap-preview ${snapPreview}`} aria-hidden />}
+      {insertLine && (
+        <div
+          className="eram-insert-line"
+          style={{ left: insertLine.x, top: insertLine.y, width: insertLine.w }}
+          aria-hidden
+        />
+      )}
     </>
   );
 }

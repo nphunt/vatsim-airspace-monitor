@@ -56,7 +56,7 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 | `DATA 12s` | Age of the traffic data. Red past 60 s: the feed is late or the page lost its connection |
 | `NAV DATA EXPIRED` | The bundled FAA route data is out of date; routes may predict worse |
 
-Each window can be minimized (`-`), undocked to float (`↗`) and closed (`X`). Drag any window by its title bar: drop it at the **left or right edge** of the page and it docks into a column on that side (a highlight shows where), placed above or below the windows already there by where you drop it. Drop it anywhere else and it floats. Drag the gaps between columns or windows to resize them; `↙` sends a floating window back to the main stack. Layout and settings are saved in this browser only.
+Each window can be minimized (`-`), undocked to float (`↗`) and closed (`X`). Drag a docked window's title bar **up or down** to move it within its stack: a line shows where it will land, and it snaps back in when you let go. Pull it **far to the side** and it pops out as a floating window (bring it back near the stack before letting go to keep it docked). Drop any window at the **left or right edge** of the page and it docks into a column on that side (a highlight shows where), above or below the windows already there by where you drop it; drop it anywhere else and it floats. Drag the gaps between columns or windows to resize them; `↙` sends a floating window back to the main stack. Layout and settings are saved in this browser only.
 
 ### Good to know
 

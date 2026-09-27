@@ -15,6 +15,9 @@ export const MIN_DOCKED_H = 60;
 export const NARROW_VIEWPORT_PX = 600;
 /** Dropping a dragged window with the pointer this close to a side edge docks it there. */
 export const SNAP_EDGE_PX = 32;
+/** Sideways drag that pulls a docked window out of its stack to float, px (at most). */
+export const TEAR_OUT_PX = 160;
+
 /** Minimum column width while dragging a column splitter, px. */
 export const MIN_COLUMN_W = 200;
 
@@ -23,6 +26,25 @@ export function dockedOrder(windows: Windows, column: DockColumn = "main"): Wind
   return WINDOW_IDS.filter(
     (id) => windows[id].open && windows[id].docked && windows[id].column === column,
   ).sort((a, b) => windows[a].order - windows[b].order);
+}
+
+export type DockDragMode = "reorder" | "float";
+
+/**
+ * Dragging a docked window: moving it up and down reorders it in its stack; pulling it
+ * far enough sideways (TEAR_OUT_PX, or 40% of a narrow column) tears it out to float.
+ * Coming back within half that distance returns it to reordering (hysteresis, so it
+ * doesn't flicker at the threshold).
+ */
+export function dockDragMode(
+  dxPx: number,
+  columnWidthPx: number,
+  current: DockDragMode,
+): DockDragMode {
+  const out = Math.min(TEAR_OUT_PX, columnWidthPx * 0.4);
+  const d = Math.abs(dxPx);
+  if (current === "reorder") return d > out ? "float" : "reorder";
+  return d < out / 2 ? "reorder" : "float";
 }
 
 /** Side column a drag would snap into with the pointer at `clientX`, or null. */

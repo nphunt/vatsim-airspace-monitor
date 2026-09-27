@@ -4,6 +4,7 @@ import {
   TITLE_H,
   clampAll,
   clampFloating,
+  dockDragMode,
   dockTo,
   dockedOrder,
   dropIndex,
@@ -101,5 +102,15 @@ describe("window layout", () => {
   it("column splitter respects its own minimum width", () => {
     const [a] = splitWeights([1, 1], [400, 400], -1000, 200);
     expect(a).toBeCloseTo(0.5); // 200 px of 800
+  });
+
+  it("docked drag: reorders until pulled far sideways, with hysteresis back in", () => {
+    // Wide column: 160 px out; 80 px to come back.
+    expect(dockDragMode(150, 960, "reorder")).toBe("reorder");
+    expect(dockDragMode(-170, 960, "reorder")).toBe("float");
+    expect(dockDragMode(100, 960, "float")).toBe("float");
+    expect(dockDragMode(70, 960, "float")).toBe("reorder");
+    // Narrow column: 40% of 300 = 120 px.
+    expect(dockDragMode(125, 300, "reorder")).toBe("float");
   });
 });
