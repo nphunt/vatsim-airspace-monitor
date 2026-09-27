@@ -52,7 +52,8 @@ The user MUST be able to switch airspaces at any time, across the whole United S
 ## 3. Data sources (verified 2026-09-27 unless noted)
 
 ### 3.1 VATSIM live data feed
-- **Discovery:** `GET https://status.vatsim.net/status.json` → use `data.v3[0]` as the feed URL. Hard-code `https://data.vatsim.net/v3/vatsim-data.json` only as a fallback.
+- **Discovery (build time only):** ⚠ `status.vatsim.net/status.json` sends **no CORS header** (verified 2026-09-27 in a browser: `fetch` fails), so it MUST NOT be fetched from the app. `update-data.mjs` reads it in Node and writes `data.v3[0]` to `public/data/meta.json` as `feedUrl`; at runtime use `meta.feedUrl`, falling back to the hard-coded `https://data.vatsim.net/v3/vatsim-data.json`. See PUBLISHING_PLAN §0 B2.
+- **Timestamps** carry 5–7 fractional-second digits (e.g. `…17:34:11.2326506Z`). Parse with `core/parseVatsimTime` (truncate the fraction to 3 digits, `NaN` → skip the sample), never raw `Date.parse`. See PUBLISHING_PLAN §6.5.
 - **Feed:**
   - Response headers: `access-control-allow-origin: *`, `Cache-Control: public, max-age=15`. → **Poll every 15 s, never faster.** Use `fetch(url, { cache: "no-cache" })` so the browser revalidates instead of serving its own cached copy (otherwise effective updates drop to every 30 s).
   - `general.update_timestamp` (ISO string) – skip processing if unchanged from the last poll. A skipped (duplicate) poll does NOT count as a "missed" poll for any aircraft.
@@ -88,7 +89,7 @@ Sample pilot object (trimmed):
     - Record the classification as an explicit table in `scripts/update-data.mjs` (with a comment on how it was verified) and in `firs.json` (`tier` field). Do not guess — check overlap area with turf.
 - ⚠ **`KZNY` appears twice** (domestic and oceanic). Key features by `` `${id}#${oceanic === "1" ? "ocn" : "dom"}` `` internally. Do **not** use an `-OCN` suffix: `KZMA-OCN` is already a real id and could collide.
 - Geometry may be `Polygon` or `MultiPolygon`; handle both, including holes.
-- `VATSpy.dat` `[FIRs]` section format: `ICAO|NAME|CALLSIGN PREFIX|FIR BOUNDARY`, e.g. `KZME|Memphis|MEM|KZME`. **The same boundary can appear on several rows with different prefixes** (verified: `KZKC` has both `MCI` and `KC`) — collect a *set* of prefixes per boundary. Use NAME for display ("Memphis") and the prefix set to match online controllers (`MEM_*_CTR`). Ignore empty prefixes.
+- `VATSpy.dat` `[FIRs]` section format: `ICAO|NAME|CALLSIGN PREFIX|FIR BOUNDARY`, e.g. `KZME|Memphis|MEM|KZME`. **The same boundary can appear on several rows with different prefixes** (verified: `KZKC` has both `MCI` and `KC`) — collect a *set* of prefixes per boundary, keyed by the **4th column** (boundary), not the ICAO column (`KZA1|…|SF|KZAK` rows belong to `KZAK`). Use NAME for display ("Memphis") and the prefix set to match online controllers (`MEM_*_CTR`). Ignore empty prefixes. ⚠ Prefixes can contain underscores (`MIA_N`, `KC_E`, `NY_W`, `JAX_A`, `ZAN_64`) and `PAZA` has an **empty** prefix (Anchorage Center's `ANC` is on `PAZA-D`). So: record `parent` for every sub-area in `firs.json`; a base ARTCC's prefix set = its own ∪ its children's; callsign matching uses **longest prefix wins**, then rolls up to the parent. See PUBLISHING_PLAN §6.
 - `VATSpy.dat` `[Airports]` section gives ICAO + lat/lon — used to detect "destination is inside the airspace" (§5.6).
 
 **Bundle, don't fetch at runtime.** GitHub release downloads are not reliable CORS sources. `scripts/update-data.mjs` (Node) downloads the latest release assets via the GitHub API (`/repos/vatsimnetwork/vatspy-data-project/releases/latest`), filters, and writes:
@@ -256,7 +257,7 @@ if no relevant crossing within horizon → not listed
 - Classifying ENTER/EXIT by probing replaces the old "drop crossings < 0.1 nm" rule, which could relabel a re-entry as an exit when the aircraft was sitting on the line.
 - Use boundary *rings* (`turf.polygonToLine`) for intersections; handle MultiPolygon & holes.
 - **facilityAt(point):** tiered point-in-polygon: **domestic** base ARTCCs → **oceanic** tier (US oceanic + classified sub-areas, §3.2) → **foreign** FIRs. `excluded` features never match. Return `{ key, id, name, staffed }`. Use a bbox index. No hit → `UNK`.
-- **staffed:** true if any controller in the feed has `facility == 6` and callsign starts with any of the FIR's prefixes + `"_"` (e.g. `MEM_`). Staffed = normal text, unstaffed = dimmed.
+- **staffed:** true if any controller in the feed has `facility == 6` (oceanic tier: `facility ∈ {1, 6}`, since oceanic often logs on as `_FSS`), is not on frequency `199.998` (no primary frequency), and its callsign resolves to this FIR via the longest-prefix + roll-up rule (§3.2). Staffed = normal text, unstaffed = dimmed.
 - **Antimeridian:** before geometry ops, shift longitudes into a continuous range around the selected airspace's center (e.g. PAZA: map to −250…−110 or 110…250 consistently for the airspace, its neighbors, and pilots). PAZA and PHZH MUST be selectable, and PAZA exits across 180° MUST resolve to the Russian FIR, not `UNK`.
 
 ### 5.6 Arrivals and departures
@@ -337,8 +338,8 @@ For each aircraft in (or predicted to enter) the selected airspace, compute **oc
 - Recompute on each feed cycle (not every UI tick).
 
 ### 5.12 My Position (`myPosition.ts`)
-- Setting: the owner's **CID** (persisted; blank = feature off).
-- Each poll, look for a `controllers[]` entry with that cid and `facility == 6`. If found, map its callsign prefix to a FIR via the prefix sets (`MEM_22_CTR` → KZME).
+- Setting: the owner's **CID** (persisted; blank = feature off). The feed's `cid` is a JSON **number**; the input is a string. Validate `/^\d{1,8}$/` after trim, store as a number, compare numerically (a `===` against the string never matches, verified).
+- Each poll, look for a `controllers[]` entry with that cid and `facility == 6`. If found, map its callsign to a base ARTCC with the longest-prefix + roll-up rule (§3.2): `MEM_22_CTR` → KZME, `MIA_N_CTR` → KZMA, `ANC_40_CTR` → PAZA. A `199.998` frequency still counts for My Position. If it resolves to a non-selectable facility (TJZS, PGZU, KZAK), show `ON <callsign>` but don't auto-select.
 - **Auto-select** that ARTCC on the *transition* only (offline → online, or callsign change), so the user can still switch manually while logged on. Setting to disable auto-select.
 - Toolbar shows `ON MEM_22_CTR` while online.
 - Non-CTR positions (APP/TWR) don't auto-select in v1 (Phase 3 with TRACONs).
