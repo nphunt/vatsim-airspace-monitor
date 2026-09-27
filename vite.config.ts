@@ -75,6 +75,10 @@ function replayFixtures(): Plugin {
 export default defineConfig({
   base: pagesBase(),
   plugins: [react(), replayFixtures()],
+  server: {
+    // Dev server reachable through an ngrok tunnel (hostnames only, no scheme).
+    allowedHosts: ["amuck-yesterday-cilantro.ngrok-free.dev"],
+  },
   define: {
     __BUILD_ID__: JSON.stringify(buildId()),
   },
