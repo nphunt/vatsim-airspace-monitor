@@ -66,7 +66,13 @@ export interface WindowState {
   order: number;
   /** False until the user moves/resizes/undocks it (§7.2: new windows dock when narrow). */
   positioned: boolean;
+  /** Docked: which column of the dock area (main stack, or a side column). */
+  column: DockColumn;
 }
+
+/** Dock area columns, left to right. Windows snap into a side column from the page edge. */
+export type DockColumn = "left" | "main" | "right";
+export const DOCK_COLUMNS: readonly DockColumn[] = ["left", "main", "right"];
 
 export interface Settings {
   schemaVersion: typeof SETTINGS_SCHEMA_VERSION;
@@ -100,6 +106,8 @@ export interface Settings {
   bright: Brightness;
   /** Pause polling after IDLE_STOP_MIN without input (PUBLISHING_PLAN §4). */
   idleStop: boolean;
+  /** Dock column widths as flex weights (only columns holding windows are shown). */
+  columns: Record<DockColumn, number>;
   windows: Record<WindowId, WindowState>;
 }
 
@@ -128,6 +136,7 @@ const win = (w: Partial<WindowState>): WindowState => ({
   weight: 1,
   order: 0,
   positioned: false,
+  column: "main",
   ...w,
 });
 
@@ -153,6 +162,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fontSizePx: FONT_SIZE_PX,
   bright: { list: 100, map: 100, datablock: 100 },
   idleStop: true,
+  columns: { left: 1, main: 1, right: 1 },
   windows: {
     // Default open: OUTBOUND and ALERTS (§7.2). Lists dock; menus float.
     outbound: win({ open: true, order: 0 }),
@@ -201,6 +211,9 @@ function readWindow(v: unknown, d: WindowState): WindowState {
     weight: Math.max(0.05, finite(v.weight, d.weight)),
     order: finite(v.order, d.order),
     positioned: bool(v.positioned, d.positioned),
+    column: (DOCK_COLUMNS as readonly unknown[]).includes(v.column)
+      ? (v.column as DockColumn)
+      : d.column,
   };
 }
 
@@ -213,6 +226,12 @@ function readThresholds(v: unknown): Record<string, number> {
     }
   }
   return out;
+}
+
+function readColumns(v: unknown, d: Record<DockColumn, number>): Record<DockColumn, number> {
+  const c = isObj(v) ? v : {};
+  const w = (k: DockColumn) => Math.min(20, Math.max(0.05, finite(c[k], d[k])));
+  return { left: w("left"), main: w("main"), right: w("right") };
 }
 
 /** Validates a parsed blob field by field against the defaults. */
@@ -255,6 +274,7 @@ export function parseSettings(raw: unknown): Settings {
     fontSizePx: oneOf(FONT_SIZE_CHOICES_PX, raw.fontSizePx, d.fontSizePx),
     bright: readBright(raw.bright, d.bright),
     idleStop: bool(raw.idleStop, d.idleStop),
+    columns: readColumns(raw.columns, d.columns),
     windows: Object.fromEntries(
       WINDOW_IDS.map((id) => [id, readWindow(windows[id], d.windows[id])]),
     ) as Record<WindowId, WindowState>,

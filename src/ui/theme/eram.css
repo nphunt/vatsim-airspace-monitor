@@ -169,12 +169,60 @@ input[aria-invalid="true"] {
   margin: 0;
 }
 
-.eram-dock-stack {
+/* Dock area: side columns (left/right) around the main stack (§7.2). */
+.eram-dock-area {
   flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+
+.eram-dock-stack {
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 2px;
+}
+
+.eram-col-splitter {
+  flex: none;
+  width: 5px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.eram-col-splitter:hover {
+  background: var(--eram-window-border);
+}
+
+.eram-window.docked .eram-window-title {
+  cursor: grab;
+}
+
+.eram-window.dragging {
+  opacity: 0.85;
+}
+
+/* Where a dragged window will dock if dropped now. */
+.eram-snap-preview {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: min(40vw, 420px);
+  z-index: 999;
+  pointer-events: none;
+  border: 2px solid var(--eram-toolbar-active);
+  background: rgb(0 160 160 / 0.15);
+}
+
+.eram-snap-preview.left {
+  left: 0;
+}
+
+.eram-snap-preview.right {
+  right: 0;
 }
 
 .eram-dock-slot {

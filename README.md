@@ -31,9 +31,9 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 
 ### 4. Read the lists
 
-- **OUTBOUND**: aircraft inside your airspace predicted to leave within the horizon, soonest first. `TO` is the airspace it will enter (dimmed if nobody is staffing it), `DIR` the direction it leaves, `ETX` the time to exit. The strip above the list counts exits per neighbor; click one to filter.
+- **OUTBOUND**: aircraft inside your airspace predicted to leave within the horizon, soonest first. `TO` is the airspace it will enter (dimmed if nobody is staffing it), `DIR` the direction it leaves, `ETX` the time to exit as a countdown and the Zulu time it crosses (`01:52 1732Z`). The strip above the list counts exits per neighbor; click one to filter.
 - **ALERTS**: an aircraft flashes red 2:00 before it exits (change this in SETTINGS → `ALERT AT`) with one short tone. Click it, or press `A` for all, to acknowledge. It shows the neighbor's controller and frequency when staffed.
-- **INBOUND**: aircraft predicted to enter, with `ETE` and where they come from.
+- **INBOUND**: aircraft predicted to enter, with `ETE` (countdown and Zulu time) and where they come from. With `SETTINGS` → `ALSO ALERT … BEFORE ENTRY` on, an aircraft about to enter flashes here and in ALERTS, like an exit.
 - `FLG` column: `RTE` (following its filed route) or `DR` (dead reckoning on its current track; less reliable before turns), `ARR` landing inside, `TRN` turning, `CLP` only clipping a corner (never alerts), `V` VFR.
 - Times are `MM:SS`; past an hour, `H+MM`.
 - Click any row to open the **flight plan readout**: route, filed altitude, squawk, and whether it is predicted by route or dead reckoning.
@@ -56,7 +56,7 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 | `DATA 12s` | Age of the traffic data. Red past 60 s: the feed is late or the page lost its connection |
 | `NAV DATA EXPIRED` | The bundled FAA route data is out of date; routes may predict worse |
 
-Each window can be minimized (`-`), undocked to float (`↗`) and closed (`X`). Layout and settings are saved in this browser only.
+Each window can be minimized (`-`), undocked to float (`↗`) and closed (`X`). Drag any window by its title bar: drop it at the **left or right edge** of the page and it docks into a column on that side (a highlight shows where), placed above or below the windows already there by where you drop it. Drop it anywhere else and it floats. Drag the gaps between columns or windows to resize them; `↙` sends a floating window back to the main stack. Layout and settings are saved in this browser only.
 
 ### Good to know
 

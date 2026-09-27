@@ -4,9 +4,12 @@ import {
   TITLE_H,
   clampAll,
   clampFloating,
+  dockTo,
   dockedOrder,
+  dropIndex,
   floatingIds,
   openWindow,
+  snapZone,
   splitWeights,
   toggleDock,
 } from "./layout";
@@ -59,5 +62,44 @@ describe("window layout", () => {
     const [a, b] = splitWeights([1, 1], [300, 300], 1000);
     expect(a + b).toBeCloseTo(2);
     expect(b).toBeCloseTo((2 * 60) / 600);
+  });
+
+  it("snaps into a side column only within the edge band", () => {
+    expect(snapZone(10, 1200)).toBe("left");
+    expect(snapZone(1190, 1200)).toBe("right");
+    expect(snapZone(600, 1200)).toBeNull();
+  });
+
+  it("docks into a side column at the drop position and out of the main stack", () => {
+    let w = openWindow(windows(), "inbound", 1200);
+    w = dockTo(w, "alerts", "right");
+    expect(dockedOrder(w, "main")).toEqual(["outbound", "inbound"]);
+    expect(dockedOrder(w, "right")).toEqual(["alerts"]);
+    // Dropped above ALERTS's midpoint: goes first.
+    w = dockTo(w, "outbound", "right", dropIndex([300], 120));
+    expect(dockedOrder(w, "right")).toEqual(["outbound", "alerts"]);
+    expect(dockedOrder(w, "main")).toEqual(["inbound"]);
+    expect(w.outbound).toMatchObject({ docked: true, column: "right", positioned: true });
+  });
+
+  it("the dock button returns a floating side-column window to the main stack", () => {
+    let w = dockTo(windows(), "alerts", "left");
+    w = toggleDock(w, "alerts"); // undock
+    expect(w.alerts.docked).toBe(false);
+    w = toggleDock(w, "alerts"); // dock
+    expect(w.alerts.column).toBe("main");
+    expect(dockedOrder(w, "main")).toEqual(["outbound", "alerts"]);
+  });
+
+  it("dropIndex: below every midpoint appends", () => {
+    expect(dropIndex([100, 300], 50)).toBe(0);
+    expect(dropIndex([100, 300], 200)).toBe(1);
+    expect(dropIndex([100, 300], 400)).toBe(2);
+    expect(dropIndex([], 10)).toBe(0);
+  });
+
+  it("column splitter respects its own minimum width", () => {
+    const [a] = splitWeights([1, 1], [400, 400], -1000, 200);
+    expect(a).toBeCloseTo(0.5); // 200 px of 800
   });
 });

@@ -101,6 +101,8 @@ interface AppState {
   clearSelection(): void;
   patchWindow(id: WindowId, patch: Partial<WindowState>): void;
   setWindows(windows: Settings["windows"]): void;
+  /** Dock column width weights (§7.2 side columns). */
+  setColumns(columns: Settings["columns"]): void;
 
   /** Acknowledge one aircraft's ACTIVE alert, or all (null). */
   ack(cid: number | null): void;
@@ -271,6 +273,7 @@ export const useStore = create<AppState>()((set, get) => {
       updateSettings({ windows: { ...windows, [id]: { ...windows[id], ...patch } } });
     },
     setWindows: (windows) => updateSettings({ windows }),
+    setColumns: (columns) => updateSettings({ columns }),
 
     ack: (cid) => send({ type: "ack", cid }),
     setTone: (tone) => updateSettings({ tone }),
