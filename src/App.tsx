@@ -1,22 +1,12 @@
-import { useEffect, useState } from "react";
-import { loadAirspaces } from "./data/airspaces";
+import { useEffect } from "react";
+import { useStore } from "./store/store";
 import { Toolbar } from "./ui/Toolbar";
-
-// TODO(M2): boundary data moves into the engine worker; this main-thread load only proves
-// the bundled files resolve under the app base path.
-type DataStatus = { state: "loading" } | { state: "ok"; count: number } | { state: "error" };
+import { startEngine } from "./worker/client";
 
 export function App() {
-  const [data, setData] = useState<DataStatus>({ state: "loading" });
-
-  useEffect(() => {
-    loadAirspaces()
-      .then((r) => setData({ state: "ok", count: r.getSelectableAirspaces().length }))
-      .catch((e: unknown) => {
-        console.error(e);
-        setData({ state: "error" });
-      });
-  }, []);
+  useEffect(() => startEngine(), []);
+  const ready = useStore((s) => s.engine.ready);
+  const errors = useStore((s) => s.engine.errors);
 
   return (
     <>
@@ -24,10 +14,15 @@ export function App() {
       <main className="eram-dock">
         <p>NO AIRSPACE SELECTED</p>
         <p>
-          {data.state === "loading" && "LOADING BOUNDARIES"}
-          {data.state === "ok" && `${data.count} AIRSPACES LOADED`}
-          {data.state === "error" && "BOUNDARY DATA FAILED TO LOAD"}
+          {ready
+            ? `${ready.selectableCount} AIRSPACES LOADED · VATSPY ${ready.vatspyTag ?? "?"}`
+            : "LOADING"}
         </p>
+        {errors.map((e, i) => (
+          <p key={i} className="eram-error">
+            {e}
+          </p>
+        ))}
         <p>BUILD {__BUILD_ID__}</p>
       </main>
     </>

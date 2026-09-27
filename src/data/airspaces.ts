@@ -82,11 +82,17 @@ async function fetchJson<T>(url: string, fetchImpl: typeof fetch): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Loads the bundled boundary data (§3.2) from public/data under the app base path. */
-export async function loadAirspaces(fetchImpl: typeof fetch = fetch): Promise<AirspaceRegistry> {
+/**
+ * Loads the bundled boundary data (§3.2) from public/data. `base` defaults to the app base
+ * path; the worker passes the page's absolute base URL.
+ */
+export async function loadAirspaces(
+  opts: { base?: string; fetchImpl?: typeof fetch } = {},
+): Promise<AirspaceRegistry> {
+  const fetchImpl = opts.fetchImpl ?? ((...args) => fetch(...args));
   const [firs, boundaries] = await Promise.all([
-    fetchJson<FirRecord[]>(dataUrl("firs.json"), fetchImpl),
-    fetchJson<BoundaryCollection>(dataUrl("boundaries.us.geojson"), fetchImpl),
+    fetchJson<FirRecord[]>(dataUrl("firs.json", opts.base), fetchImpl),
+    fetchJson<BoundaryCollection>(dataUrl("boundaries.us.geojson", opts.base), fetchImpl),
   ]);
   return buildAirspaces(firs, boundaries);
 }

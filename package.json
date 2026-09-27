@@ -5,7 +5,7 @@
   "type": "module",
   "description": "ERAM-styled VATSIM exit/entry and load monitor for VATUSA controllers",
   "engines": {
-    "node": ">=22.12"
+    "node": ">=22.18"
   },
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
-    "update-data": "node scripts/update-data.mjs"
+    "update-data": "node scripts/update-data.mjs",
+    "record": "node scripts/record.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",

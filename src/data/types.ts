@@ -53,6 +53,56 @@ export interface Facility {
   tier: Tier | "unknown";
 }
 
+// ---------- VATSIM feed (normalized; §3.1) ----------
+// Only the fields the app uses. `name` is never kept.
+
+export interface VatsimFlightPlan {
+  aircraftShort: string;
+  aircraftFaa: string;
+  departure: string;
+  arrival: string;
+  /** Filed altitude as written in the plan, e.g. "35000", "FL350". */
+  altitude: string;
+  route: string;
+  /** "I" (IFR) or "V" (VFR). */
+  flightRules: string;
+  assignedTransponder: string;
+}
+
+export interface VatsimPilot {
+  cid: number;
+  callsign: string;
+  lat: number;
+  lon: number;
+  /** ft */
+  altitude: number;
+  /** kt */
+  groundspeed: number;
+  /** deg. Heading, not track (§5.3). */
+  heading: number;
+  transponder: string;
+  /** ms UTC of the position report; anchors every countdown (§4.2). */
+  lastUpdated: number;
+  flightPlan: VatsimFlightPlan | null;
+}
+
+export interface VatsimController {
+  cid: number;
+  callsign: string;
+  /** 6 = CTR, 1 = FSS (oceanic often logs on as FSS). */
+  facility: number;
+  /** "127.900"; "199.998" means no primary frequency. */
+  frequency: string;
+  lastUpdated: number;
+}
+
+export interface FeedSnapshot {
+  /** ms UTC of general.update_timestamp. */
+  updateTimestamp: number;
+  pilots: VatsimPilot[];
+  controllers: VatsimController[];
+}
+
 export const UNKNOWN_FACILITY: Facility = Object.freeze({
   key: "UNK",
   id: "UNK",

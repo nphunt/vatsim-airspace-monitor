@@ -11,20 +11,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as turf from "@turf/turf";
+import { FALLBACK_FEED_URL, TRACK_REGIONS, inTrackRegion } from "../src/config.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "public", "data");
 const RELEASE_API =
   "https://api.github.com/repos/vatsimnetwork/vatspy-data-project/releases/latest";
 const STATUS_URL = "https://status.vatsim.net/status.json";
-const FALLBACK_FEED_URL = "https://data.vatsim.net/v3/vatsim-data.json";
-
-// Recording/bundle region: pilots, FIRs and airports outside it never matter to a US ARTCC.
-// The Pacific box starts at lat 0 so Guam (PGZU, ~13N) and its neighbors are kept.
-const REGIONS = [
-  { minLon: -180, maxLon: -30, minLat: 0, maxLat: 80 },
-  { minLon: 120, maxLon: 180, minLat: 0, maxLat: 80 },
-];
+// Bundle region (shared with tracking and recording): FIRs and airports outside it never
+// matter to a US ARTCC.
+const REGIONS = TRACK_REGIONS;
 
 const EXPECTED_VATUSA_FEATURES = 37;
 
@@ -150,8 +146,7 @@ function polygonBboxes(feature) {
 const intersectsRegion = (b) =>
   REGIONS.some((r) => b[0] <= r.maxLon && b[2] >= r.minLon && b[1] <= r.maxLat && b[3] >= r.minLat);
 
-const inRegion = (lat, lon) =>
-  REGIONS.some((r) => lon >= r.minLon && lon <= r.maxLon && lat >= r.minLat && lat <= r.maxLat);
+const inRegion = inTrackRegion;
 
 /** Fraction of `a`'s area that lies inside `b`. */
 function insideFraction(a, b) {

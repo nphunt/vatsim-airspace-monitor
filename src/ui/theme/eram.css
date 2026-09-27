@@ -109,3 +109,7 @@ button {
   padding: 8px;
   color: var(--eram-datablock-dim);
 }
+
+.eram-error {
+  color: var(--eram-alert);
+}
