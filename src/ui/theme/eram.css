@@ -519,3 +519,34 @@ input[aria-invalid="true"] {
   margin-top: 4px;
   color: var(--eram-datablock);
 }
+
+/* ---- SCOPE (§7.5) ---- */
+
+.eram-scope {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 160px;
+}
+
+.eram-scope-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.eram-scope-canvas canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.eram-scope-note {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}

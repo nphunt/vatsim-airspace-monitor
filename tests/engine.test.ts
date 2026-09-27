@@ -148,6 +148,30 @@ describe("Engine", () => {
     expect(lastSet()).toMatchObject({ horizonMin: 30, load: null });
   });
 
+  it("opening SCOPE adds scope targets; closing drops them", async () => {
+    const messages: FromEngine[] = [];
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl: fakeFetch([]),
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
+    await engine.handle({ type: "select", airspace: "ZME" });
+    const lastSet = () => {
+      const m = messages.filter((x) => x.type === "predictions").at(-1);
+      return m?.type === "predictions" ? m.set : null;
+    };
+    await waitFor(() => lastSet() !== null);
+    expect(lastSet()?.scope).toBeNull();
+
+    await engine.handle({ type: "config", config: { ...DEFAULT_CONFIG, scopeOpen: true } });
+    expect(lastSet()?.horizonMin).toBe(30); // the scope doesn't change the horizon
+    expect(lastSet()?.scope).toEqual([expect.objectContaining({ callsign: "DAL123" })]);
+
+    await engine.handle({ type: "config", config: { ...DEFAULT_CONFIG, scopeOpen: false } });
+    expect(lastSet()?.scope).toBeNull();
+  });
+
   it("falls back to the default feed URL if meta.json names a non-VATSIM host", async () => {
     const messages: FromEngine[] = [];
     const base = fakeFetch([]);

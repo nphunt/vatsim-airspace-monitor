@@ -30,6 +30,8 @@ export interface EngineConfig {
   entryAlerts: boolean;
   /** LOAD window open: extend paths to the load horizon and compute the forecast (§5.2). */
   loadOpen: boolean;
+  /** SCOPE window open: collect scope targets with each recompute (§7.5). */
+  scopeOpen: boolean;
 }
 
 /** Select the airspace (id "KZME", key, or label "ZME"), or null for none. Recomputes immediately (§4.2). */

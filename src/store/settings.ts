@@ -11,7 +11,8 @@ import {
 
 export const SETTINGS_KEY = `${STORAGE_PREFIX}settings`;
 
-export type WindowId = "outbound" | "alerts" | "inbound" | "load" | "airspace" | "settings" | "fpr";
+export type WindowId =
+  "outbound" | "alerts" | "inbound" | "load" | "airspace" | "settings" | "fpr" | "scope";
 export const WINDOW_IDS: readonly WindowId[] = [
   "outbound",
   "alerts",
@@ -20,12 +21,16 @@ export const WINDOW_IDS: readonly WindowId[] = [
   "airspace",
   "settings",
   "fpr",
+  "scope",
 ];
 
 /** LOAD window view (§7.4): strategic 15 min x 2 h, tactical 5 min x 60 min. */
 export type LoadViewId = "strat" | "tact";
 
 export const LOAD_THRESHOLD_MAX = 999;
+
+/** Scope velocity vector length, minutes (§7.5 VECTOR). */
+export const SCOPE_VECTOR_CHOICES = [1, 2, 4, 8] as const;
 
 export type ToneId = "chime" | "high" | "low";
 export const TONE_IDS: readonly ToneId[] = ["chime", "high", "low"];
@@ -73,6 +78,8 @@ export interface Settings {
   loadView: LoadViewId;
   /** Load threshold per airspace key; missing = LOAD_THRESHOLD_DEFAULT (§5.11). */
   loadThresholds: Record<string, number>;
+  /** Scope velocity vector length, minutes. */
+  scopeVector: number;
   windows: Record<WindowId, WindowState>;
 }
 
@@ -113,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   entryAlerts: false,
   loadView: "tact",
   loadThresholds: {},
+  scopeVector: 2,
   windows: {
     // Default open: OUTBOUND and ALERTS (§7.2). Lists dock; menus float.
     outbound: win({ open: true, order: 0 }),
@@ -123,6 +131,8 @@ export const DEFAULT_SETTINGS: Settings = {
     settings: win({ docked: false, order: 5, x: 40, y: 96, w: 380, h: 360 }),
     // Flight Plan Readout (§7.3): opens on a list-row click.
     fpr: win({ docked: false, order: 6, x: 64, y: 120, w: 380, h: 220 }),
+    // Optional, off by default (§7.5); floats over the lists when there is room.
+    scope: win({ docked: false, order: 7, x: 24, y: 80, w: 520, h: 520 }),
   },
 };
 
@@ -190,6 +200,9 @@ export function parseSettings(raw: unknown): Settings {
     entryAlerts: bool(raw.entryAlerts, d.entryAlerts),
     loadView: raw.loadView === "strat" || raw.loadView === "tact" ? raw.loadView : d.loadView,
     loadThresholds: readThresholds(raw.loadThresholds),
+    scopeVector: (SCOPE_VECTOR_CHOICES as readonly number[]).includes(raw.scopeVector as number)
+      ? (raw.scopeVector as number)
+      : d.scopeVector,
     windows: Object.fromEntries(
       WINDOW_IDS.map((id) => [id, readWindow(windows[id], d.windows[id])]),
     ) as Record<WindowId, WindowState>,

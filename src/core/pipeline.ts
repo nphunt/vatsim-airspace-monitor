@@ -5,6 +5,7 @@ import type {
   FeedSnapshot,
   Prediction,
   PredictionSet,
+  ScopeTarget,
   VatsimPilot,
 } from "../data/types";
 import { containsRaw, prepareAirspace, type PreparedAirspace } from "./airspaceGeom";
@@ -24,7 +25,7 @@ import {
   type AltitudeFilter,
   type LoadEntry,
 } from "./load";
-import { buildDrPath, courseAt, pathLength, pointAt } from "./path";
+import { buildDrPath, courseAt, pathLength, pointAt, turnPoints } from "./path";
 import { findCrossings, summarizeCrossings, timeAlong } from "./predict";
 import type { RouteModeTracker } from "./routeMode";
 import { deriveTrack, type TrackStore } from "./track";
@@ -95,6 +96,8 @@ export interface PipelineInput {
    * already the load horizon. The altitude filter applies to load only here (§5.7).
    */
   load?: { altitude?: AltitudeFilter | null } | null;
+  /** Collect SCOPE targets (§7.5): only while the SCOPE window is open. */
+  scope?: boolean;
   /** Wall-clock timer for stats; injectable for tests. */
   perfNow?: () => number;
 }
@@ -119,6 +122,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
   const resident: Prediction[] = [];
   const insideCids: number[] = [];
   const loadEntries: LoadEntry[] = [];
+  const scope: ScopeTarget[] | null = input.scope ? [] : null;
   let prefiltered = 0;
 
   for (const p of eligible) {
@@ -130,6 +134,26 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     const path = input.routes
       ? input.routes.pathFor(p, derived.trackDeg, lengthNm, prepared.centerLon)
       : buildDrPath(p, derived.trackDeg, lengthNm, prepared.centerLon);
+    if (scope) {
+      const samples = tracks.get(p.cid)?.samples ?? [];
+      const trail: number[] = [];
+      // Every sample before the current report (the last one is the report itself).
+      for (const s of samples) if (s.t < p.lastUpdated) trail.push(s.lat, s.lon);
+      scope.push({
+        cid: p.cid,
+        callsign: p.callsign,
+        aircraftType: p.flightPlan!.aircraftShort || p.flightPlan!.aircraftFaa,
+        lat: p.lat,
+        lon: p.lon,
+        altitude: p.altitude,
+        trend: derived.trend,
+        groundspeed: p.groundspeed,
+        trackDeg: derived.trackDeg,
+        lastUpdated: p.lastUpdated,
+        trail,
+        routeAhead: path.mode === "RTE" ? turnPoints(path) : null,
+      });
+    }
     const crossings = findCrossings(path, prepared);
     const summary = summarizeCrossings(path, prepared, p.groundspeed, crossings);
     if (summary.inside) insideCids.push(p.cid);
@@ -242,6 +266,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     resident,
     insideCids,
     load: input.load ? buildLoad(loadEntries, now, { altitude: input.load.altitude }) : null,
+    scope,
     stats: { eligible: eligible.length, prefiltered, ms: perfNow() - started },
   };
 }

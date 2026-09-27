@@ -180,6 +180,29 @@ export interface Prediction {
   entry?: PredictedEntry;
 }
 
+/**
+ * One target for the SCOPE window (§7.5): every eligible aircraft in the prefilter area,
+ * whether or not it is listed. Positions are as reported; the scope extrapolates them to
+ * the clock between snapshots (§4.2).
+ */
+export interface ScopeTarget {
+  cid: number;
+  callsign: string;
+  aircraftType: string;
+  lat: number;
+  lon: number;
+  /** ft */
+  altitude: number;
+  trend: VerticalTrend;
+  groundspeed: number;
+  trackDeg: number;
+  lastUpdated: number;
+  /** Earlier reported positions, oldest first, flat [lat, lon, ...] (§5.3 history). */
+  trail: number[];
+  /** RTE mode: the route ahead reduced to its turn points, flat [lat, lon, ...]; else null. */
+  routeAhead: number[] | null;
+}
+
 export interface PredictionSet {
   airspaceKey: string;
   /** Clock time the set was computed. */
@@ -197,6 +220,8 @@ export interface PredictionSet {
   insideCids: number[];
   /** Load forecast (§5.11); null unless the LOAD window is open. */
   load: LoadForecast | null;
+  /** SCOPE targets; only computed while the SCOPE window is open (§7.5). */
+  scope: ScopeTarget[] | null;
   stats: { eligible: number; prefiltered: number; ms: number };
 }
 

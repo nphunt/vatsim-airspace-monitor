@@ -46,6 +46,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   repeatTone: false,
   entryAlerts: false,
   loadOpen: false,
+  scopeOpen: false,
 };
 
 /** Prediction horizon: the list horizon, or the load horizon while LOAD is open (§5.2). */
@@ -307,7 +308,8 @@ export class Engine {
     const cidChanged = config.myCid !== this.config.myCid;
     const horizonChanged =
       effectiveHorizonMin(config) !== effectiveHorizonMin(this.config) ||
-      config.loadOpen !== this.config.loadOpen;
+      config.loadOpen !== this.config.loadOpen ||
+      config.scopeOpen !== this.config.scopeOpen;
     this.config = { ...config };
     this.alerts.config = alertConfig(this.config);
     if (cidChanged) {
@@ -365,6 +367,7 @@ export class Engine {
         horizonMin: effectiveHorizonMin(this.config),
         routes: this.routes,
         load: this.config.loadOpen ? {} : null,
+        scope: this.config.scopeOpen,
       });
       this.lastSet = set;
       this.eligibleCids = new Set(eligiblePilots(this.snapshot.pilots, now).map((p) => p.cid));

@@ -9,6 +9,7 @@ import { InboundList, InboundTitle } from "./InboundList";
 import { LoadTitle, LoadWindow } from "./LoadWindow";
 import { clampAll, dockedOrder, floatingIds, splitWeights, toggleDock } from "./layout";
 import { OutboundList, OutboundTitle } from "./OutboundList";
+import { ScopeTitle, ScopeWindow } from "./ScopeWindow";
 import { SettingsWindow } from "./SettingsWindow";
 
 const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode }> = {
@@ -19,6 +20,7 @@ const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode 
   airspace: { title: () => <AirspaceMenuTitle />, body: () => <AirspaceMenu /> },
   settings: { title: () => "SETTINGS", body: () => <SettingsWindow /> },
   fpr: { title: () => <FlightPlanReadoutTitle />, body: () => <FlightPlanReadout /> },
+  scope: { title: () => <ScopeTitle />, body: () => <ScopeWindow /> },
 };
 
 /** Docked stack with splitters, plus floating windows on top (§7.2). */

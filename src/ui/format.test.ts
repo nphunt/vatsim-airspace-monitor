@@ -211,6 +211,7 @@ describe("flight plan readout lines (§7.3)", () => {
       insideCids: [1, 3],
       stats: { eligible: 3, prefiltered: 3, ms: 0 },
       load: null,
+      scope: null,
     };
     expect(findPrediction(set, 2)?.kind).toBe("inbound");
     expect(findPrediction(set, 3)?.kind).toBe("resident");

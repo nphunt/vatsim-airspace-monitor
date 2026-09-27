@@ -107,6 +107,7 @@ interface AppState {
   setRepeatTone(on: boolean): void;
   setEntryAlerts(on: boolean): void;
   setLoadView(view: LoadViewId): void;
+  setScopeVector(min: number): void;
   /** Load threshold for the selected airspace (§5.11). */
   setLoadThreshold(key: string, n: number): void;
   patchAudio(patch: Partial<AudioView>): void;
@@ -150,6 +151,7 @@ export function engineConfig(s: Settings): EngineConfig {
     repeatTone: s.repeatTone,
     entryAlerts: s.entryAlerts,
     loadOpen: s.windows.load.open,
+    scopeOpen: s.windows.scope.open,
   };
 }
 
@@ -263,6 +265,7 @@ export const useStore = create<AppState>()((set, get) => {
     setRepeatTone: (repeatTone) => updateSettings({ repeatTone }),
     setEntryAlerts: (entryAlerts) => updateSettings({ entryAlerts }),
     setLoadView: (loadView) => updateSettings({ loadView }),
+    setScopeVector: (scopeVector) => updateSettings({ scopeVector }),
     setLoadThreshold: (key, n) => {
       if (!Number.isInteger(n) || n < 1) return;
       const loadThresholds = {

@@ -165,3 +165,37 @@ describe("switching airspace keeps track history (§4.2)", () => {
     expect(p.trackDeg).toBeCloseTo(45, 0);
   });
 });
+
+describe("SCOPE targets (§7.5)", () => {
+  it("only while asked for: every prefiltered aircraft, listed or not, with its trail", () => {
+    const cid = 515151;
+    const tracks = new TrackStore();
+    // Two earlier reports then the current one, northbound in ZME.
+    for (const [i, lat] of [36.3, 36.4].entries()) {
+      tracks.update(
+        snapshot([pilot({ cid, callsign: "SCP1", lat, lastUpdated: NOW - (2 - i) * 15_000 })]),
+      );
+    }
+    // Heading away from ZME, well outside: prefiltered but never listed.
+    const away = pilot({ lat: 33, lon: -84, heading: 90 });
+    const snap = snapshot([pilot({ cid, callsign: "SCP1", lat: 36.5 }), away]);
+    tracks.update(snap);
+
+    expect(run("KZME", snap, tracks).scope).toBeNull();
+    const set = computePredictions({
+      snapshot: snap,
+      selected: selectAirspace(r.getAirspace("KZME")!),
+      registry: r,
+      airports,
+      tracks,
+      now: NOW,
+      horizonMin: 30,
+      scope: true,
+    });
+    const own = set.scope!.find((t) => t.cid === cid)!;
+    expect(own).toMatchObject({ callsign: "SCP1", aircraftType: "B738", routeAhead: null });
+    expect(own.trail).toEqual([36.3, -90, 36.4, -90]);
+    expect(set.scope!.map((t) => t.cid)).toContain(away.cid);
+    expect([...set.outbound, ...set.inbound].map((p) => p.cid)).not.toContain(away.cid);
+  });
+});

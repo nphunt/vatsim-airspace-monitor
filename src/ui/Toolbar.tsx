@@ -75,9 +75,7 @@ export function Toolbar() {
       />
       <WindowButton id="inbound" label="INBOUND" />
       <WindowButton id="load" label="LOAD" />
-      <button type="button" className="eram-tb-btn" disabled>
-        SCOPE
-      </button>
+      <WindowButton id="scope" label="SCOPE" />
       <button
         type="button"
         className="eram-tb-btn"

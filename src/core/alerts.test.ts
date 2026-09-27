@@ -62,6 +62,7 @@ function set(
     resident: [],
     insideCids: inside,
     load: null,
+    scope: null,
     stats: { eligible: 0, prefiltered: 0, ms: 0 },
   };
 }

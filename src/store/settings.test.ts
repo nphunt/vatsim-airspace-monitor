@@ -97,6 +97,12 @@ describe("settings persistence", () => {
     expect(s.windows.load.open).toBe(false);
   });
 
+  it("validates the scope vector length", () => {
+    expect(parseSettings({ schemaVersion: 1, scopeVector: 4 }).scopeVector).toBe(4);
+    expect(parseSettings({ schemaVersion: 1, scopeVector: 3 }).scopeVector).toBe(2);
+    expect(parseSettings({ schemaVersion: 1 }).windows.scope.open).toBe(false);
+  });
+
   it("survives storage that throws", () => {
     const throwing = {
       getItem: () => {
