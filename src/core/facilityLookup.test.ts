@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildAirspaces, type BoundaryCollection } from "../data/airspaces";
 import type { FirRecord, Tier } from "../data/types";
-import { wrapLon } from "./facilityLookup";
+import { resolveExitInto, wrapLon } from "./facilityLookup";
+import { buildDrPath } from "./path";
 
 type Ring = [number, number][];
 
@@ -172,5 +173,42 @@ describe("wrapLon", () => {
     [540, -180],
   ])("%d -> %d", (input, expected) => {
     expect(wrapLon(input)).toBe(expected);
+  });
+});
+
+describe("resolveExitInto probe order", () => {
+  const rect = (minLon: number, minLat: number, w: number, h: number): Ring => [
+    [minLon, minLat],
+    [minLon + w, minLat],
+    [minLon + w, minLat + h],
+    [minLon, minLat + h],
+    [minLon, minLat],
+  ];
+  // Selected A: lon -90..-89. B: a ~1.5 nm sliver east of it. C: beyond B.
+  const sliverW = 0.03;
+  const exitDist = (-89 - -89.5) * 60 * Math.cos((35.5 * Math.PI) / 180);
+  const path = buildDrPath({ lat: 35.5, lon: -89.5 }, 90, 100, -89.5);
+
+  it("uses the 3 nm probe first, so a sliver at a tripoint does not win", () => {
+    const r = registry([
+      [fir("A#dom", "domestic"), [[rect(-90, 35, 1, 1)]]],
+      [fir("B#dom", "domestic"), [[rect(-89, 35, sliverW, 1)]]],
+      [fir("C#dom", "domestic"), [[rect(-89 + sliverW, 35, 1, 1)]]],
+    ]);
+    expect(resolveExitInto(path, exitDist, "A#dom", r, new Map()).key).toBe("C#dom");
+  });
+
+  it("falls back to the 1 nm probe for a sliver with nothing beyond", () => {
+    const r = registry([
+      [fir("A#dom", "domestic"), [[rect(-90, 35, 1, 1)]]],
+      [fir("B#dom", "domestic"), [[rect(-89, 35, sliverW, 1)]]],
+    ]);
+    expect(resolveExitInto(path, exitDist, "A#dom", r, new Map()).key).toBe("B#dom");
+  });
+
+  it("never returns the selected airspace and gives UNK when nothing is there", () => {
+    const r = registry([[fir("A#dom", "domestic"), [[rect(-90, 35, 1, 1)]]]]);
+    const f = resolveExitInto(path, exitDist, "A#dom", r, new Map());
+    expect(f).toMatchObject({ key: "UNK", staffed: false });
   });
 });

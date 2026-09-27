@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { FeedStatus } from "../data/feed";
+import type { PredictionSet } from "../data/types";
 import type { FromEngine, ReadyMessage } from "../worker/protocol";
 
 export interface EngineView {
@@ -13,6 +14,7 @@ export interface EngineView {
   controllers: number;
   serverOffsetMs: number;
   errors: string[];
+  predictions: PredictionSet | null;
 }
 
 interface AppState {
@@ -30,6 +32,7 @@ const initialEngine: EngineView = {
   controllers: 0,
   serverOffsetMs: 0,
   errors: [],
+  predictions: null,
 };
 
 export const useStore = create<AppState>()((set) => ({
@@ -54,6 +57,9 @@ export const useStore = create<AppState>()((set) => ({
           break;
         case "ready":
           e.ready = msg;
+          break;
+        case "predictions":
+          e.predictions = msg.set;
           break;
         case "error":
           e.errors = [...e.errors, msg.message].slice(-10);

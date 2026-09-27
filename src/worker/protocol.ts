@@ -1,5 +1,6 @@
 // Messages between the main thread and the engine worker (§4.3).
 import type { FeedStatus } from "../data/feed";
+import type { PredictionSet } from "../data/types";
 
 export interface InitMessage {
   type: "init";
@@ -11,7 +12,13 @@ export interface InitMessage {
   dataBaseUrl: string;
 }
 
-export type ToEngine = InitMessage;
+/** Select the airspace (id "KZME", key, or label "ZME"), or null for none. Recomputes immediately (§4.2). */
+export interface SelectMessage {
+  type: "select";
+  airspace: string | null;
+}
+
+export type ToEngine = InitMessage | SelectMessage;
 
 export interface ReadyMessage {
   type: "ready";
@@ -42,4 +49,11 @@ export interface ErrorMessage {
   message: string;
 }
 
-export type FromEngine = ReadyMessage | PollMessage | TickMessage | ErrorMessage;
+/** Posted after each recompute (new snapshot or airspace switch). */
+export interface PredictionsMessage {
+  type: "predictions";
+  set: PredictionSet | null;
+}
+
+export type FromEngine =
+  ReadyMessage | PollMessage | TickMessage | ErrorMessage | PredictionsMessage;

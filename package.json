@@ -17,7 +17,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "update-data": "node scripts/update-data.mjs",
-    "record": "node scripts/record.mjs"
+    "record": "node scripts/record.mjs",
+    "bench": "vitest run tests/pipeline.perf.test.ts --mode bench --silent=false"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",

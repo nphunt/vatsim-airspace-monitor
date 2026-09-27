@@ -14,7 +14,10 @@ npm run dev       # http://localhost:5173
 npm test          # Vitest
 npm run lint      # ESLint + Prettier check
 npm run build     # type-check and production build to dist/
+npm run bench     # prediction performance budget (< 500 ms per recompute) on the replay fixture
 ```
+
+Until the AIRSPACE menu exists, pick an airspace from DevTools with `__vam.select("ZME")` and inspect `__vam.predictions()`.
 
 A build with `GITHUB_ACTIONS=true` uses the GitHub Pages base path `/<repo-name>/`.
 

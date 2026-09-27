@@ -7,10 +7,39 @@ import type { FromEngine } from "../src/worker/protocol";
 const DATA = path.resolve(import.meta.dirname, "../public/data");
 const BASE = "https://nphunt.github.io/vatsim-airspace-monitor/";
 
+const TS = "2026-09-27T17:00:00.1234567Z";
 const feedDoc = {
-  general: { update_timestamp: "2026-09-27T17:00:00.1234567Z" },
-  pilots: [],
-  controllers: [],
+  general: { update_timestamp: TS },
+  pilots: [
+    {
+      cid: 7,
+      name: "x",
+      callsign: "DAL123",
+      latitude: 36.5,
+      longitude: -90,
+      altitude: 35000,
+      groundspeed: 450,
+      heading: 360,
+      transponder: "1234",
+      last_updated: TS,
+      flight_plan: {
+        flight_rules: "I",
+        aircraft_short: "B738",
+        departure: "KATL",
+        arrival: "KMCI",
+      },
+    },
+  ],
+  controllers: [
+    {
+      cid: 8,
+      name: "y",
+      callsign: "KC_12_CTR",
+      facility: 6,
+      frequency: "127.900",
+      last_updated: TS,
+    },
+  ],
 };
 
 function fakeFetch(requested: string[]): typeof fetch {
@@ -57,10 +86,33 @@ describe("Engine", () => {
 
     // Data files resolve under the Pages sub-path with the cache-busting build id.
     const dataRequests = requested.filter((u) => u.includes("/data/"));
-    expect(dataRequests.length).toBe(3);
+    expect(dataRequests.length).toBe(4); // meta, firs, boundaries, airports
     for (const u of dataRequests) {
       expect(u).toMatch(/^https:\/\/nphunt\.github\.io\/vatsim-airspace-monitor\/data\/.+\?v=/);
     }
+  });
+
+  it("selecting before the data loads still yields predictions for the latest snapshot", async () => {
+    const messages: FromEngine[] = [];
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl: fakeFetch([]),
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    const init = engine.handle({ type: "init", dataBaseUrl: BASE });
+    await engine.handle({ type: "select", airspace: "ZME" }); // by label, before load
+    await init;
+    await waitFor(() => messages.some((m) => m.type === "predictions" && m.set !== null));
+    const last = messages.filter((m) => m.type === "predictions").at(-1);
+    const set = last?.type === "predictions" ? last.set : null;
+    expect(set?.airspaceKey).toBe("KZME#dom");
+    expect(set?.outbound[0]).toMatchObject({ callsign: "DAL123" });
+    expect(set?.outbound[0]?.exit?.into).toMatchObject({
+      label: "ZKC",
+      staffed: true,
+      controller: { callsign: "KC_12_CTR", frequency: "127.900" },
+    });
+    expect(engine.tracks.size).toBe(1);
   });
 
   it("falls back to the default feed URL if meta.json names a non-VATSIM host", async () => {

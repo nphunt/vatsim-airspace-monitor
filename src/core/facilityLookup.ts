@@ -1,5 +1,14 @@
 import { booleanPointInPolygon } from "@turf/turf";
-import { UNKNOWN_FACILITY, type Airspace, type Facility, type Tier } from "../data/types";
+import {
+  UNKNOWN_FACILITY,
+  type Airspace,
+  type Facility,
+  type FacilityStatus,
+  type OnlineController,
+  type Tier,
+  type VatsimController,
+} from "../data/types";
+import { pointAt, type PredictedPath } from "./path";
 
 const LOOKUP_TIERS: readonly Tier[] = ["domestic", "oceanic", "foreign"];
 
@@ -67,4 +76,77 @@ export function buildFacilityIndex(airspaces: readonly Airspace[]): FacilityInde
       return null;
     },
   };
+}
+
+// ---------- staffing (§5.5) ----------
+
+/** VATSIM's "no primary frequency" value (shadowing, training). Never counts as staffed. */
+export const NO_PRIMARY_FREQUENCY = "199.998";
+
+export type Staffing = ReadonlyMap<string, readonly OnlineController[]>;
+
+/** "127.9" -> "127.900". */
+export function formatFrequency(f: string): string {
+  const n = Number(f);
+  return Number.isFinite(n) ? n.toFixed(3) : f;
+}
+
+/**
+ * Online controllers per facility key (§5.5): a CTR (facility 6) connection whose callsign
+ * resolves to the facility by longest prefix + roll-up, not on 199.998. Oceanic facilities
+ * also accept FSS (facility 1), since oceanic often logs on as `_FSS`; an FSS callsign that
+ * resolves to a domestic ARTCC with an oceanic twin (NY_FSS -> KZNY) staffs the oceanic one.
+ */
+export function buildStaffing(
+  controllers: readonly VatsimController[],
+  index: Pick<FacilityIndex, "resolveCallsign">,
+  byKey: (key: string) => Airspace | undefined,
+): Staffing {
+  const map = new Map<string, OnlineController[]>();
+  for (const c of controllers) {
+    if (c.facility !== 6 && c.facility !== 1) continue;
+    const freq = formatFrequency(c.frequency);
+    if (freq === NO_PRIMARY_FREQUENCY) continue;
+    const base = index.resolveCallsign(c.callsign);
+    if (!base) continue;
+    let target: Airspace | undefined = base;
+    if (c.facility === 1) {
+      target = base.tier === "oceanic" ? base : byKey(`${base.id}#ocn`);
+      if (target?.tier !== "oceanic") continue;
+    }
+    const list = map.get(target.key) ?? [];
+    list.push({ callsign: c.callsign, frequency: freq });
+    map.set(target.key, list);
+  }
+  for (const list of map.values()) list.sort((a, b) => a.callsign.localeCompare(b.callsign));
+  return map;
+}
+
+export function withStaffing(f: Facility, staffing: Staffing): FacilityStatus {
+  const online = staffing.get(f.key);
+  return online?.length ? { ...f, staffed: true, controller: online[0] } : { ...f, staffed: false };
+}
+
+// ---------- exit-into (§5.9) ----------
+
+/** Probe order past the exit crossing: 3 nm first (tripoints), 1 nm last (slivers). */
+export const EXIT_INTO_PROBES_NM = [3, 5, 1] as const;
+
+/**
+ * The facility an aircraft exits into (§5.9): probes along the predicted path (which may
+ * turn) past the exit, ignoring the selected airspace itself; first hit wins, else UNK.
+ */
+export function resolveExitInto(
+  path: PredictedPath,
+  exitDistNm: number,
+  selectedKey: string,
+  index: Pick<FacilityIndex, "facilityAt">,
+  staffing: Staffing,
+): FacilityStatus {
+  for (const offset of EXIT_INTO_PROBES_NM) {
+    const p = pointAt(path, exitDistNm + offset);
+    const f = index.facilityAt(p.lat, p.lon, { ignoreKey: selectedKey });
+    if (f.key !== UNKNOWN_FACILITY.key) return withStaffing(f, staffing);
+  }
+  return { ...UNKNOWN_FACILITY, staffed: false };
 }

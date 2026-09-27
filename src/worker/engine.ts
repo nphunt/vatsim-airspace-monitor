@@ -1,5 +1,12 @@
-import { FALLBACK_FEED_URL, UI_TICK_MS } from "../config";
+import { FALLBACK_FEED_URL, HORIZON_MIN, UI_TICK_MS } from "../config";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
+import {
+  computePredictions,
+  selectAirspace,
+  type AirportIndex,
+  type SelectedAirspace,
+} from "../core/pipeline";
+import { TrackStore } from "../core/track";
 import { loadAirspaces, type AirspaceRegistry } from "../data/airspaces";
 import { FeedPoller } from "../data/feed";
 import { dataUrl } from "../data/paths";
@@ -26,8 +33,8 @@ function safeFeedUrl(url: unknown): string {
 }
 
 /**
- * The worker-side engine (§4.3): owns feed polling, the clock and (from M3) the core
- * pipeline. Runs in a dedicated worker so polling and the 1 Hz tick keep going when the
+ * The worker-side engine (§4.3): owns feed polling, the clock, track history and the core
+ * prediction pipeline. Runs in a dedicated worker so polling and the 1 Hz tick keep going when the
  * page is covered by CRC and the main thread is throttled.
  */
 export class Engine {
@@ -43,7 +50,13 @@ export class Engine {
   private started = false;
 
   airspaces: AirspaceRegistry | null = null;
+  airports: AirportIndex = {};
   snapshot: FeedSnapshot | null = null;
+  readonly tracks = new TrackStore();
+  private selected: SelectedAirspace | null = null;
+  /** A selection that arrived before the boundary data finished loading. */
+  private pendingSelect: string | null = null;
+  horizonMin = HORIZON_MIN;
 
   private readonly post: (m: FromEngine) => void;
 
@@ -61,6 +74,9 @@ export class Engine {
     switch (msg.type) {
       case "init":
         return this.init(msg.dataBaseUrl);
+      case "select":
+        this.select(msg.airspace);
+        return Promise.resolve();
     }
   }
 
@@ -88,6 +104,9 @@ export class Engine {
       localNow: this.localNow,
       onSnapshot: (s) => {
         this.snapshot = s;
+        // History is kept for every pilot in the track region, whatever is selected.
+        this.tracks.update(s);
+        this.recompute();
       },
       onPoll: (feed) =>
         this.post({
@@ -100,16 +119,63 @@ export class Engine {
     this.poller.start();
 
     try {
-      this.airspaces = await loadAirspaces({ base, fetchImpl: this.fetchImpl });
+      [this.airspaces, this.airports] = await Promise.all([
+        loadAirspaces({ base, fetchImpl: this.fetchImpl }),
+        this.fetchImpl(dataUrl("airports.json", base)).then(
+          (r) => r.json() as Promise<AirportIndex>,
+        ),
+      ]);
     } catch (e) {
       this.error(`boundary data failed to load: ${String(e)}`);
     }
+    if (this.pendingSelect) this.select(this.pendingSelect);
     this.post({
       type: "ready",
       selectableCount: this.airspaces?.getSelectableAirspaces().length ?? 0,
       vatspyTag: meta.vatspy?.tag ?? null,
       feedUrl,
     });
+  }
+
+  private select(idOrKey: string | null): void {
+    if (idOrKey === null) {
+      this.selected = null;
+      this.post({ type: "predictions", set: null });
+      return;
+    }
+    if (!this.airspaces) {
+      this.pendingSelect = idOrKey;
+      return;
+    }
+    this.pendingSelect = null;
+    const a =
+      this.airspaces.getAirspace(idOrKey) ??
+      this.airspaces.getSelectableAirspaces().find((x) => x.label === idOrKey.toUpperCase());
+    if (!a?.selectable) {
+      this.error(`unknown airspace ${idOrKey}`);
+      return;
+    }
+    this.selected = selectAirspace(a);
+    this.recompute();
+  }
+
+  /** Recomputes from the latest snapshot. Called per new snapshot and on switch (§4.2). */
+  private recompute(): void {
+    if (!this.selected || !this.snapshot || !this.airspaces) return;
+    try {
+      const set = computePredictions({
+        snapshot: this.snapshot,
+        selected: this.selected,
+        registry: this.airspaces,
+        airports: this.airports,
+        tracks: this.tracks,
+        now: this.clock.now(),
+        horizonMin: this.horizonMin,
+      });
+      this.post({ type: "predictions", set });
+    } catch (e) {
+      this.error(`prediction failed: ${String(e)}`);
+    }
   }
 
   private tick(): void {
