@@ -19,7 +19,11 @@ import {
 import { compass8, distanceNm, normalizeLonAround } from "./geo";
 import { buildDrPath, courseAt, pointAt } from "./path";
 import { summarizeCrossings, timeAlong } from "./predict";
+import type { RouteModeTracker } from "./routeMode";
 import { deriveTrack, type TrackStore } from "./track";
+
+/** Route text kept on each prediction for the flight plan readout. */
+export const ROUTE_TEXT_MAX = 400;
 
 export type AirportIndex = Readonly<Record<string, readonly [number, number]>>;
 
@@ -77,6 +81,8 @@ export interface PipelineInput {
   now: number;
   /** List horizon, or the load horizon when LOAD is open (§5.2). */
   horizonMin: number;
+  /** Route-following (§5.10); null until nav data loads, then DR only is used. */
+  routes?: RouteModeTracker | null;
   /** Wall-clock timer for stats; injectable for tests. */
   perfNow?: () => number;
 }
@@ -108,7 +114,9 @@ export function computePredictions(input: PipelineInput): PredictionSet {
 
     const derived = deriveTrack(tracks.get(p.cid), p.heading);
     const lengthNm = (p.groundspeed * horizonMin) / 60;
-    const path = buildDrPath(p, derived.trackDeg, lengthNm, prepared.centerLon);
+    const path = input.routes
+      ? input.routes.pathFor(p, derived.trackDeg, lengthNm, prepared.centerLon)
+      : buildDrPath(p, derived.trackDeg, lengthNm, prepared.centerLon);
     const summary = summarizeCrossings(path, prepared, p.groundspeed);
     if (summary.inside) insideCids.push(p.cid);
     if (summary.inside === false && !summary.entry) continue;
@@ -128,6 +136,11 @@ export function computePredictions(input: PipelineInput): PredictionSet {
       lon: p.lon,
       lastUpdated: p.lastUpdated,
       mode: path.mode,
+      routeStatus: input.routes ? input.routes.status(p.cid) : "none",
+      route: fp.route.slice(0, ROUTE_TEXT_MAX),
+      filedAltitude: fp.altitude,
+      squawk: p.transponder,
+      assignedSquawk: fp.assignedTransponder,
       vfr: fp.flightRules === "V",
       turning: derived.turning,
       inside: summary.inside,

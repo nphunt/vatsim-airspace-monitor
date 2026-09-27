@@ -161,6 +161,13 @@ export interface Prediction {
   lon: number;
   lastUpdated: number;
   mode: "RTE" | "DR";
+  /** How the filed route resolved: ok, partial, unusable, or none (nav data not loaded). */
+  routeStatus: "ok" | "partial" | "unusable" | "none";
+  /** Flight plan readout (§7.3). Route trimmed to ROUTE_TEXT_MAX characters. */
+  route: string;
+  filedAltitude: string;
+  squawk: string;
+  assignedSquawk: string;
   vfr: boolean;
   turning: boolean;
   inside: boolean;

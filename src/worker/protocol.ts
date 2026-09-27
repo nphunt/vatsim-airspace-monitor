@@ -116,6 +116,15 @@ export interface AlertsMessage {
   tone: boolean;
 }
 
+/** Nav data status (§3.3): route prediction is DR-only until this arrives. */
+export interface NavMessage {
+  type: "nav";
+  cycle: string | null;
+  /** YYYY-MM-DD; after this the toolbar shows NAV DATA EXPIRED. */
+  expires: string | null;
+  error: string | null;
+}
+
 /** Posted after each recompute (new snapshot, airspace switch, config change). */
 export interface PredictionsMessage {
   type: "predictions";
@@ -129,4 +138,5 @@ export type FromEngine =
   | StatusMessage
   | ErrorMessage
   | PredictionsMessage
-  | AlertsMessage;
+  | AlertsMessage
+  | NavMessage;

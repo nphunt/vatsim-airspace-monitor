@@ -10,6 +10,8 @@ import {
   type AirportIndex,
   type SelectedAirspace,
 } from "../core/pipeline";
+import type { NavData, Procedure } from "../core/route";
+import { RouteModeTracker } from "../core/routeMode";
 import { TrackStore } from "../core/track";
 import { loadAirspaces, type AirspaceRegistry } from "../data/airspaces";
 import { FeedPoller, type FeedStatus } from "../data/feed";
@@ -86,6 +88,8 @@ export class Engine {
   private pendingSelect: string | null = null;
   private readonly myPosition = new MyPositionTracker();
   readonly alerts = new AlertMachine();
+  /** Route-following state; null until nav data loads (then predictions start using it). */
+  routes: RouteModeTracker | null = null;
   private lastSet: PredictionSet | null = null;
   private eligibleCids: ReadonlySet<number> = new Set();
 
@@ -168,6 +172,8 @@ export class Engine {
       feedUrl,
     });
     if (this.pendingSelect) this.select(this.pendingSelect);
+    // Nav data is large; load it in the background. Until then everything is DR (§3.3).
+    void this.loadNav(base);
 
     // The replay module is dev-only. The import must sit inside this dead-in-production
     // branch (not in a method) for the bundler to drop it from the build.
@@ -213,10 +219,48 @@ export class Engine {
     this.tick();
   }
 
+  private async loadNav(base: string): Promise<void> {
+    try {
+      const get = async <T>(name: string): Promise<T> => {
+        const res = await this.fetchImpl(dataUrl(`nav/${name}`, base));
+        if (!res.ok) throw new Error(`nav/${name} -> ${res.status}`);
+        return (await res.json()) as T;
+      };
+      const [points, airways, procedures, meta] = await Promise.all([
+        get<NavData["points"]>("points.json"),
+        get<NavData["airways"]>("airways.json"),
+        get<{ sids: Record<string, Procedure>; stars: Record<string, Procedure> }>(
+          "procedures.json",
+        ),
+        get<{ cycle?: string; expires?: string }>("meta.json"),
+      ]);
+      const nav: NavData = { points, airways, sids: procedures.sids, stars: procedures.stars };
+      this.routes = new RouteModeTracker(nav, (icao) => {
+        const a = this.airports[icao];
+        return a ? { lat: a[0], lon: a[1] } : undefined;
+      });
+      this.post({
+        type: "nav",
+        cycle: meta.cycle ?? null,
+        expires: meta.expires ?? null,
+        error: null,
+      });
+      if (this.snapshot) {
+        this.routes.update(this.snapshot.pilots, this.tracks);
+        this.recompute();
+      }
+    } catch (e) {
+      this.post({ type: "nav", cycle: null, expires: null, error: String(e) });
+      this.error(`nav data failed to load; predictions stay dead reckoning: ${String(e)}`);
+    }
+  }
+
   private onSnapshot(s: FeedSnapshot): void {
     this.snapshot = s;
-    // History is kept for every pilot in the track region, whatever is selected.
+    // History and RTE/DR state are kept for every pilot in the track region, whatever is
+    // selected, so a switch never starts from scratch (§4.2).
     this.tracks.update(s);
+    this.routes?.update(s.pilots, this.tracks);
     const autoSelected = this.updateStatus();
     if (autoSelected) this.select(autoSelected);
     else this.recompute();
@@ -311,6 +355,7 @@ export class Engine {
         tracks: this.tracks,
         now,
         horizonMin: this.config.horizonMin,
+        routes: this.routes,
       });
       this.lastSet = set;
       this.eligibleCids = new Set(eligiblePilots(this.snapshot.pilots, now).map((p) => p.cid));
