@@ -59,8 +59,8 @@ function fakeFetch(requested: string[], doc: unknown = feedDoc): typeof fetch {
 let engine: Engine | undefined;
 afterEach(() => engine?.stop());
 
-async function waitFor(pred: () => boolean) {
-  for (let i = 0; i < 200 && !pred(); i++) await new Promise((r) => setTimeout(r, 5));
+async function waitFor(pred: () => boolean, tries = 200) {
+  for (let i = 0; i < tries && !pred(); i++) await new Promise((r) => setTimeout(r, 5));
   if (!pred()) throw new Error("timed out");
 }
 
@@ -75,6 +75,8 @@ describe("Engine", () => {
     });
     await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
     await waitFor(() => messages.some((m) => m.type === "poll"));
+    // Nav data loads in the background after the boundary data (§3.3).
+    await waitFor(() => messages.some((m) => m.type === "nav"), 2_000);
 
     expect(messages[0]?.type).toBe("tick");
     const ready = messages.find((m) => m.type === "ready");
@@ -86,7 +88,11 @@ describe("Engine", () => {
 
     // Data files resolve under the Pages sub-path with the cache-busting build id.
     const dataRequests = requested.filter((u) => u.includes("/data/"));
-    expect(dataRequests.length).toBe(4); // meta, firs, boundaries, airports
+    // meta, firs, boundaries, airports, then nav points, airways, procedures, meta.
+    expect(dataRequests.length).toBe(8);
+    expect(dataRequests.filter((u) => u.includes("/data/nav/"))).toHaveLength(4);
+    const nav = messages.find((m) => m.type === "nav");
+    expect(nav).toMatchObject({ error: null, cycle: expect.any(String) });
     for (const u of dataRequests) {
       expect(u).toMatch(/^https:\/\/nphunt\.github\.io\/vatsim-airspace-monitor\/data\/.+\?v=/);
     }

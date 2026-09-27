@@ -1,5 +1,5 @@
 import type { AlertEntry } from "../core/alerts";
-import type { Prediction, VerticalTrend } from "../data/types";
+import type { Prediction, PredictionSet, VerticalTrend } from "../data/types";
 
 /** Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). */
 export function alertClass(a: AlertEntry | undefined): string | undefined {
@@ -7,6 +7,12 @@ export function alertClass(a: AlertEntry | undefined): string | undefined {
   if (a.state === "ACTIVE") return "alert-active";
   if (a.state === "ACKED") return "alert-acked";
   return undefined;
+}
+
+/** Adds the selected-row class (§7.3) to a row's alert/dim class. */
+export function rowClass(base: string | undefined, selected: boolean): string | undefined {
+  if (!selected) return base;
+  return base ? `${base} selected` : "selected";
 }
 
 /** Toolbar UTC clock, ERAM style: "HHMM SS". */
@@ -106,4 +112,63 @@ export function exitSummary(rows: readonly Prediction[]): { label: string; count
   return [...counts.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+export type ReadoutKind = "outbound" | "inbound" | "resident";
+
+/** Finds an aircraft in the current prediction set for the Flight Plan Readout (§7.3). */
+export function findPrediction(
+  set: PredictionSet | null,
+  cid: number,
+): { p: Prediction; kind: ReadoutKind } | null {
+  if (!set) return null;
+  for (const kind of ["outbound", "inbound", "resident"] as const) {
+    const p = set[kind].find((x) => x.cid === cid);
+    if (p) return { p, kind };
+  }
+  return null;
+}
+
+const ROUTE_STATUS: Record<Prediction["routeStatus"], string> = {
+  ok: "ROUTE OK",
+  partial: "ROUTE PARTIAL",
+  unusable: "ROUTE UNUSABLE",
+  none: "NO NAV DATA",
+};
+
+/** Mode line: "RTE  ROUTE PARTIAL" (§5.10). */
+export function modeLine(p: Prediction): string {
+  const status = p.route.trim() === "" ? "NO ROUTE FILED" : ROUTE_STATUS[p.routeStatus];
+  return `${p.mode}  ${status}`;
+}
+
+/** Squawk line: "SQ 1234  ASSIGNED 4521" (assigned only when set and different). */
+export function squawkLine(p: Prediction): string {
+  const assigned = p.assignedSquawk.trim();
+  const code = p.squawk || "----";
+  return assigned && assigned !== "0000" && assigned !== p.squawk
+    ? `SQ ${code}  ASSIGNED ${assigned}`
+    : `SQ ${code}`;
+}
+
+/**
+ * The readout's exit/entry line (§5.9): "EXIT ZKC (KANSAS CITY) N 01:52 RTE", or
+ * "ENTRY FROM ZID (INDIANAPOLIS) 07:14" for inbound.
+ */
+export function crossingLine(
+  p: Prediction,
+  kind: ReadoutKind,
+  now: number,
+  horizonMin: number,
+): string {
+  if (kind === "outbound" && p.exit) {
+    const x = p.exit;
+    return `EXIT ${x.into.label} (${x.into.name}) ${x.dir} ${formatCountdown(x.t - now)} ${p.mode}`;
+  }
+  if (kind === "inbound" && p.entry) {
+    const e = p.entry;
+    return `ENTRY FROM ${e.from.label} (${e.from.name}) ${formatCountdown(e.t - now)}`;
+  }
+  if (p.arr) return `LANDING ${p.arrival || "INSIDE"}`;
+  return `NO EXIT WITHIN ${horizonMin} MIN`;
 }

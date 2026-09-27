@@ -4,8 +4,16 @@ import type { AlertEntry } from "../core/alerts";
 import { parseCid } from "../core/myPosition";
 import type { MyPositionStatus } from "../core/myPosition";
 import type { FeedStatus } from "../data/feed";
-import type { PredictionSet } from "../data/types";
-import type { EngineConfig, FromEngine, ReadyMessage, ToEngine } from "../worker/protocol";
+import type { Prediction, PredictionSet } from "../data/types";
+import { findPrediction } from "../ui/format";
+import { openWindow } from "../ui/windows/layout";
+import type {
+  EngineConfig,
+  FromEngine,
+  NavMessage,
+  ReadyMessage,
+  ToEngine,
+} from "../worker/protocol";
 import type { ReplayStatus } from "../worker/replay";
 import {
   loadSettings,
@@ -43,6 +51,15 @@ export interface EngineView {
   errors: string[];
   predictions: PredictionSet | null;
   alerts: AlertEntry[];
+  /** Nav data status (§3.3); null until the background load finishes or fails. */
+  nav: Omit<NavMessage, "type"> | null;
+}
+
+/** The aircraft shown in the Flight Plan Readout (§7.3). */
+export interface AircraftSelection {
+  cid: number;
+  /** Latest prediction seen for it, kept so the readout can say it dropped out. */
+  last: Prediction | null;
 }
 
 export interface AudioView {
@@ -59,6 +76,8 @@ interface AppState {
   audio: AudioView;
   /** OUTBOUND summary-strip filter: an exit-into label, or null (§5.9). Not persisted. */
   exitFilter: string | null;
+  /** Selected aircraft (row click). Not persisted. */
+  selection: AircraftSelection | null;
 
   engineStarted(localNow: number): void;
   engineMessage(msg: FromEngine, localNow: number): void;
@@ -70,6 +89,12 @@ interface AppState {
   setInboundLimit(n: number): void;
   setReplayRate(rate: number): void;
   setExitFilter(label: string | null): void;
+  /**
+   * Row click (§7.3): selects the aircraft, acknowledges its ACTIVE alert, and opens the
+   * Flight Plan Readout. `viewportWidth` decides whether a never-placed window docks.
+   */
+  selectAircraft(cid: number, viewportWidth: number): void;
+  clearSelection(): void;
   patchWindow(id: WindowId, patch: Partial<WindowState>): void;
   setWindows(windows: Settings["windows"]): void;
 
@@ -101,6 +126,7 @@ const initialEngine: EngineView = {
   errors: [],
   predictions: null,
   alerts: [],
+  nav: null,
 };
 
 // The engine port is injected by the worker client, so the store never imports it.
@@ -152,6 +178,7 @@ export const useStore = create<AppState>()((set, get) => {
     settings: loadSettings(),
     audio: { state: "locked", sinkSupported: false, devices: [], deviceMissing: false },
     exitFilter: null,
+    selection: null,
 
     engineStarted: (localNow) => set({ engine: { ...initialEngine, startedAt: localNow } }),
 
@@ -178,12 +205,20 @@ export const useStore = create<AppState>()((set, get) => {
           e.myPosition = msg.myPosition;
           if (msg.autoSelected) updateSettings({ selectedAirspace: msg.autoSelected });
           break;
-        case "predictions":
+        case "predictions": {
           e.predictions = msg.set;
+          const sel = get().selection;
+          const found = sel && findPrediction(msg.set, sel.cid);
+          if (sel && found) set({ selection: { cid: sel.cid, last: found.p } });
           break;
+        }
         case "alerts":
           e.alerts = msg.alerts;
           if (msg.tone) playTone();
+          break;
+        case "nav":
+          // A load error also arrives as an "error" message, for the errors list.
+          e.nav = { cycle: msg.cycle, expires: msg.expires, error: msg.error };
           break;
         case "error":
           e.errors = [...e.errors, msg.message].slice(-10);
@@ -203,6 +238,17 @@ export const useStore = create<AppState>()((set, get) => {
     setInboundLimit: (n) => updateSettings({ inboundLimit: n }),
     setReplayRate: (rate) => send({ type: "replayRate", rate }),
     setExitFilter: (label) => set({ exitFilter: label }),
+    selectAircraft: (cid, viewportWidth) => {
+      const { engine, settings } = get();
+      set({ selection: { cid, last: findPrediction(engine.predictions, cid)?.p ?? null } });
+      if (engine.alerts.some((a) => a.cid === cid && a.state === "ACTIVE")) {
+        send({ type: "ack", cid });
+      }
+      if (!settings.windows.fpr.open) {
+        updateSettings({ windows: openWindow(settings.windows, "fpr", viewportWidth) });
+      }
+    },
+    clearSelection: () => set({ selection: null }),
     patchWindow: (id, patch) => {
       const windows = get().settings.windows;
       updateSettings({ windows: { ...windows, [id]: { ...windows[id], ...patch } } });

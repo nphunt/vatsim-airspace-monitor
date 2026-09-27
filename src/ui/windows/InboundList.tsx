@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { Prediction } from "../../data/types";
 import { useStore } from "../../store/store";
-import { formatCountdown, listColumns } from "../format";
+import { alertClass, formatCountdown, listColumns, rowClass } from "../format";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -33,6 +33,11 @@ export function InboundList() {
   const predictions = useStore((s) => s.engine.predictions);
   const horizonMin = useStore((s) => s.settings.horizonMin);
   const layout = listColumns(width / ch, "inbound", width);
+  const alerts = useStore((s) => s.engine.alerts);
+  const selectedCid = useStore((s) => s.selection?.cid ?? null);
+  const selectAircraft = useStore((s) => s.selectAircraft);
+  // Entry alerts (§6.1, optional) style the row like exit alerts do in OUTBOUND.
+  const alertByCid = new Map(alerts.filter((a) => a.kind === "entry").map((a) => [a.cid, a]));
 
   return (
     <div className="eram-list-wrap" ref={ref}>
@@ -40,7 +45,7 @@ export function InboundList() {
         <p className="eram-empty">NO AIRSPACE SELECTED</p>
       ) : (
         <>
-          <table className="eram-list">
+          <table className="eram-list selectable">
             <thead>
               <tr>
                 {layout.columns.map((c) => (
@@ -54,7 +59,14 @@ export function InboundList() {
               {rows.map((p) => {
                 const entry = p.entry!;
                 return (
-                  <tr key={p.cid} className={entry.clip ? "dim" : undefined}>
+                  <tr
+                    key={p.cid}
+                    className={rowClass(
+                      alertClass(alertByCid.get(p.cid)) ?? (entry.clip ? "dim" : undefined),
+                      p.cid === selectedCid,
+                    )}
+                    onClick={() => selectAircraft(p.cid, window.innerWidth)}
+                  >
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>
                         {commonCell(c, p, {

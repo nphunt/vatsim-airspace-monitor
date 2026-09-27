@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { AlertEntry } from "../core/alerts";
 import type { FeedStatus } from "../data/feed";
+import type { Prediction, PredictionSet } from "../data/types";
 import type { ToEngine } from "../worker/protocol";
 import { engineConfig, engineNow, setEngineSender, useStore } from "./store";
 
@@ -70,6 +72,48 @@ describe("store", () => {
     );
     expect(useStore.getState().settings.selectedAirspace).toBe("KZME#dom");
     expect(useStore.getState().engine.staffed.has("KZME#dom")).toBe(true);
+  });
+
+  it("a row click selects, acks an ACTIVE alert and opens the readout", () => {
+    const p = { cid: 7, callsign: "DAL123" } as Prediction;
+    const set = { outbound: [p], inbound: [], resident: [] } as unknown as PredictionSet;
+    const s = useStore.getState();
+    s.setWindows({ ...s.settings.windows, fpr: { ...s.settings.windows.fpr, open: false } });
+    s.engineMessage({ type: "predictions", set }, 1);
+    s.engineMessage(
+      { type: "alerts", alerts: [{ cid: 7, state: "ACTIVE" } as AlertEntry], tone: false },
+      2,
+    );
+    useStore.getState().selectAircraft(7, 1200);
+    expect(sent).toEqual([{ type: "ack", cid: 7 }]);
+    expect(useStore.getState().selection).toEqual({ cid: 7, last: p });
+    expect(useStore.getState().settings.windows.fpr.open).toBe(true);
+
+    // It follows the aircraft, and keeps the last data when it drops out of the lists.
+    const moved = { ...p, callsign: "DAL123", altitude: 1 };
+    useStore
+      .getState()
+      .engineMessage({ type: "predictions", set: { ...set, outbound: [moved] } }, 3);
+    expect(useStore.getState().selection?.last).toBe(moved);
+    useStore.getState().engineMessage({ type: "predictions", set: { ...set, outbound: [] } }, 4);
+    expect(useStore.getState().selection).toEqual({ cid: 7, last: moved });
+
+    // No ACTIVE alert: selecting sends nothing.
+    sent = [];
+    useStore.getState().engineMessage({ type: "alerts", alerts: [], tone: false }, 5);
+    useStore.getState().selectAircraft(7, 1200);
+    expect(sent).toEqual([]);
+  });
+
+  it("keeps the nav data status", () => {
+    useStore
+      .getState()
+      .engineMessage({ type: "nav", cycle: "2026-09-03", expires: "2026-10-01", error: null }, 1);
+    expect(useStore.getState().engine.nav).toEqual({
+      cycle: "2026-09-03",
+      expires: "2026-10-01",
+      error: null,
+    });
   });
 
   it("config changes go to the engine with the CID parsed", () => {

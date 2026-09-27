@@ -11,7 +11,7 @@ import {
 
 export const SETTINGS_KEY = `${STORAGE_PREFIX}settings`;
 
-export type WindowId = "outbound" | "alerts" | "inbound" | "load" | "airspace" | "settings";
+export type WindowId = "outbound" | "alerts" | "inbound" | "load" | "airspace" | "settings" | "fpr";
 export const WINDOW_IDS: readonly WindowId[] = [
   "outbound",
   "alerts",
@@ -19,6 +19,7 @@ export const WINDOW_IDS: readonly WindowId[] = [
   "load",
   "airspace",
   "settings",
+  "fpr",
 ];
 
 /** LOAD window view (§7.4): strategic 15 min x 2 h, tactical 5 min x 60 min. */
@@ -120,6 +121,8 @@ export const DEFAULT_SETTINGS: Settings = {
     load: win({ order: 3, w: 380, h: 360 }),
     airspace: win({ docked: false, order: 4, w: 380, h: 400 }),
     settings: win({ docked: false, order: 5, x: 40, y: 96, w: 380, h: 360 }),
+    // Flight Plan Readout (§7.3): opens on a list-row click.
+    fpr: win({ docked: false, order: 6, x: 64, y: 120, w: 380, h: 220 }),
   },
 };
 

@@ -6,7 +6,7 @@ import type { WindowId } from "../store/settings";
 import { engineNow, useStore } from "../store/store";
 import { formatUtcClock } from "./format";
 import { useLocalNow } from "./hooks";
-import { dataIndicator, isEngineStalled } from "./status";
+import { dataIndicator, isEngineStalled, isNavExpired } from "./status";
 import { openWindow } from "./windows/layout";
 
 function WindowButton({ id, label, alert }: { id: WindowId; label: string; alert?: boolean }) {
@@ -143,6 +143,14 @@ export function Toolbar() {
       <span className={`eram-tb-readout ${data.level}`} title={dataTitle}>
         {data.text}
       </span>
+      {engine.nav && isNavExpired(now, engine.nav.expires) && (
+        <span
+          className="eram-tb-readout caution"
+          title={`FAA NASR cycle ${engine.nav.cycle} ended ${engine.nav.expires}. Route prediction may be off until the nav data is updated.`}
+        >
+          NAV DATA EXPIRED
+        </span>
+      )}
     </nav>
   );
 }

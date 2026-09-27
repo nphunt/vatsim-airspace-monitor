@@ -488,3 +488,34 @@ input[aria-invalid="true"] {
   padding: 2px 4px;
   border-top: 1px solid var(--eram-map-other);
 }
+
+/* ---- Selection and Flight Plan Readout (§7.3) ---- */
+
+.eram-list.selectable tbody tr {
+  cursor: pointer;
+}
+
+/* An outline, not a background, so alert flashing still reads on a selected row. */
+.eram-list tr.selected {
+  outline: 1px solid var(--eram-toolbar-active);
+  outline-offset: -1px;
+}
+
+.eram-fpr {
+  padding: 4px 6px;
+}
+
+.eram-fpr p {
+  margin: 0 0 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.eram-fpr-route {
+  color: var(--eram-datablock-dim);
+}
+
+.eram-fpr-cross {
+  margin-top: 4px;
+  color: var(--eram-datablock);
+}

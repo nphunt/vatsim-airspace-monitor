@@ -4,6 +4,7 @@ import { useStore } from "../../store/store";
 import { AirspaceMenu, AirspaceMenuTitle } from "./AirspaceMenu";
 import { AlertsList, AlertsTitle } from "./AlertsList";
 import { EramWindow } from "./EramWindow";
+import { FlightPlanReadout, FlightPlanReadoutTitle } from "./FlightPlanReadout";
 import { InboundList, InboundTitle } from "./InboundList";
 import { LoadTitle, LoadWindow } from "./LoadWindow";
 import { clampAll, dockedOrder, floatingIds, splitWeights, toggleDock } from "./layout";
@@ -17,6 +18,7 @@ const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode 
   load: { title: () => <LoadTitle />, body: () => <LoadWindow /> },
   airspace: { title: () => <AirspaceMenuTitle />, body: () => <AirspaceMenu /> },
   settings: { title: () => "SETTINGS", body: () => <SettingsWindow /> },
+  fpr: { title: () => <FlightPlanReadoutTitle />, body: () => <FlightPlanReadout /> },
 };
 
 /** Docked stack with splitters, plus floating windows on top (§7.2). */

@@ -187,5 +187,5 @@ describe.runIf(recording)("route-based prediction on the replay fixture (M6 acce
           .join("\n"),
     );
     expect(exitsRte.size).toBeGreaterThanOrEqual(5);
-  });
+  }, 60_000); // runs both pipelines over every snapshot for all 22 airspaces (~10 s)
 });

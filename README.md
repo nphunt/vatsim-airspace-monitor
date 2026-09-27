@@ -31,6 +31,27 @@ npm run update-data   # latest VATSpy release -> boundaries, FIRs, airports, met
 
 The script fails rather than writing if the release breaks an assumption (feature counts, the US sub-area classification table, callsign prefixes). Boundary data: [VATSpy Data Project](https://github.com/vatsimnetwork/vatspy-data-project).
 
+Route-based prediction uses FAA NASR nav data in `public/data/nav/` (fixes, navaids, airports, airways, SIDs and STARs). NASR runs on a 28-day cycle, so **refresh it every 28 days**:
+
+```bash
+npm run update-nav    # current FAA NASR cycle -> public/data/nav/{points,airways,procedures,meta}.json
+```
+
+`meta.json` records the cycle and the date it expires; after that date the toolbar shows `NAV DATA EXPIRED`. Nav data: [FAA NASR 28-day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) (public domain).
+
+### Route vs dead-reckoning accuracy
+
+Aircraft that follow their filed route are predicted along it (`RTE`); vectored, off-route or unresolvable ones fall back to a straight line (`DR`). `tests/route.replay.test.ts` measures both on the replay fixture (`2026-09-27T1917Z`, all 22 airspaces), comparing predictions made 1–5 min before each real exit with the time and airspace the aircraft actually left into:
+
+| | Predictions | Mean abs. exit-time error | Exit-into correct |
+| --- | --- | --- | --- |
+| RTE-mode aircraft, following the route | 534 (41 exits) | 28 s | 534/534 |
+| Same aircraft, dead reckoning | 534 (41 exits) | 30 s | 534/534 |
+| All aircraft as shown (RTE or DR) | 617 (46 exits) | 33 s | 601/617 |
+| All aircraft, dead reckoning only | 617 (46 exits) | 35 s | 601/617 |
+
+92% of cruising IFR jets over US airspace (193 at the end of the recording) were in `RTE` mode. The gain is small at 1–5 min leads, where most aircraft are on a straight leg anyway. Longer leads and turns at fixes near a boundary should benefit more, but aren't measured yet.
+
 ### Replay recordings
 
 ```bash

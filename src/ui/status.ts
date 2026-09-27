@@ -39,3 +39,16 @@ export function dataIndicator(
     level: stalled || ageS > DATA_STALE_S ? "alert" : "normal",
   };
 }
+
+/** NASR cycles change over at 0901Z on the effective date (AIRAC). */
+const AIRAC_CHANGEOVER_UTC = "T09:01:00Z";
+
+/**
+ * Toolbar `NAV DATA EXPIRED` (§3.3, §7.2): the engine clock is past the cycle end
+ * (`expires` is the next cycle's effective date, YYYY-MM-DD). Unknown dates never flag.
+ */
+export function isNavExpired(now: number, expires: string | null): boolean {
+  if (!expires || !/^\d{4}-\d{2}-\d{2}$/.test(expires)) return false;
+  const end = Date.parse(`${expires}${AIRAC_CHANGEOVER_UTC}`);
+  return Number.isFinite(end) && now >= end;
+}

@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { Prediction } from "../../data/types";
 import { useStore } from "../../store/store";
-import { alertClass, exitSummary, formatCountdown, listColumns } from "../format";
+import { alertClass, exitSummary, formatCountdown, listColumns, rowClass } from "../format";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -36,7 +36,8 @@ export function OutboundList() {
   const filter = useStore((s) => s.exitFilter);
   const setFilter = useStore((s) => s.setExitFilter);
   const alerts = useStore((s) => s.engine.alerts);
-  const ack = useStore((s) => s.ack);
+  const selectedCid = useStore((s) => s.selection?.cid ?? null);
+  const selectAircraft = useStore((s) => s.selectAircraft);
   const alertByCid = new Map(alerts.filter((a) => a.kind === "exit").map((a) => [a.cid, a]));
 
   const summary = exitSummary(rows);
@@ -64,7 +65,7 @@ export function OutboundList() {
               ))}
             </div>
           )}
-          <table className="eram-list">
+          <table className="eram-list selectable">
             <thead>
               <tr>
                 {layout.columns.map((c) => (
@@ -78,12 +79,15 @@ export function OutboundList() {
               {shown.map((p) => {
                 const exit = p.exit!;
                 const alert = alertByCid.get(p.cid);
-                // Row click acknowledges an ACTIVE alert (§7.3; FP readout arrives in M6).
+                // Row click selects, acknowledges an ACTIVE alert and opens the readout (§7.3).
                 return (
                   <tr
                     key={p.cid}
-                    className={alertClass(alert) ?? (exit.clip ? "dim" : undefined)}
-                    onClick={() => alert?.state === "ACTIVE" && ack(p.cid)}
+                    className={rowClass(
+                      alertClass(alert) ?? (exit.clip ? "dim" : undefined),
+                      p.cid === selectedCid,
+                    )}
+                    onClick={() => selectAircraft(p.cid, window.innerWidth)}
                   >
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>
