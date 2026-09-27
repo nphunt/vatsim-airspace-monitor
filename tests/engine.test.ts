@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { Engine } from "../src/worker/engine";
+import { DEFAULT_CONFIG, Engine } from "../src/worker/engine";
 import type { FromEngine } from "../src/worker/protocol";
 
 const DATA = path.resolve(import.meta.dirname, "../public/data");
@@ -73,7 +73,7 @@ describe("Engine", () => {
       setInterval: () => 0,
       clearInterval: () => {},
     });
-    await engine.handle({ type: "init", dataBaseUrl: BASE });
+    await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
     await waitFor(() => messages.some((m) => m.type === "poll"));
 
     expect(messages[0]?.type).toBe("tick");
@@ -99,7 +99,7 @@ describe("Engine", () => {
       setInterval: () => 0,
       clearInterval: () => {},
     });
-    const init = engine.handle({ type: "init", dataBaseUrl: BASE });
+    const init = engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
     await engine.handle({ type: "select", airspace: "ZME" }); // by label, before load
     await init;
     await waitFor(() => messages.some((m) => m.type === "predictions" && m.set !== null));
@@ -127,7 +127,7 @@ describe("Engine", () => {
       setInterval: () => 0,
       clearInterval: () => {},
     });
-    await engine.handle({ type: "init", dataBaseUrl: BASE });
+    await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
     const ready = messages.find((m) => m.type === "ready");
     expect(ready?.type === "ready" && ready.feedUrl).toBe(
       "https://data.vatsim.net/v3/vatsim-data.json",

@@ -46,10 +46,47 @@ body {
   overflow-x: hidden;
 }
 
-button {
+button,
+input {
   font: inherit;
   text-transform: inherit;
   border-radius: 0;
+}
+
+button {
+  background: var(--eram-toolbar-btn);
+  color: var(--eram-toolbar-text);
+  border: 1px solid var(--eram-toolbar-btn);
+  padding: 1px 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--eram-toolbar-text);
+}
+
+button[aria-pressed="true"] {
+  background: var(--eram-toolbar-active);
+  color: var(--eram-bg);
+}
+
+input {
+  background: var(--eram-bg);
+  color: var(--eram-text);
+  border: 1px solid var(--eram-window-border);
+  padding: 1px 4px;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--eram-alert);
+}
+
+.dim {
+  color: var(--eram-datablock-dim);
+}
+
+.alert {
+  color: var(--eram-alert);
 }
 
 /* ---- Master Toolbar (§7.2) ---- */
@@ -103,13 +140,249 @@ button {
   color: var(--eram-alert);
 }
 
-/* ---- Docked window stack (placeholder until M4) ---- */
+.eram-tb-btn.caution {
+  color: var(--eram-caution);
+  border-color: var(--eram-caution);
+  background: var(--eram-bg);
+}
 
-.eram-dock {
-  padding: 8px;
+/* ---- App layout: toolbar on top, docked stack fills the rest (§7.2) ---- */
+
+.eram-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.eram-toolbar {
+  flex: none;
+}
+
+.eram-errors {
+  flex: none;
+  color: var(--eram-alert);
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--eram-alert);
+}
+
+.eram-errors p {
+  margin: 0;
+}
+
+.eram-dock-stack {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+}
+
+.eram-dock-slot {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.eram-splitter {
+  flex: none;
+  height: 5px;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.eram-splitter:hover {
+  background: var(--eram-window-border);
+}
+
+.eram-splitter.inert {
+  cursor: default;
+  background: none;
+}
+
+.eram-empty {
+  color: var(--eram-datablock-dim);
+  margin: 4px 6px;
+}
+
+/* ---- Window frame ---- */
+
+.eram-window {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--eram-window-border);
+  background: var(--eram-bg);
+  min-width: 0;
+}
+
+.eram-window.docked {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.eram-window.floating {
+  position: fixed;
+}
+
+.eram-window-title {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  padding: 0 2px 0 6px;
+  border-bottom: 1px solid var(--eram-window-border);
+  color: var(--eram-toolbar-text);
+  user-select: none;
+  touch-action: none;
+}
+
+.eram-window.floating .eram-window-title {
+  cursor: move;
+}
+
+.eram-window.minimized .eram-window-title {
+  border-bottom: none;
+}
+
+.eram-window-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.eram-window-title button {
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  line-height: 1;
+}
+
+.eram-window-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.eram-window-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  cursor: nwse-resize;
+  touch-action: none;
+  border-right: 2px solid var(--eram-window-border);
+  border-bottom: 2px solid var(--eram-window-border);
+}
+
+/* ---- Lists (§7.3) ---- */
+
+.eram-list-wrap {
+  min-width: 0;
+}
+
+.eram-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--eram-map-other);
+}
+
+.eram-list {
+  border-collapse: collapse;
+  width: 100%;
+  white-space: pre;
+}
+
+.eram-list th {
+  text-align: left;
+  font-weight: normal;
+  color: var(--eram-datablock-dim);
+  position: sticky;
+  top: 0;
+  background: var(--eram-bg);
+}
+
+.eram-list th,
+.eram-list td {
+  padding: 0 1ch 0 0;
+}
+
+.eram-list th:first-child,
+.eram-list td:first-child {
+  padding-left: 4px;
+}
+
+.eram-list tr.dim td {
   color: var(--eram-datablock-dim);
 }
 
-.eram-error {
-  color: var(--eram-alert);
+.eram-list .col-flg {
+  width: 100%;
+}
+
+/* ---- AIRSPACE menu (§7.6) ---- */
+
+.eram-menu {
+  padding: 4px;
+}
+
+.eram-menu-group {
+  border: 1px solid var(--eram-map-other);
+  margin: 0 0 4px;
+  padding: 2px 4px 4px;
+}
+
+.eram-menu-group legend {
+  color: var(--eram-datablock-dim);
+  padding: 0 4px;
+}
+
+.eram-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 2px;
+}
+
+.eram-menu-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 2px 4px;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.eram-menu-name {
+  font-size: 0.8em;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.eram-menu-cmd input {
+  width: 10ch;
+}
+
+/* ---- SETTINGS ---- */
+
+.eram-settings {
+  padding: 6px;
+}
+
+.eram-settings .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.eram-settings input:not([type]),
+.eram-settings input[inputmode] {
+  width: 12ch;
 }

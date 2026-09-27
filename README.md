@@ -17,7 +17,7 @@ npm run build     # type-check and production build to dist/
 npm run bench     # prediction performance budget (< 500 ms per recompute) on the replay fixture
 ```
 
-Until the AIRSPACE menu exists, pick an airspace from DevTools with `__vam.select("ZME")` and inspect `__vam.predictions()`.
+To replay a recording instead of live data, run `npm run dev` and open `http://localhost:5173/?replay=latest` (or `?replay=<folder>`, add `&rate=4` for 4× speed; the REPLAY button in the toolbar toggles 1×/4×). Replay exists only on the dev server; production builds don't include it.
 
 A build with `GITHUB_ACTIONS=true` uses the GitHub Pages base path `/<repo-name>/`.
 

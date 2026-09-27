@@ -1,5 +1,7 @@
 import { FALLBACK_FEED_URL, HORIZON_MIN, UI_TICK_MS } from "../config";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
+import { buildStaffing } from "../core/facilityLookup";
+import { MyPositionTracker, findMyPosition } from "../core/myPosition";
 import {
   computePredictions,
   selectAirspace,
@@ -8,10 +10,11 @@ import {
 } from "../core/pipeline";
 import { TrackStore } from "../core/track";
 import { loadAirspaces, type AirspaceRegistry } from "../data/airspaces";
-import { FeedPoller } from "../data/feed";
+import { FeedPoller, type FeedStatus } from "../data/feed";
 import { dataUrl } from "../data/paths";
 import type { FeedSnapshot } from "../data/types";
-import type { FromEngine, ToEngine } from "./protocol";
+import type { EngineConfig, FromEngine, InitMessage, ToEngine } from "./protocol";
+import type { ReplayFeed } from "./replay";
 
 export interface EngineDeps {
   fetchImpl?: typeof fetch;
@@ -32,23 +35,33 @@ function safeFeedUrl(url: unknown): string {
     : FALLBACK_FEED_URL;
 }
 
+export const DEFAULT_CONFIG: EngineConfig = {
+  horizonMin: HORIZON_MIN,
+  myCid: null,
+  autoSelect: true,
+};
+
 /**
- * The worker-side engine (§4.3): owns feed polling, the clock, track history and the core
- * prediction pipeline. Runs in a dedicated worker so polling and the 1 Hz tick keep going when the
- * page is covered by CRC and the main thread is throttled.
+ * The worker-side engine (§4.3): owns the feed (live polling or dev replay), the clock,
+ * track history, My Position and the prediction pipeline. Runs in a dedicated worker so
+ * polling and the 1 Hz tick keep going when the page is covered by CRC.
  */
 export class Engine {
   private readonly fetchImpl: typeof fetch;
   private readonly setIntervalFn: (fn: () => void, ms: number) => unknown;
   private readonly clearIntervalFn: (handle: unknown) => void;
   private readonly localNow: () => number;
+  private readonly post: (m: FromEngine) => void;
 
   readonly estimator = new ServerOffsetEstimator();
-  readonly clock: Clock;
+  /** Live (server-corrected) until a replay recording loads, then its virtual clock. */
+  clock: Clock;
   private poller: FeedPoller | null = null;
+  private replay: ReplayFeed | null = null;
   private tickHandle: unknown = null;
   private started = false;
 
+  config: EngineConfig = { ...DEFAULT_CONFIG };
   airspaces: AirspaceRegistry | null = null;
   airports: AirportIndex = {};
   snapshot: FeedSnapshot | null = null;
@@ -56,9 +69,7 @@ export class Engine {
   private selected: SelectedAirspace | null = null;
   /** A selection that arrived before the boundary data finished loading. */
   private pendingSelect: string | null = null;
-  horizonMin = HORIZON_MIN;
-
-  private readonly post: (m: FromEngine) => void;
+  private readonly myPosition = new MyPositionTracker();
 
   constructor(post: (m: FromEngine) => void, deps: EngineDeps = {}) {
     this.post = post;
@@ -73,16 +84,29 @@ export class Engine {
   handle(msg: ToEngine): Promise<void> {
     switch (msg.type) {
       case "init":
-        return this.init(msg.dataBaseUrl);
+        return this.init(msg);
       case "select":
         this.select(msg.airspace);
+        return Promise.resolve();
+      case "config":
+        this.setConfig(msg.config);
+        return Promise.resolve();
+      case "replayRate":
+        this.replay?.setRate(msg.rate);
+        this.tick();
         return Promise.resolve();
     }
   }
 
-  private async init(base: string): Promise<void> {
+  private get rate(): number {
+    return this.replay?.clock?.getRate() ?? 1;
+  }
+
+  private async init(msg: InitMessage): Promise<void> {
     if (this.started) return;
     this.started = true;
+    this.config = { ...msg.config };
+    const base = msg.dataBaseUrl;
 
     // Tick first, so the watchdog sees a live worker even while data is loading.
     this.tickHandle = this.setIntervalFn(() => this.tick(), UI_TICK_MS);
@@ -96,28 +120,7 @@ export class Engine {
     }
     const feedUrl = safeFeedUrl(meta.feedUrl);
 
-    // Poll even if boundaries fail: the DATA indicator is still useful.
-    this.poller = new FeedPoller({
-      url: feedUrl,
-      estimator: this.estimator,
-      fetchImpl: this.fetchImpl,
-      localNow: this.localNow,
-      onSnapshot: (s) => {
-        this.snapshot = s;
-        // History is kept for every pilot in the track region, whatever is selected.
-        this.tracks.update(s);
-        this.recompute();
-      },
-      onPoll: (feed) =>
-        this.post({
-          type: "poll",
-          feed,
-          pilots: this.snapshot?.pilots.length ?? 0,
-          controllers: this.snapshot?.controllers.length ?? 0,
-        }),
-    });
-    this.poller.start();
-
+    // Load boundary data before feeding snapshots, so the first one is fully processed.
     try {
       [this.airspaces, this.airports] = await Promise.all([
         loadAirspaces({ base, fetchImpl: this.fetchImpl }),
@@ -128,13 +131,117 @@ export class Engine {
     } catch (e) {
       this.error(`boundary data failed to load: ${String(e)}`);
     }
-    if (this.pendingSelect) this.select(this.pendingSelect);
     this.post({
       type: "ready",
       selectableCount: this.airspaces?.getSelectableAirspaces().length ?? 0,
+      selectable: (this.airspaces?.getSelectableAirspaces() ?? []).map((a) => ({
+        key: a.key,
+        id: a.id,
+        label: a.label,
+        name: a.name,
+        group: a.group!,
+      })),
       vatspyTag: meta.vatspy?.tag ?? null,
       feedUrl,
     });
+    if (this.pendingSelect) this.select(this.pendingSelect);
+
+    // The replay module is dev-only. The import must sit inside this dead-in-production
+    // branch (not in a method) for the bundler to drop it from the build.
+    if (import.meta.env.DEV && msg.replay) {
+      const { ReplayFeed } = await import("./replay");
+      await this.startReplay(
+        new ReplayFeed({
+          ...msg.replay,
+          fetchImpl: this.fetchImpl,
+          localNow: this.localNow,
+          setInterval: this.setIntervalFn,
+          clearInterval: this.clearIntervalFn,
+          onSnapshot: (s) => this.onSnapshot(s),
+          onPoll: (feed) => this.postPoll(feed),
+        }),
+      );
+      return;
+    }
+    // Poll even if boundaries failed: the DATA indicator is still useful.
+    this.poller = new FeedPoller({
+      url: feedUrl,
+      estimator: this.estimator,
+      fetchImpl: this.fetchImpl,
+      localNow: this.localNow,
+      onSnapshot: (s) => this.onSnapshot(s),
+      onPoll: (feed) => this.postPoll(feed),
+    });
+    this.poller.start();
+  }
+
+  private async startReplay(replay: ReplayFeed): Promise<void> {
+    try {
+      await replay.load();
+    } catch (e) {
+      this.error(String(e));
+      return;
+    }
+    this.replay = replay;
+    this.clock = replay.clock!;
+    replay.start();
+    this.tick();
+  }
+
+  private onSnapshot(s: FeedSnapshot): void {
+    this.snapshot = s;
+    // History is kept for every pilot in the track region, whatever is selected.
+    this.tracks.update(s);
+    const autoSelected = this.updateStatus();
+    if (autoSelected) this.select(autoSelected);
+    else this.recompute();
+  }
+
+  /** Posts staffing + My Position for the latest snapshot; returns a key to auto-select. */
+  private updateStatus(): string | null {
+    if (!this.snapshot || !this.airspaces) return null;
+    const registry = this.airspaces;
+    const staffing = buildStaffing(this.snapshot.controllers, registry, (k) =>
+      registry.getAirspace(k),
+    );
+    const me =
+      this.config.myCid === null
+        ? null
+        : findMyPosition(this.snapshot.controllers, this.config.myCid, registry);
+    const transition = this.myPosition.update(me);
+    const autoSelected =
+      transition && this.config.autoSelect && transition !== this.selected?.airspace.key
+        ? transition
+        : null;
+    this.post({ type: "status", staffed: [...staffing.keys()], myPosition: me, autoSelected });
+    return autoSelected;
+  }
+
+  private postPoll(feed: FeedStatus): void {
+    this.post({
+      type: "poll",
+      feed,
+      pilots: this.snapshot?.pilots.length ?? 0,
+      controllers: this.snapshot?.controllers.length ?? 0,
+      now: this.clock.now(),
+      rate: this.rate,
+    });
+  }
+
+  private setConfig(config: EngineConfig): void {
+    const cidChanged = config.myCid !== this.config.myCid;
+    const horizonChanged = config.horizonMin !== this.config.horizonMin;
+    this.config = { ...config };
+    if (cidChanged) {
+      // Re-evaluate at once, so entering a CID while logged on auto-selects immediately.
+      this.myPosition.reset();
+      const autoSelected = this.updateStatus();
+      if (autoSelected) {
+        this.select(autoSelected);
+        return;
+      }
+    }
+    if (horizonChanged) this.recompute();
   }
 
   private select(idOrKey: string | null): void {
@@ -159,7 +266,7 @@ export class Engine {
     this.recompute();
   }
 
-  /** Recomputes from the latest snapshot. Called per new snapshot and on switch (§4.2). */
+  /** Recomputes from the latest snapshot: per new snapshot, on switch, on horizon change. */
   private recompute(): void {
     if (!this.selected || !this.snapshot || !this.airspaces) return;
     try {
@@ -170,7 +277,7 @@ export class Engine {
         airports: this.airports,
         tracks: this.tracks,
         now: this.clock.now(),
-        horizonMin: this.horizonMin,
+        horizonMin: this.config.horizonMin,
       });
       this.post({ type: "predictions", set });
     } catch (e) {
@@ -179,7 +286,12 @@ export class Engine {
   }
 
   private tick(): void {
-    this.post({ type: "tick", now: this.clock.now(), serverOffsetMs: this.estimator.offset() });
+    this.post({
+      type: "tick",
+      now: this.clock.now(),
+      rate: this.rate,
+      replay: this.replay?.status() ?? null,
+    });
   }
 
   private error(message: string): void {
@@ -189,6 +301,7 @@ export class Engine {
 
   stop(): void {
     this.poller?.stop();
+    this.replay?.stop();
     if (this.tickHandle !== null) this.clearIntervalFn(this.tickHandle);
     this.tickHandle = null;
   }
