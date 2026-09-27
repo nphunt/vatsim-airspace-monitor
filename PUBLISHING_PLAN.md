@@ -42,7 +42,7 @@ The site is served from `/vatsim-airspace-monitor/`, not `/`. Everything below M
 
 ## 3. GitHub Actions workflows
 
-Pin every third-party action to a major version (or a SHA). Use Node 20 LTS and `npm ci`, and commit `package-lock.json`.
+Pin every third-party action to a major version (or a SHA). Use Node 22 LTS (Vitest 5 requires ≥ 22.12; Node 20 is EOL) and `npm ci`, and commit `package-lock.json`.
 
 ### 3.1 `ci.yml`: on `pull_request` and `push` to non-main branches
 Steps: checkout → setup-node (cache npm) → `npm ci` → `npm run lint` → `npm test` → `npm run build` (with `GITHUB_ACTIONS=true`, so the real base path is used) → **publish checks**:

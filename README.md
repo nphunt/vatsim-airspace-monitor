@@ -17,3 +17,13 @@ npm run build     # type-check and production build to dist/
 ```
 
 A build with `GITHUB_ACTIONS=true` uses the GitHub Pages base path `/<repo-name>/`.
+
+### Data
+
+`public/data/` is generated and committed. Refresh it with:
+
+```bash
+npm run update-data   # latest VATSpy release -> boundaries, FIRs, airports, meta
+```
+
+The script fails rather than writing if the release breaks an assumption (feature counts, the US sub-area classification table, callsign prefixes). Boundary data: [VATSpy Data Project](https://github.com/vatsimnetwork/vatspy-data-project).
