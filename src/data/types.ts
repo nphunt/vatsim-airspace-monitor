@@ -1,4 +1,5 @@
 import type { Polygon } from "geojson";
+import type { LoadForecast } from "../core/load";
 
 /**
  * Lookup tier of a boundary feature (§3.2, §5.5). `facilityAt` tries domestic, then
@@ -190,10 +191,12 @@ export interface PredictionSet {
   outbound: Prediction[];
   /** Outside, predicted to enter within the horizon; by entry time. */
   inbound: Prediction[];
-  /** Inside with no exit within the horizon (occupancy for load, M7). */
+  /** Inside with no exit within the horizon. */
   resident: Prediction[];
   /** CIDs of every eligible aircraft currently inside (alerts: "exited" vs "no exit"). */
   insideCids: number[];
+  /** Load forecast (§5.11); null unless the LOAD window is open. */
+  load: LoadForecast | null;
   stats: { eligible: number; prefiltered: number; ms: number };
 }
 

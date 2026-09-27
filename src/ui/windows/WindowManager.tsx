@@ -5,6 +5,7 @@ import { AirspaceMenu, AirspaceMenuTitle } from "./AirspaceMenu";
 import { AlertsList, AlertsTitle } from "./AlertsList";
 import { EramWindow } from "./EramWindow";
 import { InboundList, InboundTitle } from "./InboundList";
+import { LoadTitle, LoadWindow } from "./LoadWindow";
 import { clampAll, dockedOrder, floatingIds, splitWeights, toggleDock } from "./layout";
 import { OutboundList, OutboundTitle } from "./OutboundList";
 import { SettingsWindow } from "./SettingsWindow";
@@ -13,6 +14,7 @@ const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode 
   outbound: { title: () => <OutboundTitle />, body: () => <OutboundList /> },
   alerts: { title: () => <AlertsTitle />, body: () => <AlertsList /> },
   inbound: { title: () => <InboundTitle />, body: () => <InboundList /> },
+  load: { title: () => <LoadTitle />, body: () => <LoadWindow /> },
   airspace: { title: () => <AirspaceMenuTitle />, body: () => <AirspaceMenu /> },
   settings: { title: () => "SETTINGS", body: () => <SettingsWindow /> },
 };

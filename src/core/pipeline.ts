@@ -17,8 +17,15 @@ import {
   type Staffing,
 } from "./facilityLookup";
 import { compass8, distanceNm, normalizeLonAround } from "./geo";
-import { buildDrPath, courseAt, pointAt } from "./path";
-import { summarizeCrossings, timeAlong } from "./predict";
+import {
+  buildLoad,
+  capIntervals,
+  occupancyFromCrossings,
+  type AltitudeFilter,
+  type LoadEntry,
+} from "./load";
+import { buildDrPath, courseAt, pathLength, pointAt } from "./path";
+import { findCrossings, summarizeCrossings, timeAlong } from "./predict";
 import type { RouteModeTracker } from "./routeMode";
 import { deriveTrack, type TrackStore } from "./track";
 
@@ -83,6 +90,11 @@ export interface PipelineInput {
   horizonMin: number;
   /** Route-following (§5.10); null until nav data loads, then DR only is used. */
   routes?: RouteModeTracker | null;
+  /**
+   * Compute the load forecast (§5.11): only while LOAD is open, when `horizonMin` is
+   * already the load horizon. The altitude filter applies to load only here (§5.7).
+   */
+  load?: { altitude?: AltitudeFilter | null } | null;
   /** Wall-clock timer for stats; injectable for tests. */
   perfNow?: () => number;
 }
@@ -106,6 +118,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
   const inbound: Prediction[] = [];
   const resident: Prediction[] = [];
   const insideCids: number[] = [];
+  const loadEntries: LoadEntry[] = [];
   let prefiltered = 0;
 
   for (const p of eligible) {
@@ -117,11 +130,36 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     const path = input.routes
       ? input.routes.pathFor(p, derived.trackDeg, lengthNm, prepared.centerLon)
       : buildDrPath(p, derived.trackDeg, lengthNm, prepared.centerLon);
-    const summary = summarizeCrossings(path, prepared, p.groundspeed);
+    const crossings = findCrossings(path, prepared);
+    const summary = summarizeCrossings(path, prepared, p.groundspeed, crossings);
     if (summary.inside) insideCids.push(p.cid);
     if (summary.inside === false && !summary.entry) continue;
 
     const fp = p.flightPlan!;
+    if (input.load) {
+      const lenNm = pathLength(path);
+      // A path shorter than asked ended at the destination (RTE): the aircraft lands.
+      let dist = occupancyFromCrossings(summary.inside, crossings, lenNm, lenNm >= lengthNm - 0.5);
+      const apt = airports[fp.arrival];
+      // DR flies straight past a destination inside the airspace; it lands there (§5.6).
+      if (path.mode === "DR" && apt && containsRaw(prepared, apt[0], apt[1])) {
+        dist = capIntervals(dist, distanceNm(p.lat, p.lon, apt[0], apt[1]));
+      }
+      if (dist.length > 0) {
+        loadEntries.push({
+          cid: p.cid,
+          callsign: p.callsign,
+          aircraftType: fp.aircraftShort || fp.aircraftFaa,
+          altitude: p.altitude,
+          mode: path.mode,
+          inside: summary.inside,
+          intervals: dist.map(([a, b]) => [
+            timeAlong(p.lastUpdated, a, p.groundspeed),
+            b === Infinity ? Infinity : timeAlong(p.lastUpdated, b, p.groundspeed),
+          ]),
+        });
+      }
+    }
     const base: Prediction = {
       cid: p.cid,
       callsign: p.callsign,
@@ -203,6 +241,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     inbound,
     resident,
     insideCids,
+    load: input.load ? buildLoad(loadEntries, now, { altitude: input.load.altitude }) : null,
     stats: { eligible: eligible.length, prefiltered, ms: perfNow() - started },
   };
 }

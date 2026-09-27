@@ -10,7 +10,9 @@ import type { ReplayStatus } from "../worker/replay";
 import {
   loadSettings,
   saveSettings,
+  LOAD_THRESHOLD_MAX,
   type AudioDevice,
+  type LoadViewId,
   type Settings,
   type ToneId,
   type WindowId,
@@ -79,6 +81,9 @@ interface AppState {
   setAudioDevice(d: AudioDevice | null): void;
   setRepeatTone(on: boolean): void;
   setEntryAlerts(on: boolean): void;
+  setLoadView(view: LoadViewId): void;
+  /** Load threshold for the selected airspace (§5.11). */
+  setLoadThreshold(key: string, n: number): void;
   patchAudio(patch: Partial<AudioView>): void;
 }
 
@@ -118,8 +123,12 @@ export function engineConfig(s: Settings): EngineConfig {
     autoSelect: s.autoSelect,
     repeatTone: s.repeatTone,
     entryAlerts: s.entryAlerts,
+    loadOpen: s.windows.load.open,
   };
 }
+
+const sameConfig = (a: EngineConfig, b: EngineConfig) =>
+  (Object.keys(a) as (keyof EngineConfig)[]).every((k) => a[k] === b[k]);
 
 /** Engine clock extrapolated to local time `localNow` (live or replay, §4.1). */
 export function engineNow(clock: ClockAnchor | null, localNow: number): number {
@@ -127,11 +136,15 @@ export function engineNow(clock: ClockAnchor | null, localNow: number): number {
 }
 
 export const useStore = create<AppState>()((set, get) => {
-  const updateSettings = (patch: Partial<Settings>, sendConfig = false) => {
+  // Any settings change that alters the engine config (horizon, CID, LOAD open, ...) is
+  // sent to the worker.
+  const updateSettings = (patch: Partial<Settings>) => {
+    const before = engineConfig(get().settings);
     const settings = { ...get().settings, ...patch };
     set({ settings });
     saveSettings(settings);
-    if (sendConfig) send({ type: "config", config: engineConfig(settings) });
+    const config = engineConfig(settings);
+    if (!sameConfig(before, config)) send({ type: "config", config });
   };
 
   return {
@@ -184,9 +197,9 @@ export const useStore = create<AppState>()((set, get) => {
       set({ exitFilter: null });
       send({ type: "select", airspace: key });
     },
-    setHorizon: (min) => updateSettings({ horizonMin: min }, true),
-    setMyCid: (raw) => updateSettings({ myCid: raw }, true),
-    setAutoSelect: (on) => updateSettings({ autoSelect: on }, true),
+    setHorizon: (min) => updateSettings({ horizonMin: min }),
+    setMyCid: (raw) => updateSettings({ myCid: raw }),
+    setAutoSelect: (on) => updateSettings({ autoSelect: on }),
     setInboundLimit: (n) => updateSettings({ inboundLimit: n }),
     setReplayRate: (rate) => send({ type: "replayRate", rate }),
     setExitFilter: (label) => set({ exitFilter: label }),
@@ -201,8 +214,17 @@ export const useStore = create<AppState>()((set, get) => {
     setVolume: (volume) => updateSettings({ volume: Math.min(1, Math.max(0, volume)) }),
     setMuted: (muted) => updateSettings({ muted }),
     setAudioDevice: (audioDevice) => updateSettings({ audioDevice }),
-    setRepeatTone: (repeatTone) => updateSettings({ repeatTone }, true),
-    setEntryAlerts: (entryAlerts) => updateSettings({ entryAlerts }, true),
+    setRepeatTone: (repeatTone) => updateSettings({ repeatTone }),
+    setEntryAlerts: (entryAlerts) => updateSettings({ entryAlerts }),
+    setLoadView: (loadView) => updateSettings({ loadView }),
+    setLoadThreshold: (key, n) => {
+      if (!Number.isInteger(n) || n < 1) return;
+      const loadThresholds = {
+        ...get().settings.loadThresholds,
+        [key]: Math.min(LOAD_THRESHOLD_MAX, n),
+      };
+      updateSettings({ loadThresholds });
+    },
     patchAudio: (patch) => set({ audio: { ...get().audio, ...patch } }),
   };
 });

@@ -61,6 +61,7 @@ function set(
     inbound,
     resident: [],
     insideCids: inside,
+    load: null,
     stats: { eligible: 0, prefiltered: 0, ms: 0 },
   };
 }

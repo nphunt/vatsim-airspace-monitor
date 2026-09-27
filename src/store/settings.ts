@@ -1,6 +1,7 @@
 import {
   HORIZON_CHOICES_MIN,
   HORIZON_MIN,
+  LOAD_THRESHOLD_DEFAULT,
   SETTINGS_SCHEMA_VERSION,
   STORAGE_PREFIX,
 } from "../config";
@@ -10,14 +11,20 @@ import {
 
 export const SETTINGS_KEY = `${STORAGE_PREFIX}settings`;
 
-export type WindowId = "outbound" | "alerts" | "inbound" | "airspace" | "settings";
+export type WindowId = "outbound" | "alerts" | "inbound" | "load" | "airspace" | "settings";
 export const WINDOW_IDS: readonly WindowId[] = [
   "outbound",
   "alerts",
   "inbound",
+  "load",
   "airspace",
   "settings",
 ];
+
+/** LOAD window view (§7.4): strategic 15 min x 2 h, tactical 5 min x 60 min. */
+export type LoadViewId = "strat" | "tact";
+
+export const LOAD_THRESHOLD_MAX = 999;
 
 export type ToneId = "chime" | "high" | "low";
 export const TONE_IDS: readonly ToneId[] = ["chime", "high", "low"];
@@ -62,8 +69,17 @@ export interface Settings {
   audioDevice: AudioDevice | null;
   repeatTone: boolean;
   entryAlerts: boolean;
+  loadView: LoadViewId;
+  /** Load threshold per airspace key; missing = LOAD_THRESHOLD_DEFAULT (§5.11). */
+  loadThresholds: Record<string, number>;
   windows: Record<WindowId, WindowState>;
 }
+
+export function loadThreshold(s: Settings, key: string | null): number {
+  return (key && s.loadThresholds[key]) || LOAD_THRESHOLD_DEFAULT;
+}
+
+const AIRSPACE_KEY_RE = /^[A-Z0-9-]+#(dom|ocn)$/;
 
 export const INBOUND_LIMIT_CHOICES = [10, 25, 50] as const;
 
@@ -94,13 +110,16 @@ export const DEFAULT_SETTINGS: Settings = {
   audioDevice: null,
   repeatTone: false,
   entryAlerts: false,
+  loadView: "tact",
+  loadThresholds: {},
   windows: {
     // Default open: OUTBOUND and ALERTS (§7.2). Lists dock; menus float.
     outbound: win({ open: true, order: 0 }),
     alerts: win({ open: true, order: 1, weight: 0.5 }),
     inbound: win({ order: 2 }),
-    airspace: win({ docked: false, order: 3, w: 380, h: 400 }),
-    settings: win({ docked: false, order: 4, x: 40, y: 96, w: 380, h: 360 }),
+    load: win({ order: 3, w: 380, h: 360 }),
+    airspace: win({ docked: false, order: 4, w: 380, h: 400 }),
+    settings: win({ docked: false, order: 5, x: 40, y: 96, w: 380, h: 360 }),
   },
 };
 
@@ -125,6 +144,17 @@ function readWindow(v: unknown, d: WindowState): WindowState {
   };
 }
 
+function readThresholds(v: unknown): Record<string, number> {
+  if (!isObj(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, n] of Object.entries(v).slice(0, 100)) {
+    if (AIRSPACE_KEY_RE.test(k) && Number.isInteger(n) && (n as number) >= 1) {
+      out[k] = Math.min(LOAD_THRESHOLD_MAX, n as number);
+    }
+  }
+  return out;
+}
+
 /** Validates a parsed blob field by field against the defaults. */
 export function parseSettings(raw: unknown): Settings {
   const d = DEFAULT_SETTINGS;
@@ -133,8 +163,7 @@ export function parseSettings(raw: unknown): Settings {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     selectedAirspace:
-      typeof raw.selectedAirspace === "string" &&
-      /^[A-Z0-9-]+#(dom|ocn)$/.test(raw.selectedAirspace)
+      typeof raw.selectedAirspace === "string" && AIRSPACE_KEY_RE.test(raw.selectedAirspace)
         ? raw.selectedAirspace
         : null,
     horizonMin: (HORIZON_CHOICES_MIN as readonly number[]).includes(raw.horizonMin as number)
@@ -156,6 +185,8 @@ export function parseSettings(raw: unknown): Settings {
         : null,
     repeatTone: bool(raw.repeatTone, d.repeatTone),
     entryAlerts: bool(raw.entryAlerts, d.entryAlerts),
+    loadView: raw.loadView === "strat" || raw.loadView === "tact" ? raw.loadView : d.loadView,
+    loadThresholds: readThresholds(raw.loadThresholds),
     windows: Object.fromEntries(
       WINDOW_IDS.map((id) => [id, readWindow(windows[id], d.windows[id])]),
     ) as Record<WindowId, WindowState>,

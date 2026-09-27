@@ -466,3 +466,25 @@ input[aria-invalid="true"] {
   border: 1px solid var(--eram-window-border);
   max-width: 100%;
 }
+
+/* LOAD window (§7.4) */
+.eram-load .eram-summary {
+  align-items: center;
+  gap: 6px;
+}
+
+.eram-load-chart {
+  display: block;
+  cursor: pointer;
+}
+
+.eram-load-note {
+  margin: 2px 4px;
+  font-size: 0.85em;
+}
+
+.eram-load-caption {
+  text-align: left;
+  padding: 2px 4px;
+  border-top: 1px solid var(--eram-map-other);
+}

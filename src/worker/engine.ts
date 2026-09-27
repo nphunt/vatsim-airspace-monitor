@@ -1,4 +1,4 @@
-import { FALLBACK_FEED_URL, HORIZON_MIN, UI_TICK_MS } from "../config";
+import { FALLBACK_FEED_URL, HORIZON_MIN, LOAD_STRATEGIC_MIN, UI_TICK_MS } from "../config";
 import { AlertMachine, DEFAULT_ALERT_CONFIG, type AlertConfig } from "../core/alerts";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
 import { buildStaffing } from "../core/facilityLookup";
@@ -45,7 +45,13 @@ export const DEFAULT_CONFIG: EngineConfig = {
   autoSelect: true,
   repeatTone: false,
   entryAlerts: false,
+  loadOpen: false,
 };
+
+/** Prediction horizon: the list horizon, or the load horizon while LOAD is open (§5.2). */
+export function effectiveHorizonMin(c: EngineConfig): number {
+  return c.loadOpen ? Math.max(c.horizonMin, LOAD_STRATEGIC_MIN) : c.horizonMin;
+}
 
 /** Repeat interval when the repeat-tone setting is on (§6.1). */
 const REPEAT_TONE_S = 30;
@@ -299,7 +305,9 @@ export class Engine {
 
   private setConfig(config: EngineConfig): void {
     const cidChanged = config.myCid !== this.config.myCid;
-    const horizonChanged = config.horizonMin !== this.config.horizonMin;
+    const horizonChanged =
+      effectiveHorizonMin(config) !== effectiveHorizonMin(this.config) ||
+      config.loadOpen !== this.config.loadOpen;
     this.config = { ...config };
     this.alerts.config = alertConfig(this.config);
     if (cidChanged) {
@@ -354,8 +362,9 @@ export class Engine {
         airports: this.airports,
         tracks: this.tracks,
         now,
-        horizonMin: this.config.horizonMin,
+        horizonMin: effectiveHorizonMin(this.config),
         routes: this.routes,
+        load: this.config.loadOpen ? {} : null,
       });
       this.lastSet = set;
       this.eligibleCids = new Set(eligiblePilots(this.snapshot.pilots, now).map((p) => p.cid));

@@ -74,11 +74,10 @@ export function Toolbar() {
         alert={activeAlerts > 0}
       />
       <WindowButton id="inbound" label="INBOUND" />
-      {["LOAD", "SCOPE"].map((l) => (
-        <button key={l} type="button" className="eram-tb-btn" disabled>
-          {l}
-        </button>
-      ))}
+      <WindowButton id="load" label="LOAD" />
+      <button type="button" className="eram-tb-btn" disabled>
+        SCOPE
+      </button>
       <button
         type="button"
         className="eram-tb-btn"

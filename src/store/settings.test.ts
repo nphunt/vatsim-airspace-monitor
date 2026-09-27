@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { LOAD_THRESHOLD_DEFAULT } from "../config";
 import {
   DEFAULT_SETTINGS,
   SETTINGS_KEY,
   loadSettings,
+  loadThreshold,
   parseSettings,
   saveSettings,
 } from "./settings";
@@ -73,6 +75,26 @@ describe("settings persistence", () => {
     expect(s.inboundLimit).toBe(25);
     expect(s.autoSelect).toBe(true);
     expect(s.windows.outbound).toMatchObject({ open: false, x: 16, w: 160 });
+  });
+
+  it("validates the LOAD view and per-airspace thresholds", () => {
+    const s = parseSettings({
+      schemaVersion: 1,
+      loadView: "weekly",
+      loadThresholds: {
+        "KZME#dom": 30,
+        "KZNY#dom": 0,
+        "<x>": 5,
+        "KZDC#dom": "12",
+        "KZOB#dom": 5000,
+      },
+    });
+    expect(s.loadView).toBe("tact");
+    expect(s.loadThresholds).toEqual({ "KZME#dom": 30, "KZOB#dom": 999 });
+    expect(loadThreshold(s, "KZME#dom")).toBe(30);
+    expect(loadThreshold(s, "KZID#dom")).toBe(LOAD_THRESHOLD_DEFAULT);
+    expect(loadThreshold(s, null)).toBe(LOAD_THRESHOLD_DEFAULT);
+    expect(s.windows.load.open).toBe(false);
   });
 
   it("survives storage that throws", () => {

@@ -28,6 +28,8 @@ export interface EngineConfig {
   repeatTone: boolean;
   /** Entry alerts (§6.1, default off). */
   entryAlerts: boolean;
+  /** LOAD window open: extend paths to the load horizon and compute the forecast (§5.2). */
+  loadOpen: boolean;
 }
 
 /** Select the airspace (id "KZME", key, or label "ZME"), or null for none. Recomputes immediately (§4.2). */

@@ -115,6 +115,33 @@ describe("Engine", () => {
     expect(engine.tracks.size).toBe(1);
   });
 
+  it("opening LOAD extends the horizon and adds the forecast; closing drops it", async () => {
+    const messages: FromEngine[] = [];
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl: fakeFetch([]),
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
+    await engine.handle({ type: "select", airspace: "ZME" });
+    const lastSet = () => {
+      const m = messages.filter((x) => x.type === "predictions").at(-1);
+      return m?.type === "predictions" ? m.set : null;
+    };
+    await waitFor(() => lastSet() !== null);
+    expect(lastSet()).toMatchObject({ horizonMin: 30, load: null });
+
+    await engine.handle({ type: "config", config: { ...DEFAULT_CONFIG, loadOpen: true } });
+    const open = lastSet()!;
+    expect(open.horizonMin).toBe(120);
+    expect(open.load?.current).toBe(1);
+    expect(open.load?.entries[0]).toMatchObject({ callsign: "DAL123", inside: true });
+    expect(open.load?.tactical.bins[0]?.peak).toBe(1);
+
+    await engine.handle({ type: "config", config: { ...DEFAULT_CONFIG, loadOpen: false } });
+    expect(lastSet()).toMatchObject({ horizonMin: 30, load: null });
+  });
+
   it("falls back to the default feed URL if meta.json names a non-VATSIM host", async () => {
     const messages: FromEngine[] = [];
     const base = fakeFetch([]);

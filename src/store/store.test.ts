@@ -78,6 +78,31 @@ describe("store", () => {
     useStore.getState().setMyCid("abc");
     expect(sent.at(-1)).toMatchObject({ type: "config", config: { myCid: null } });
   });
+
+  it("opening and closing LOAD tells the engine; other window changes don't", () => {
+    const st = useStore.getState();
+    st.patchWindow("load", { open: false });
+    sent = [];
+    st.patchWindow("load", { open: true });
+    expect(sent).toEqual([{ type: "config", config: expect.objectContaining({ loadOpen: true }) }]);
+    st.patchWindow("load", { x: 100 });
+    st.patchWindow("inbound", { open: true });
+    expect(sent).toHaveLength(1);
+    st.patchWindow("load", { open: false });
+    expect(sent.at(-1)).toMatchObject({ type: "config", config: { loadOpen: false } });
+  });
+
+  it("load thresholds are per airspace and validated", () => {
+    const st = useStore.getState();
+    st.setLoadThreshold("KZME#dom", 35);
+    st.setLoadThreshold("KZME#dom", 0);
+    st.setLoadThreshold("KZME#dom", 2.5);
+    st.setLoadThreshold("KZNY#dom", 5000);
+    expect(useStore.getState().settings.loadThresholds).toMatchObject({
+      "KZME#dom": 35,
+      "KZNY#dom": 999,
+    });
+  });
 });
 
 describe("engineNow", () => {
