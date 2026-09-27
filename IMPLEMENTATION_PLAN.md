@@ -560,6 +560,7 @@ Deliver each milestone as a separate git commit.
 - **Phase 2 – Extra alerts:** emergency squawks (7500/7600/7700), squawk ≠ `assigned_transponder`, wrong altitude for direction of flight, neighbor staffing changes.
 - **Phase 3 – TRACONs:** SimAware TRACON boundaries in the selector (with floor/ceiling); APP positions in My Position.
 - **Phase 3 – Oceanic & non-US FIRs:** unlock the rest of the world.
+- **Phase 4 – Conflict probe, resolution advisories, flows & MIT calculator:** planned in `CONFLICT_FLOW_PLAN.md` (M15–M20).
 - **Always-on-top:** Chrome Document Picture-in-Picture for the ALERTS window, or a Tauri desktop build with OS notifications.
 - Optional speech alerts.
 
