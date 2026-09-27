@@ -43,6 +43,14 @@ export function formatCountdown(remainingMs: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/**
+ * Crossing time: countdown and Zulu time of day, "01:52 1732Z". The countdown ticks; the
+ * Zulu time is the predicted crossing itself, for coordination and handoff planning.
+ */
+export function formatCrossing(t: number, now: number): string {
+  return `${formatCountdown(t - now)} ${formatZulu(t)}`;
+}
+
 const TREND: Record<VerticalTrend, string> = { level: "C", climb: "↑", descend: "↓" };
 
 /** Hundreds of feet + trend (§7.3): "350C", "120↑". */
@@ -92,12 +100,13 @@ export function listColumns(
 ): ColumnLayout {
   const compactFlags = chars < 62 || widthPx <= 480;
   const columns: ListColumn[] = ["callsign"];
-  if (chars >= 38) columns.push("type");
+  // Thresholds include the time column's "MM:SS HHMMZ" (11 chars).
+  if (chars >= 44) columns.push("type");
   columns.push("alt", "facility");
   if (kind === "outbound") columns.push("dir");
   columns.push("time");
-  if (chars >= 44) columns.push("dest");
-  if (chars >= 70) columns.push("gs");
+  if (chars >= 50) columns.push("dest");
+  if (chars >= 76) columns.push("gs");
   columns.push("flg");
   return { columns, compactFlags };
 }
@@ -163,11 +172,11 @@ export function crossingLine(
 ): string {
   if (kind === "outbound" && p.exit) {
     const x = p.exit;
-    return `EXIT ${x.into.label} (${x.into.name}) ${x.dir} ${formatCountdown(x.t - now)} ${p.mode}`;
+    return `EXIT ${x.into.label} (${x.into.name}) ${x.dir} ${formatCrossing(x.t, now)} ${p.mode}`;
   }
   if (kind === "inbound" && p.entry) {
     const e = p.entry;
-    return `ENTRY FROM ${e.from.label} (${e.from.name}) ${formatCountdown(e.t - now)}`;
+    return `ENTRY FROM ${e.from.label} (${e.from.name}) ${formatCrossing(e.t, now)}`;
   }
   if (p.arr) return `LANDING ${p.arrival || "INSIDE"}`;
   return `NO EXIT WITHIN ${horizonMin} MIN`;

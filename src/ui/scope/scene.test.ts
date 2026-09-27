@@ -69,15 +69,15 @@ function set(parts: Partial<PredictionSet>): PredictionSet {
 }
 
 describe("datablockLines (§7.5)", () => {
-  it("outbound: callsign, altitude, type + GS, exit-into + ETX", () => {
+  it("outbound: callsign, altitude, type + GS, exit-into + ETX + Zulu", () => {
     const d = datablockLines(target(), { p: pred({ exit }), kind: "outbound" }, T0);
-    expect(d.lines).toEqual(["DAL123", "350C", "B738 452", "ZKC 01:52"]);
+    expect(d.lines).toEqual(["DAL123", "350C", "B738 452", "ZKC 01:52 1801Z"]);
     expect(d.timeLine).toBe(3);
   });
 
-  it('inbound: "E" + ETE on line 4', () => {
+  it('inbound: "E" + ETE + Zulu on line 4', () => {
     const d = datablockLines(target(), { p: pred({ inside: false, entry }), kind: "inbound" }, T0);
-    expect(d.lines[3]).toBe("E 07:14");
+    expect(d.lines[3]).toBe("E 07:14 1807Z");
   });
 
   it("resident: three lines, no time field", () => {

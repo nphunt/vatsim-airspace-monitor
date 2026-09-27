@@ -1,5 +1,5 @@
 import { useStore } from "../../store/store";
-import { alertClass, formatCountdown } from "../format";
+import { alertClass, formatCrossing } from "../format";
 import { useEngineNow } from "../hooks";
 
 export function AlertsTitle() {
@@ -10,7 +10,7 @@ export function AlertsTitle() {
 
 /**
  * ALERTS list (§5.9, §6.2), styled like ERAM's Conflict Alert list, by time:
- * `DAL123 B738 350 ZME→ZKC N 01:52 KC_12_CTR 127.900` (controller only when staffed).
+ * `DAL123 B738 350 ZME→ZKC N 01:52 1732Z KC_12_CTR 127.900` (controller only when staffed).
  * Click a row, or focus it and press Enter, to acknowledge.
  */
 export function AlertsList() {
@@ -48,7 +48,7 @@ export function AlertsList() {
                 <>
                   <td className={a.other.staffed ? undefined : "dim-cell"}>{route}</td>
                   <td>{a.kind === "exit" ? (a.dir ?? "") : "ENT"}</td>
-                  <td>{formatCountdown(a.t - now)}</td>
+                  <td>{formatCrossing(a.t, now)}</td>
                   <td className="col-flg">
                     {a.other.controller
                       ? `${a.other.controller.callsign} ${a.other.controller.frequency}`

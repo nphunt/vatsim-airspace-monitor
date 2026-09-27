@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { Prediction } from "../../data/types";
 import { useStore } from "../../store/store";
-import { alertClass, formatCountdown, listColumns, rowClass } from "../format";
+import { alertClass, formatCrossing, listColumns, rowClass } from "../format";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -72,7 +72,7 @@ export function InboundList() {
                       <td key={c} className={`col-${c}`}>
                         {commonCell(c, p, {
                           facility: <FacilityCell f={entry.from} />,
-                          time: formatCountdown(entry.t - now),
+                          time: formatCrossing(entry.t, now),
                           clip: entry.clip,
                           compact: layout.compactFlags,
                         })}

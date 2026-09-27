@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { Prediction } from "../../data/types";
 import { useStore } from "../../store/store";
-import { alertClass, exitSummary, formatCountdown, listColumns, rowClass } from "../format";
+import { alertClass, exitSummary, formatCrossing, listColumns, rowClass } from "../format";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -95,7 +95,7 @@ export function OutboundList() {
                         {commonCell(c, p, {
                           facility: <FacilityCell f={exit.into} />,
                           dir: exit.dir,
-                          time: formatCountdown(exit.t - now),
+                          time: formatCrossing(exit.t, now),
                           clip: exit.clip,
                           compact: layout.compactFlags,
                         })}

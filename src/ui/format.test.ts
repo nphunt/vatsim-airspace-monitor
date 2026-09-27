@@ -8,6 +8,7 @@ import {
   flagsOf,
   formatAlt,
   formatCountdown,
+  formatCrossing,
   formatUtcClock,
   formatZulu,
   listColumns,
@@ -112,8 +113,8 @@ describe("listColumns (§7.3 narrow rules)", () => {
   });
 
   it("drops DEST before TYPE, never CALLSIGN/TO/DIR/time", () => {
-    expect(listColumns(40, "outbound").columns).not.toContain("dest");
-    expect(listColumns(40, "outbound").columns).toContain("type");
+    expect(listColumns(46, "outbound").columns).not.toContain("dest");
+    expect(listColumns(46, "outbound").columns).toContain("type");
     const tiny = listColumns(20, "outbound").columns;
     expect(tiny).not.toContain("type");
     for (const c of ["callsign", "facility", "dir", "time"] as const) expect(tiny).toContain(c);
@@ -164,9 +165,9 @@ describe("flight plan readout lines (§7.3)", () => {
   };
   const exit = { t: 112_000, distNm: 14, lat: 0, lon: 0, dir: "N" as const, into, clip: false };
 
-  it("exit line: facility, name, direction, countdown and mode", () => {
+  it("exit line: facility, name, direction, countdown, Zulu time and mode", () => {
     const p = pred({ mode: "RTE", exit });
-    expect(crossingLine(p, "outbound", 0, 30)).toBe("EXIT ZKC (KANSAS CITY) N 01:52 RTE");
+    expect(crossingLine(p, "outbound", 0, 30)).toBe("EXIT ZKC (KANSAS CITY) N 01:52 0001Z RTE");
   });
 
   it("entry line for inbound", () => {
@@ -175,7 +176,7 @@ describe("flight plan readout lines (§7.3)", () => {
       inside: false,
       entry: { t: 434_000, distNm: 50, lat: 0, lon: 0, from, clip: false },
     });
-    expect(crossingLine(p, "inbound", 0, 30)).toBe("ENTRY FROM ZID (INDIANAPOLIS) 07:14");
+    expect(crossingLine(p, "inbound", 0, 30)).toBe("ENTRY FROM ZID (INDIANAPOLIS) 07:14 0007Z");
   });
 
   it("resident: landing inside, or no exit within the horizon", () => {
@@ -224,6 +225,17 @@ describe("flight plan readout lines (§7.3)", () => {
     expect(rowClass("alert-active", true)).toBe("alert-active selected");
     expect(rowClass(undefined, true)).toBe("selected");
     expect(rowClass("dim", false)).toBe("dim");
+  });
+});
+
+describe("formatCrossing", () => {
+  it("shows the countdown and the Zulu crossing time", () => {
+    const now = Date.UTC(2026, 8, 27, 17, 30, 8);
+    expect(formatCrossing(now + 112_000, now)).toBe("01:52 1732Z");
+    // Past midnight UTC, and above an hour.
+    expect(formatCrossing(Date.UTC(2026, 8, 28, 0, 45), Date.UTC(2026, 8, 27, 23, 30))).toBe(
+      "1+15 0045Z",
+    );
   });
 });
 
