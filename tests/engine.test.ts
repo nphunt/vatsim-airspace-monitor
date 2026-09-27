@@ -290,4 +290,33 @@ describe("Engine", () => {
     expect(lastSet()?.scope?.map((t) => t.callsign)).toEqual(["DAL123"]);
     expect(lastSet()?.load?.current).toBe(1);
   });
+
+  it("entry alerts, when on, go ACTIVE for an aircraft about to enter", async () => {
+    // North of the ZME/ZKC line (37.28N at 90W), southbound: entry in about 1 min.
+    const nearLine = {
+      ...feedDoc,
+      pilots: [{ ...feedDoc.pilots[0], latitude: 37.4, longitude: -90, heading: 180 }],
+    };
+    const messages: FromEngine[] = [];
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl: fakeFetch([], nearLine),
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    await engine.handle({
+      type: "init",
+      dataBaseUrl: BASE,
+      config: { ...DEFAULT_CONFIG, entryAlerts: true },
+    });
+    await engine.handle({ type: "select", airspace: "KZME" });
+    await waitFor(() =>
+      messages.some((m) => m.type === "alerts" && m.alerts.some((a) => a.kind === "entry")),
+    );
+    const last = messages.filter((m) => m.type === "alerts").at(-1);
+    expect(last?.type === "alerts" && last.alerts[0]).toMatchObject({
+      kind: "entry",
+      state: "ACTIVE",
+      other: { label: "ZKC" },
+    });
+  });
 });

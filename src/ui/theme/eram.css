@@ -440,6 +440,15 @@ input[aria-invalid="true"] {
   color: var(--eram-alert);
 }
 
+/* Dimmed cells (unstaffed facility) flash with the rest of an alert row. */
+.eram-list tr.alert-active .dim,
+.eram-list tr.alert-acked .dim,
+.eram-list tr.alert-active .dim-cell,
+.eram-list tr.alert-acked .dim-cell {
+  color: inherit;
+  opacity: 1;
+}
+
 .eram-list tr.alert-active:focus-visible {
   outline: 1px solid var(--eram-toolbar-text);
 }
