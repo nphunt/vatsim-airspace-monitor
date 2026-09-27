@@ -221,4 +221,73 @@ describe("Engine", () => {
     const last = messages.filter((m) => m.type === "alerts").at(-1);
     expect(last?.type === "alerts" && last.alerts[0]?.state).toBe("ACKED");
   });
+
+  it("idle stop: pause clears predictions and stops polling; resume polls at once", async () => {
+    const requested: string[] = [];
+    let n = 0;
+    // Each feed request is a newer snapshot, as it would be after a real pause.
+    const docs = () => {
+      const ts = new Date(Date.parse("2026-09-27T17:00:00Z") + n++ * 15_000).toISOString();
+      return { ...feedDoc, general: { update_timestamp: ts } };
+    };
+    const inner = fakeFetch(requested);
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).startsWith("https://data.vatsim.net/")
+        ? (requested.push(String(input)), Response.json(docs()))
+        : inner(input, init)) as typeof fetch;
+    const messages: FromEngine[] = [];
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl,
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    const feedRequests = () => requested.filter((u) => u.includes("data.vatsim.net")).length;
+    const lastSet = () => {
+      const m = messages.filter((x) => x.type === "predictions").at(-1);
+      return m?.type === "predictions" ? m.set : undefined;
+    };
+
+    await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
+    await engine.handle({ type: "select", airspace: "KZME" });
+    await waitFor(() => !!lastSet());
+
+    await engine.handle({ type: "pause", paused: true });
+    expect(lastSet()).toBeNull();
+    const before = feedRequests();
+    await engine.handle({ type: "config", config: { ...DEFAULT_CONFIG, horizonMin: 60 } });
+    expect(lastSet()).toBeNull(); // no recompute on stale data while paused
+
+    await engine.handle({ type: "pause", paused: false });
+    await waitFor(() => !!lastSet());
+    expect(feedRequests()).toBe(before + 1);
+    expect(lastSet()?.outbound[0]).toMatchObject({ callsign: "DAL123" });
+  });
+
+  it("applies the altitude filter to lists, load and scope, and recomputes on change", async () => {
+    const messages: FromEngine[] = [];
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl: fakeFetch([]),
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    const lastSet = () => {
+      const m = messages.filter((x) => x.type === "predictions").at(-1);
+      return m?.type === "predictions" ? m.set : undefined;
+    };
+    await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
+    await engine.handle({ type: "select", airspace: "KZME" });
+    await waitFor(() => (lastSet()?.outbound.length ?? 0) > 0);
+
+    // DAL123 is at FL350, inside ZME.
+    const open = { ...DEFAULT_CONFIG, loadOpen: true, scopeOpen: true };
+    await engine.handle({ type: "config", config: { ...open, altCeiling: 240 } });
+    expect(lastSet()?.outbound).toEqual([]);
+    expect(lastSet()?.insideCids).toEqual([7]);
+    expect(lastSet()?.scope).toEqual([]);
+    expect(lastSet()?.load?.current).toBe(0);
+    await engine.handle({ type: "config", config: { ...open, altFloor: 240 } });
+    expect(lastSet()?.outbound.map((p) => p.callsign)).toEqual(["DAL123"]);
+    expect(lastSet()?.scope?.map((t) => t.callsign)).toEqual(["DAL123"]);
+    expect(lastSet()?.load?.current).toBe(1);
+  });
 });

@@ -48,6 +48,11 @@ export function startEngine(): () => void {
         ms: p.durationMs,
       })),
     predictions: () => useStore.getState().engine.predictions,
+    // For the CI sub-path smoke test (scripts/smoke.mjs).
+    status: () => {
+      const e = useStore.getState().engine;
+      return { selectable: e.ready?.selectableCount ?? 0, nav: e.nav, errors: e.errors };
+    },
   };
 
   return () => {

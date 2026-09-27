@@ -12,6 +12,9 @@ const CLICK_SLOP_PX = 4;
 export interface ScopeOptions {
   vectorMin: number;
   showRoutes: boolean;
+  /** BRIGHT (§7.1), 0..1. */
+  mapBright: number;
+  datablockBright: number;
 }
 
 /**
@@ -22,7 +25,12 @@ export interface ScopeOptions {
 export class ScopeController {
   private view: View | null = null;
   private map: ScopeMap | null = null;
-  private opts: ScopeOptions = { vectorMin: 2, showRoutes: false };
+  private opts: ScopeOptions = {
+    vectorMin: 2,
+    showRoutes: false,
+    mapBright: 1,
+    datablockBright: 1,
+  };
   private size = { w: 0, h: 0 };
   private metrics = { font: "13px monospace", charPx: 8, linePx: 15 };
   private scene: SceneTarget[] = [];
@@ -146,6 +154,8 @@ export class ScopeController {
       staffed: s.engine.staffed,
       alertInto,
       flashOn: Math.floor(Date.now() / 500) % 2 === 0,
+      mapBright: this.opts.mapBright,
+      datablockBright: this.opts.datablockBright,
     });
   }
 

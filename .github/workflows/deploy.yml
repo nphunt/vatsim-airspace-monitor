@@ -1,0 +1,62 @@
+# Build, re-test and deploy main to GitHub Pages (PUBLISHING_PLAN §3.2).
+# Rollback: run this workflow manually ("Run workflow") on the last good commit.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Never deploy an untested build.
+      - run: npm run lint
+      - run: npm test
+      - run: npm run validate-data
+      - run: npm run build
+      - run: npm run check-dist
+      - run: npx playwright-core install --with-deps chromium
+      - run: npm run smoke
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.d.outputs.page_url }}
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
+      - name: Check the deployed site
+        env:
+          PAGE_URL: ${{ steps.d.outputs.page_url }}
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsS -o /dev/null "$PAGE_URL" && curl -fsS -o /dev/null "${PAGE_URL}data/meta.json"; then
+              echo "ok: $PAGE_URL"; exit 0
+            fi
+            sleep 15
+          done
+          echo "deployed site did not respond at $PAGE_URL"; exit 1

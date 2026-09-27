@@ -138,4 +138,19 @@ describe("FeedPoller", () => {
     expect(h.statuses[0]!.lastUpdateTimestamp).toBe(Date.UTC(2026, 8, 27, 17, 0, 0));
     expect(h.statuses[0]!.nextPollAt).not.toBeNull();
   });
+
+  it("a stop() + start() while a fetch is in flight keeps a single poll loop", async () => {
+    const h = harness([
+      { ok: true, body: feedDoc("2026-09-27T17:00:00Z") },
+      { ok: true, body: feedDoc("2026-09-27T17:00:15Z") },
+    ]);
+    h.poller.start(); // fetch 1 in flight
+    h.poller.stop();
+    h.poller.start(); // fetch 2 in flight
+    await h.settle();
+    expect(h.requests).toHaveLength(2);
+    // Only the restarted poll delivers and schedules the next one.
+    expect(h.snapshots.map((s) => s.updateTimestamp)).toEqual([Date.parse("2026-09-27T17:00:15Z")]);
+    expect(h.timers).toHaveLength(1);
+  });
 });

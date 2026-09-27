@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Prediction } from "../data/types";
 import {
   crossingLine,
+  aboutLine,
   exitSummary,
   findPrediction,
   flagsOf,
@@ -223,5 +224,14 @@ describe("flight plan readout lines (§7.3)", () => {
     expect(rowClass("alert-active", true)).toBe("alert-active selected");
     expect(rowClass(undefined, true)).toBe("selected");
     expect(rowClass("dim", false)).toBe("dim");
+  });
+});
+
+describe("aboutLine", () => {
+  it("names build, VATSpy release and AIRAC cycle, with -- for unknowns", () => {
+    expect(aboutLine("1a2b3c4", "v2609.2", "2026-09-03")).toBe(
+      "BUILD 1a2b3c4 · VATSPY v2609.2 · AIRAC 2026-09-03",
+    );
+    expect(aboutLine("dev", null, undefined)).toBe("BUILD dev · VATSPY -- · AIRAC --");
   });
 });

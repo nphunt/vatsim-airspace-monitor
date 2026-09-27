@@ -19,6 +19,9 @@ export interface DrawOptions {
   alertInto: ReadonlySet<string>;
   /** Blink phase for ACTIVE time fields (§6.2: 1 Hz). */
   flashOn: boolean;
+  /** BRIGHT (§7.1), 0..1: boundaries and labels; targets and datablocks. Alerts stay full. */
+  mapBright: number;
+  datablockBright: number;
 }
 
 const LEVEL_COLOR = {
@@ -73,8 +76,12 @@ export function drawScope(
   ctx.fillStyle = ERAM_COLORS.bg;
   ctx.fillRect(0, 0, w, h);
   if (!map) return;
+  // On a black background, alpha scales brightness.
+  const mapA = o.mapBright;
+  const dbA = o.datablockBright;
 
   // Boundaries.
+  ctx.globalAlpha = mapA;
   ctx.lineJoin = "round";
   ctx.lineWidth = 1;
   for (const f of map.others) {
@@ -103,6 +110,7 @@ export function drawScope(
   }
 
   // Routes ahead (dim, dashed) and exit markers with their target line.
+  ctx.globalAlpha = dbA;
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
   ctx.strokeStyle = ERAM_COLORS.datablockDim;
@@ -115,6 +123,7 @@ export function drawScope(
     const hot = t.alert === "ACTIVE" || t.alert === "ACKED";
     const color = hot ? ERAM_COLORS.alert : t.selected ? ERAM_COLORS.toolbarActive : null;
     if (!color && t.level === "dim") continue;
+    ctx.globalAlpha = hot ? 1 : dbA;
     ctx.strokeStyle = color ?? ERAM_COLORS.datablockDim;
     ctx.fillStyle = ctx.strokeStyle;
     if (t.alert === "ACTIVE" || t.selected)
@@ -133,6 +142,7 @@ export function drawScope(
   }
 
   // Targets: history trail, velocity vector, symbol. Limited first, listed on top.
+  ctx.globalAlpha = dbA;
   const ordered = [...targets].sort((a, b) => Number(a.full) - Number(b.full));
   for (const t of ordered) {
     const color = LEVEL_COLOR[t.level];
@@ -165,12 +175,15 @@ export function drawScope(
         if (!o.flashOn) return; // blink the time field (§6.2)
         c = ERAM_COLORS.alert;
       }
+      ctx.globalAlpha = c === ERAM_COLORS.alert ? 1 : dbA;
       ctx.fillStyle = c;
       ctx.fillText(line, rect.x, rect.y + i * o.linePx);
     });
+    ctx.globalAlpha = dbA;
     if (t.selected) {
       ctx.strokeStyle = ERAM_COLORS.toolbarActive;
       ctx.strokeRect(rect.x - 2.5, rect.y - 1.5, rect.w + 4, rect.h + 2);
     }
   }
+  ctx.globalAlpha = 1;
 }

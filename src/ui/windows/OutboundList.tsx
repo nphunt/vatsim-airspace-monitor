@@ -32,6 +32,7 @@ export function OutboundList() {
   const now = useEngineNow();
   const rows = useOutboundRows(now);
   const predictions = useStore((s) => s.engine.predictions);
+  const paused = useStore((s) => s.paused);
   const horizonMin = useStore((s) => s.settings.horizonMin);
   const filter = useStore((s) => s.exitFilter);
   const setFilter = useStore((s) => s.setExitFilter);
@@ -48,7 +49,7 @@ export function OutboundList() {
   return (
     <div className="eram-list-wrap" ref={ref}>
       {predictions === null ? (
-        <p className="eram-empty">NO AIRSPACE SELECTED</p>
+        <p className="eram-empty">{paused ? "PAUSED" : "NO AIRSPACE SELECTED"}</p>
       ) : (
         <>
           {summary.length > 0 && (

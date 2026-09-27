@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import type { WindowId } from "../../store/settings";
 import { useStore } from "../../store/store";
+import { AboutWindow } from "./AboutWindow";
 import { AirspaceMenu, AirspaceMenuTitle } from "./AirspaceMenu";
 import { AlertsList, AlertsTitle } from "./AlertsList";
 import { EramWindow } from "./EramWindow";
@@ -21,6 +22,7 @@ const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode 
   settings: { title: () => "SETTINGS", body: () => <SettingsWindow /> },
   fpr: { title: () => <FlightPlanReadoutTitle />, body: () => <FlightPlanReadout /> },
   scope: { title: () => <ScopeTitle />, body: () => <ScopeWindow /> },
+  about: { title: () => "ABOUT", body: () => <AboutWindow /> },
 };
 
 /** Docked stack with splitters, plus floating windows on top (§7.2). */

@@ -1,0 +1,35 @@
+# Lint, test, build and publish-check every PR and every push to a non-main branch
+# (PUBLISHING_PLAN §3.1). Make "ci" a required status check on main.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run validate-data
+      # GITHUB_ACTIONS=true (always set here) builds with the real /<repo>/ base path.
+      - run: npm run build
+      - run: npm run check-dist
+      - run: npx playwright-core install --with-deps chromium
+      - run: npm run smoke

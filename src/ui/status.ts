@@ -1,4 +1,4 @@
-import { DATA_STALE_S, WORKER_WATCHDOG_S } from "../config";
+import { DATA_STALE_S, IDLE_STOP_MIN, WORKER_WATCHDOG_S } from "../config";
 
 /**
  * Main-thread watchdog (§4.3): the worker ticks every second, so no message for more than
@@ -51,4 +51,9 @@ export function isNavExpired(now: number, expires: string | null): boolean {
   if (!expires || !/^\d{4}-\d{2}-\d{2}$/.test(expires)) return false;
   const end = Date.parse(`${expires}${AIRAC_CHANGEOVER_UTC}`);
   return Number.isFinite(end) && now >= end;
+}
+
+/** Idle stop (PUBLISHING_PLAN §4): no user input for IDLE_STOP_MIN. Local ms. */
+export function isIdle(localNow: number, lastInputAt: number, idleMin = IDLE_STOP_MIN): boolean {
+  return localNow - lastInputAt >= idleMin * 60_000;
 }

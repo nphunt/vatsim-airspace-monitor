@@ -103,6 +103,43 @@ describe("settings persistence", () => {
     expect(parseSettings({ schemaVersion: 1 }).windows.scope.open).toBe(false);
   });
 
+  it("validates the M9 display, alert and filter fields", () => {
+    const s = parseSettings({
+      schemaVersion: 1,
+      alertThresholdS: 90,
+      altFloor: 180,
+      altCeiling: 350,
+      fontSizePx: 16,
+      bright: { list: 60, map: 55, datablock: "x" },
+      idleStop: false,
+    });
+    expect(s).toMatchObject({
+      alertThresholdS: 90,
+      altFloor: 180,
+      altCeiling: 350,
+      fontSizePx: 16,
+      bright: { list: 60, map: 100, datablock: 100 },
+      idleStop: false,
+    });
+  });
+
+  it("drops an altitude band whose floor is above its ceiling, and off-list choices", () => {
+    const s = parseSettings({
+      schemaVersion: 1,
+      altFloor: 400,
+      altCeiling: 100,
+      alertThresholdS: 7,
+      fontSizePx: 99,
+    });
+    expect(s).toMatchObject({
+      altFloor: null,
+      altCeiling: null,
+      alertThresholdS: DEFAULT_SETTINGS.alertThresholdS,
+      fontSizePx: DEFAULT_SETTINGS.fontSizePx,
+    });
+    expect(DEFAULT_SETTINGS.idleStop).toBe(true);
+  });
+
   it("survives storage that throws", () => {
     const throwing = {
       getItem: () => {

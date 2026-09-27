@@ -1,4 +1,10 @@
 import {
+  ALERT_THRESHOLD_CHOICES_S,
+  ALT_FILTER_MAX_HFT,
+  BRIGHT_CHOICES_PCT,
+  EXIT_ALERT_S,
+  FONT_SIZE_CHOICES_PX,
+  FONT_SIZE_PX,
   HORIZON_CHOICES_MIN,
   HORIZON_MIN,
   LOAD_THRESHOLD_DEFAULT,
@@ -8,11 +14,14 @@ import {
 
 // Persisted user settings (§4.2, §8). One key under the app prefix, with a schema version;
 // anything unreadable or from another version falls back to defaults, never a crash.
+// Adding a field is backward compatible (older blobs get its default); changing the meaning
+// or type of an existing field needs a SETTINGS_SCHEMA_VERSION bump with a migration
+// (PUBLISHING_PLAN §5.4).
 
 export const SETTINGS_KEY = `${STORAGE_PREFIX}settings`;
 
 export type WindowId =
-  "outbound" | "alerts" | "inbound" | "load" | "airspace" | "settings" | "fpr" | "scope";
+  "outbound" | "alerts" | "inbound" | "load" | "airspace" | "settings" | "fpr" | "scope" | "about";
 export const WINDOW_IDS: readonly WindowId[] = [
   "outbound",
   "alerts",
@@ -22,6 +31,7 @@ export const WINDOW_IDS: readonly WindowId[] = [
   "settings",
   "fpr",
   "scope",
+  "about",
 ];
 
 /** LOAD window view (§7.4): strategic 15 min x 2 h, tactical 5 min x 60 min. */
@@ -80,7 +90,23 @@ export interface Settings {
   loadThresholds: Record<string, number>;
   /** Scope velocity vector length, minutes. */
   scopeVector: number;
+  /** Alert this many seconds before a predicted exit (and entry, if on). */
+  alertThresholdS: number;
+  /** Altitude filter (§5.7), hundreds of feet; null = no bound. Display, alerts, load. */
+  altFloor: number | null;
+  altCeiling: number | null;
+  fontSizePx: number;
+  /** BRIGHT (§7.1), percent per element group. Map and datablock apply to SCOPE. */
+  bright: Brightness;
+  /** Pause polling after IDLE_STOP_MIN without input (PUBLISHING_PLAN §4). */
+  idleStop: boolean;
   windows: Record<WindowId, WindowState>;
+}
+
+export interface Brightness {
+  list: number;
+  map: number;
+  datablock: number;
 }
 
 export function loadThreshold(s: Settings, key: string | null): number {
@@ -121,6 +147,12 @@ export const DEFAULT_SETTINGS: Settings = {
   loadView: "tact",
   loadThresholds: {},
   scopeVector: 2,
+  alertThresholdS: EXIT_ALERT_S,
+  altFloor: null,
+  altCeiling: null,
+  fontSizePx: FONT_SIZE_PX,
+  bright: { list: 100, map: 100, datablock: 100 },
+  idleStop: true,
   windows: {
     // Default open: OUTBOUND and ALERTS (§7.2). Lists dock; menus float.
     outbound: win({ open: true, order: 0 }),
@@ -128,11 +160,12 @@ export const DEFAULT_SETTINGS: Settings = {
     inbound: win({ order: 2 }),
     load: win({ order: 3, w: 380, h: 360 }),
     airspace: win({ docked: false, order: 4, w: 380, h: 400 }),
-    settings: win({ docked: false, order: 5, x: 40, y: 96, w: 380, h: 360 }),
+    settings: win({ docked: false, order: 5, x: 40, y: 96, w: 400, h: 480 }),
     // Flight Plan Readout (§7.3): opens on a list-row click.
     fpr: win({ docked: false, order: 6, x: 64, y: 120, w: 380, h: 220 }),
     // Optional, off by default (§7.5); floats over the lists when there is room.
     scope: win({ docked: false, order: 7, x: 24, y: 80, w: 520, h: 520 }),
+    about: win({ docked: false, order: 8, x: 64, y: 120, w: 420, h: 420 }),
   },
 };
 
@@ -140,6 +173,20 @@ type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
 const finite = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
 const bool = (v: unknown, d: boolean) => (typeof v === "boolean" ? v : d);
+const oneOf = (choices: readonly number[], v: unknown, d: number) =>
+  choices.includes(v as number) ? (v as number) : d;
+/** Integer in [min, max], else the default. */
+const intIn = <D>(v: unknown, min: number, max: number, d: D): number | D =>
+  typeof v === "number" && Number.isInteger(v) && v >= min && v <= max ? v : d;
+
+function readBright(v: unknown, d: Brightness): Brightness {
+  if (!isObj(v)) return { ...d };
+  return {
+    list: oneOf(BRIGHT_CHOICES_PCT, v.list, d.list),
+    map: oneOf(BRIGHT_CHOICES_PCT, v.map, d.map),
+    datablock: oneOf(BRIGHT_CHOICES_PCT, v.datablock, d.datablock),
+  };
+}
 
 function readWindow(v: unknown, d: WindowState): WindowState {
   if (!isObj(v)) return d;
@@ -203,10 +250,27 @@ export function parseSettings(raw: unknown): Settings {
     scopeVector: (SCOPE_VECTOR_CHOICES as readonly number[]).includes(raw.scopeVector as number)
       ? (raw.scopeVector as number)
       : d.scopeVector,
+    alertThresholdS: oneOf(ALERT_THRESHOLD_CHOICES_S, raw.alertThresholdS, d.alertThresholdS),
+    ...altBounds(raw.altFloor, raw.altCeiling),
+    fontSizePx: oneOf(FONT_SIZE_CHOICES_PX, raw.fontSizePx, d.fontSizePx),
+    bright: readBright(raw.bright, d.bright),
+    idleStop: bool(raw.idleStop, d.idleStop),
     windows: Object.fromEntries(
       WINDOW_IDS.map((id) => [id, readWindow(windows[id], d.windows[id])]),
     ) as Record<WindowId, WindowState>,
   };
+}
+
+/** Floor/ceiling (hundreds of ft); a floor above the ceiling drops both. */
+export function altBounds(
+  floor: unknown,
+  ceiling: unknown,
+): Pick<Settings, "altFloor" | "altCeiling"> {
+  const f = intIn(floor, 0, ALT_FILTER_MAX_HFT, null);
+  const c = intIn(ceiling, 0, ALT_FILTER_MAX_HFT, null);
+  return f !== null && c !== null && f > c
+    ? { altFloor: null, altCeiling: null }
+    : { altFloor: f, altCeiling: c };
 }
 
 function storage(): Storage | null {

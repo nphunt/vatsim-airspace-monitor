@@ -27,6 +27,8 @@ export function ScopeWindow() {
   const airspaceKey = useStore((s) => s.engine.predictions?.airspaceKey ?? null);
   const vectorMin = useStore((s) => s.settings.scopeVector);
   const setScopeVector = useStore((s) => s.setScopeVector);
+  const mapBright = useStore((s) => s.settings.bright.map) / 100;
+  const datablockBright = useStore((s) => s.settings.bright.datablock) / 100;
 
   useEffect(() => {
     let live = true;
@@ -55,8 +57,8 @@ export function ScopeWindow() {
   }, []);
   useEffect(() => controller.current?.setMap(map), [map]);
   useEffect(
-    () => controller.current?.setOptions({ vectorMin, showRoutes }),
-    [vectorMin, showRoutes],
+    () => controller.current?.setOptions({ vectorMin, showRoutes, mapBright, datablockBright }),
+    [vectorMin, showRoutes, mapBright, datablockBright],
   );
 
   const i = (SCOPE_VECTOR_CHOICES as readonly number[]).indexOf(vectorMin);

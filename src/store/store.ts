@@ -19,7 +19,9 @@ import {
   loadSettings,
   saveSettings,
   LOAD_THRESHOLD_MAX,
+  altBounds,
   type AudioDevice,
+  type Brightness,
   type LoadViewId,
   type Settings,
   type ToneId,
@@ -78,6 +80,8 @@ interface AppState {
   exitFilter: string | null;
   /** Selected aircraft (row click). Not persisted. */
   selection: AircraftSelection | null;
+  /** Idle stop (PUBLISHING_PLAN §4): polling paused until the user resumes. Not persisted. */
+  paused: boolean;
 
   engineStarted(localNow: number): void;
   engineMessage(msg: FromEngine, localNow: number): void;
@@ -110,6 +114,13 @@ interface AppState {
   setScopeVector(min: number): void;
   /** Load threshold for the selected airspace (§5.11). */
   setLoadThreshold(key: string, n: number): void;
+  setAlertThreshold(s: number): void;
+  /** Hundreds of feet; null = no bound. A floor above the ceiling clears both. */
+  setAltFilter(floor: number | null, ceiling: number | null): void;
+  setFontSize(px: number): void;
+  setBright(patch: Partial<Brightness>): void;
+  setIdleStop(on: boolean): void;
+  setPaused(paused: boolean): void;
   patchAudio(patch: Partial<AudioView>): void;
 }
 
@@ -152,6 +163,9 @@ export function engineConfig(s: Settings): EngineConfig {
     entryAlerts: s.entryAlerts,
     loadOpen: s.windows.load.open,
     scopeOpen: s.windows.scope.open,
+    alertThresholdS: s.alertThresholdS,
+    altFloor: s.altFloor,
+    altCeiling: s.altCeiling,
   };
 }
 
@@ -181,6 +195,7 @@ export const useStore = create<AppState>()((set, get) => {
     audio: { state: "locked", sinkSupported: false, devices: [], deviceMissing: false },
     exitFilter: null,
     selection: null,
+    paused: false,
 
     engineStarted: (localNow) => set({ engine: { ...initialEngine, startedAt: localNow } }),
 
@@ -273,6 +288,16 @@ export const useStore = create<AppState>()((set, get) => {
         [key]: Math.min(LOAD_THRESHOLD_MAX, n),
       };
       updateSettings({ loadThresholds });
+    },
+    setAlertThreshold: (alertThresholdS) => updateSettings({ alertThresholdS }),
+    setAltFilter: (floor, ceiling) => updateSettings(altBounds(floor, ceiling)),
+    setFontSize: (fontSizePx) => updateSettings({ fontSizePx }),
+    setBright: (patch) => updateSettings({ bright: { ...get().settings.bright, ...patch } }),
+    setIdleStop: (idleStop) => updateSettings({ idleStop }),
+    setPaused: (paused) => {
+      if (paused === get().paused) return;
+      set({ paused });
+      send({ type: "pause", paused });
     },
     patchAudio: (patch) => set({ audio: { ...get().audio, ...patch } }),
   };

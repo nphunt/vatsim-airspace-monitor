@@ -387,6 +387,39 @@ input[aria-invalid="true"] {
   width: 12ch;
 }
 
+.eram-settings input.short {
+  width: 6ch;
+}
+
+.eram-settings .note {
+  margin: -4px 0 8px;
+  font-size: 0.9em;
+}
+
+/* ---- BRIGHT (§7.1): list text; active/acked alerts always stay at full brightness ---- */
+
+.eram-list td {
+  filter: brightness(var(--eram-bright-list, 1));
+}
+
+.eram-list tr.alert-active td,
+.eram-list tr.alert-acked td {
+  filter: none;
+}
+
+/* ---- Idle stop banner (PUBLISHING_PLAN §4) ---- */
+
+.eram-paused {
+  flex: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--eram-bg);
+  color: var(--eram-alert);
+  border: 1px solid var(--eram-alert);
+  padding: 4px 6px;
+}
+
 /* ---- Alerts (§6.2): blinking is the only animation allowed ---- */
 
 @keyframes eram-blink {
@@ -549,4 +582,38 @@ input[aria-invalid="true"] {
   top: 0;
   left: 0;
   pointer-events: none;
+}
+
+/* ---- ABOUT ---- */
+
+.eram-about {
+  padding: 6px;
+}
+
+.eram-about p,
+.eram-about ul {
+  margin: 0 0 8px;
+}
+
+.eram-about ul {
+  padding-left: 2ch;
+}
+
+.eram-about h3 {
+  font-size: 1em;
+  font-weight: normal;
+  color: var(--eram-datablock-dim);
+  margin: 8px 0 4px;
+  border-bottom: 1px solid var(--eram-map-other);
+}
+
+.eram-about .about-line {
+  color: var(--eram-toolbar-text);
+  user-select: all;
+  /* The git SHA must match `git log` in bug reports. */
+  text-transform: none;
+}
+
+.eram-about a {
+  color: var(--eram-toolbar-active);
 }

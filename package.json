@@ -19,7 +19,10 @@
     "update-data": "node scripts/update-data.mjs",
     "record": "node scripts/record.mjs",
     "bench": "vitest run tests/pipeline.perf.test.ts --mode bench --silent=false",
-    "update-nav": "node scripts/update-nav.mjs"
+    "update-nav": "node scripts/update-nav.mjs",
+    "validate-data": "node scripts/validate-data.mjs",
+    "check-dist": "node scripts/check-dist.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
@@ -40,6 +43,7 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "fflate": "^0.8.3",
     "globals": "^17.12.0",
+    "playwright-core": "^1.63.0",
     "prettier": "^3.9.9",
     "typescript": "~5.9",
     "typescript-eslint": "^8.70.1",

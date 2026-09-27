@@ -32,6 +32,11 @@ export interface EngineConfig {
   loadOpen: boolean;
   /** SCOPE window open: collect scope targets with each recompute (§7.5). */
   scopeOpen: boolean;
+  /** Alert this many seconds before a predicted exit/entry (§6.1, default 120). */
+  alertThresholdS: number;
+  /** Altitude filter (§5.7), hundreds of feet; null = no bound. */
+  altFloor: number | null;
+  altCeiling: number | null;
 }
 
 /** Select the airspace (id "KZME", key, or label "ZME"), or null for none. Recomputes immediately (§4.2). */
@@ -56,7 +61,18 @@ export interface AckMessage {
   cid: number | null;
 }
 
-export type ToEngine = InitMessage | SelectMessage | ConfigMessage | ReplayRateMessage | AckMessage;
+/**
+ * Idle stop (PUBLISHING_PLAN §4): stop polling the feed, or resume. While paused the
+ * predictions and alerts are cleared, so nothing counts down on stale data; resuming polls
+ * at once and primes alerts silently, like a page load.
+ */
+export interface PauseMessage {
+  type: "pause";
+  paused: boolean;
+}
+
+export type ToEngine =
+  InitMessage | SelectMessage | ConfigMessage | ReplayRateMessage | AckMessage | PauseMessage;
 
 export interface SelectableAirspace {
   key: string;

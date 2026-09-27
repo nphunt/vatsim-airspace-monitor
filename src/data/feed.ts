@@ -54,6 +54,8 @@ export class FeedPoller {
 
   private timer: unknown = null;
   private running = false;
+  /** Bumped by stop(), so a fetch in flight across stop()+start() can't fork the loop. */
+  private generation = 0;
   private lastTs: number | null = null;
   private failures = 0;
   private lastError: string | null = null;
@@ -77,6 +79,7 @@ export class FeedPoller {
 
   stop(): void {
     this.running = false;
+    this.generation += 1;
     if (this.timer !== null) this.clearTimer(this.timer);
     this.timer = null;
     this.nextPollAt = null;
@@ -94,6 +97,7 @@ export class FeedPoller {
   }
 
   private async poll(): Promise<void> {
+    const generation = this.generation;
     this.timer = null;
     this.nextPollAt = null;
     const started = this.localNow();
@@ -115,7 +119,7 @@ export class FeedPoller {
         const snapshot = normalizeFeed(json);
         this.lastTs = ts;
         result = "new";
-        if (this.running) this.opts.onSnapshot(snapshot);
+        if (this.running && generation === this.generation) this.opts.onSnapshot(snapshot);
       }
       this.failures = 0;
       this.lastError = null;
@@ -127,6 +131,7 @@ export class FeedPoller {
 
     this.polls.push({ at: started, result, durationMs: this.localNow() - started });
     if (this.polls.length > POLL_LOG_SIZE) this.polls.shift();
+    if (generation !== this.generation) return; // stopped (and maybe restarted) meanwhile
 
     if (this.running) {
       const delay = backoffDelay(this.failures);

@@ -172,3 +172,12 @@ export function crossingLine(
   if (p.arr) return `LANDING ${p.arrival || "INSIDE"}`;
   return `NO EXIT WITHIN ${horizonMin} MIN`;
 }
+
+/** ABOUT line, "BUILD 1a2b3c4 · VATSPY v2609.2 · AIRAC 2026-09-03": identifies a deploy. */
+export function aboutLine(
+  buildId: string,
+  vatspyTag: string | null | undefined,
+  navCycle: string | null | undefined,
+): string {
+  return `BUILD ${buildId} · VATSPY ${vatspyTag ?? "--"} · AIRAC ${navCycle ?? "--"}`;
+}

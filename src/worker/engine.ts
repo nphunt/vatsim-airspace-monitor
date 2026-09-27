@@ -1,6 +1,13 @@
-import { FALLBACK_FEED_URL, HORIZON_MIN, LOAD_STRATEGIC_MIN, UI_TICK_MS } from "../config";
+import {
+  EXIT_ALERT_S,
+  FALLBACK_FEED_URL,
+  HORIZON_MIN,
+  LOAD_STRATEGIC_MIN,
+  UI_TICK_MS,
+} from "../config";
 import { AlertMachine, DEFAULT_ALERT_CONFIG, type AlertConfig } from "../core/alerts";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
+import { altitudeFilterFt, filterByAltitude } from "../core/altitudeFilter";
 import { buildStaffing } from "../core/facilityLookup";
 import { MyPositionTracker, findMyPosition } from "../core/myPosition";
 import {
@@ -47,6 +54,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
   entryAlerts: false,
   loadOpen: false,
   scopeOpen: false,
+  alertThresholdS: EXIT_ALERT_S,
+  altFloor: null,
+  altCeiling: null,
 };
 
 /** Prediction horizon: the list horizon, or the load horizon while LOAD is open (§5.2). */
@@ -62,6 +72,8 @@ function alertConfig(c: EngineConfig): AlertConfig {
     ...DEFAULT_ALERT_CONFIG,
     repeatToneS: c.repeatTone ? REPEAT_TONE_S : null,
     entryAlerts: c.entryAlerts,
+    exitAlertS: c.alertThresholdS,
+    entryAlertS: c.alertThresholdS,
   };
 }
 
@@ -84,6 +96,7 @@ export class Engine {
   private replay: ReplayFeed | null = null;
   private tickHandle: unknown = null;
   private started = false;
+  private paused = false;
 
   config: EngineConfig = { ...DEFAULT_CONFIG };
   airspaces: AirspaceRegistry | null = null;
@@ -123,6 +136,9 @@ export class Engine {
       case "ack":
         if (msg.cid === null ? this.alerts.ackAll() : this.alerts.ack(msg.cid))
           this.postAlerts(false);
+        return Promise.resolve();
+      case "pause":
+        this.setPaused(msg.paused);
         return Promise.resolve();
       case "replayRate":
         this.replay?.setRate(msg.rate);
@@ -309,7 +325,9 @@ export class Engine {
     const horizonChanged =
       effectiveHorizonMin(config) !== effectiveHorizonMin(this.config) ||
       config.loadOpen !== this.config.loadOpen ||
-      config.scopeOpen !== this.config.scopeOpen;
+      config.scopeOpen !== this.config.scopeOpen ||
+      config.altFloor !== this.config.altFloor ||
+      config.altCeiling !== this.config.altCeiling;
     this.config = { ...config };
     this.alerts.config = alertConfig(this.config);
     if (cidChanged) {
@@ -322,6 +340,26 @@ export class Engine {
       }
     }
     if (horizonChanged) this.recompute();
+  }
+
+  /** Idle stop: live polling only (a dev replay keeps its own controls). */
+  private setPaused(paused: boolean): void {
+    if (paused === this.paused || this.replay) return;
+    this.paused = paused;
+    if (paused) {
+      this.poller?.stop();
+      this.lastSet = null;
+      this.alerts.reset();
+      this.post({ type: "predictions", set: null });
+      this.postAlerts(false);
+    } else {
+      // The old snapshot is up to 4 h stale: drop it; the immediate poll brings a new one.
+      this.snapshot = null;
+      this.tracks.clear();
+      this.routes?.clear();
+      this.alerts.reset();
+      this.poller?.start();
+    }
   }
 
   private select(idOrKey: string | null): void {
@@ -354,7 +392,7 @@ export class Engine {
 
   /** Recomputes from the latest snapshot: per new snapshot, on switch, on horizon change. */
   private recompute(): void {
-    if (!this.selected || !this.snapshot || !this.airspaces) return;
+    if (!this.selected || !this.snapshot || !this.airspaces || this.paused) return;
     try {
       const now = this.clock.now();
       const set = computePredictions({
@@ -366,12 +404,15 @@ export class Engine {
         now,
         horizonMin: effectiveHorizonMin(this.config),
         routes: this.routes,
-        load: this.config.loadOpen ? {} : null,
+        load: this.config.loadOpen ? { altitude: altitudeFilterFt(this.config) } : null,
         scope: this.config.scopeOpen,
       });
-      this.lastSet = set;
+      // The altitude filter applies to display, alerts and load, not prediction (§5.7).
+      // Load gets it above; lists, alerts and scope targets here.
+      const shown = filterByAltitude(set, altitudeFilterFt(this.config));
+      this.lastSet = shown;
       this.eligibleCids = new Set(eligiblePilots(this.snapshot.pilots, now).map((p) => p.cid));
-      this.post({ type: "predictions", set });
+      this.post({ type: "predictions", set: shown });
       this.evaluateAlerts(true);
     } catch (e) {
       this.error(`prediction failed: ${String(e)}`);

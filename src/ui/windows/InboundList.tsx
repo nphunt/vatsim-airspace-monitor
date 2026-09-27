@@ -31,6 +31,7 @@ export function InboundList() {
   const now = useEngineNow();
   const { rows, total } = useInboundRows(now);
   const predictions = useStore((s) => s.engine.predictions);
+  const paused = useStore((s) => s.paused);
   const horizonMin = useStore((s) => s.settings.horizonMin);
   const layout = listColumns(width / ch, "inbound", width);
   const alerts = useStore((s) => s.engine.alerts);
@@ -42,7 +43,7 @@ export function InboundList() {
   return (
     <div className="eram-list-wrap" ref={ref}>
       {predictions === null ? (
-        <p className="eram-empty">NO AIRSPACE SELECTED</p>
+        <p className="eram-empty">{paused ? "PAUSED" : "NO AIRSPACE SELECTED"}</p>
       ) : (
         <>
           <table className="eram-list selectable">
