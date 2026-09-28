@@ -169,7 +169,10 @@ See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Workflows in `.g
 - [ ] Secret `DATA_PR_TOKEN`: fine-grained PAT or GitHub App token for this repo only, contents + pull-requests write. (PRs opened with the default token don't run `ci`.)
 - [ ] Environment `github-pages`: deployments from `main` and `development` only (pushes to either publish the site).
 - [ ] Add the repository variable `DATA_REFRESH_ENABLED` = `true` to turn on the weekly schedule (a manual run works without it).
+- [ ] Deploy the auth Worker and set the repository variable `AUTH_URL` to its URL ([auth-worker/README.md](auth-worker/README.md)).
 - [ ] Run `refresh-data` once by hand (Actions → refresh-data → Run workflow) and check `ci` runs on its PR.
+
+**Access control:** `/dev/` opens only for VATSIM CIDs the admins allow, checked through VATSIM Connect sign-in. The admin page (`admin/` on either copy) edits those lists. CID 1935951 is a built-in admin with access to everything. Both depend on the auth Worker in [`auth-worker/`](auth-worker/README.md) and on the repository variable `AUTH_URL`. Without it, both stay locked for everyone. The live site is open to all.
 
 **Testing a change:** push to `development`; about two minutes later it is at `/dev/`.
 

@@ -9,6 +9,7 @@
 // PW_CHROMIUM_PATH selects a Chromium binary instead of Playwright's own download.
 
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
@@ -21,6 +22,14 @@ const BASE = SUB ? `/${REPO}/${SUB}/` : `/${REPO}/`;
 const PORT = 4173;
 const URL_ = `http://localhost:${PORT}${BASE}`;
 const TIMEOUT_MS = 30_000;
+
+// Builds from any branch but main are the development site: the app only opens for CIDs
+// the auth Worker allows (src/auth). The Worker is stubbed here too.
+const BUILD = JSON.parse(fs.readFileSync(path.join(ROOT, "dist/build.json"), "utf8"));
+const GATED = BUILD.branch !== "main";
+const AUTH = (BUILD.authUrl ?? "").replace(/\/+$/, "");
+const TOKEN_KEY = "vam-auth:v1:token";
+const OWNER = 1935951;
 
 const TS = new Date().toISOString();
 const FEED = {
@@ -56,33 +65,8 @@ const server = spawn(
   { cwd: ROOT, stdio: ["ignore", "inherit", "inherit"] },
 );
 
-const problems = [];
-let browser;
-try {
-  await waitForServer(URL_);
-  browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH || undefined });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  const requests = [];
-
-  // Stub the feed (it is fetched from the worker, so route at the context level).
-  await context.route("https://data.vatsim.net/**", (route) =>
-    route.fulfill({ json: FEED, headers: { "access-control-allow-origin": "*" } }),
-  );
-  await context.route("https://status.vatsim.net/**", (route) => {
-    problems.push("requested status.vatsim.net (not CORS-readable; build-time only)");
-    return route.abort();
-  });
-
-  context.on("request", (r) => requests.push(r.url()));
-  context.on("response", (r) => {
-    if (r.status() >= 400) problems.push(`${r.status()} ${r.url()}`);
-  });
-  page.on("console", (m) => {
-    if (m.type() === "error") problems.push(`console error: ${m.text()}`);
-  });
-  page.on("pageerror", (e) => problems.push(`page error: ${e.message}`));
-
+/** The app itself: the worker starts, loads its data under the base path, polls the feed. */
+async function checkApp(page, requests, problems) {
   await page.goto(URL_);
   await page.waitForFunction(
     () => {
@@ -110,6 +94,115 @@ try {
   console.log(
     `smoke: ${data.length} data files, ${status.selectable} airspaces, nav ${status.nav?.cycle}`,
   );
+}
+
+const problems = [];
+let browser;
+try {
+  await waitForServer(URL_);
+  browser = await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH || undefined });
+  const context = await browser.newContext();
+  const requests = [];
+  const cors = { "access-control-allow-origin": `http://localhost:${PORT}` };
+  const signedIn = (pages) => ({ cid: OWNER, name: "", pages, superadmin: pages.admin });
+  // What the stubbed Worker's /me answers; each check below sets it.
+  let me = null;
+  if (AUTH) {
+    await context.route(`${AUTH}/me`, (route) =>
+      me
+        ? route.fulfill({ json: me, headers: cors })
+        : route.fulfill({ status: 401, json: { error: "not signed in" }, headers: cors }),
+    );
+    await context.route(`${AUTH}/access`, (route) =>
+      route.fulfill({
+        json: {
+          pages: { dev: [111], admin: [] },
+          superadmins: [OWNER],
+          version: 1,
+          updatedAt: null,
+          updatedBy: null,
+        },
+        headers: cors,
+      }),
+    );
+  }
+
+  // Stub the feed (it is fetched from the worker, so route at the context level).
+  await context.route("https://data.vatsim.net/**", (route) =>
+    route.fulfill({ json: FEED, headers: { "access-control-allow-origin": "*" } }),
+  );
+  await context.route("https://status.vatsim.net/**", (route) => {
+    problems.push("requested status.vatsim.net (not CORS-readable; build-time only)");
+    return route.abort();
+  });
+
+  context.on("request", (r) => requests.push(r.url()));
+  context.on("response", (r) => {
+    // A 401 from /me is the signed-out check below.
+    if (r.status() >= 400 && !(r.status() === 401 && r.url() === `${AUTH}/me`))
+      problems.push(`${r.status()} ${r.url()}`);
+  });
+  const newPage = async () => {
+    const p = await context.newPage();
+    p.on("console", (m) => {
+      if (m.type() === "error" && !m.text().includes("401")) {
+        problems.push(`console error: ${m.text()}`);
+      }
+    });
+    p.on("pageerror", (e) => problems.push(`page error: ${e.message}`));
+    return p;
+  };
+  const expectText = async (p, text, what) => {
+    try {
+      await p.getByText(text).first().waitFor({ timeout: TIMEOUT_MS });
+    } catch {
+      problems.push(`${what}: never showed "${text}"`);
+    }
+  };
+
+  // Admin page (every build): the lists behind sign-in, built-in admin 1935951 locked.
+  {
+    const p = await newPage();
+    if (AUTH) {
+      me = signedIn({ dev: true, admin: true });
+      await context.addInitScript(([k]) => localStorage.setItem(k, "smoke-token"), [TOKEN_KEY]);
+      await p.goto(`${URL_}admin/`);
+      await expectText(p, "BUILT-IN ADMIN", "admin page");
+      await expectText(p, "111", "admin page");
+    } else {
+      await p.goto(`${URL_}admin/`);
+      await expectText(p, "SIGN-IN IS NOT CONFIGURED", "admin page without VITE_AUTH_URL");
+    }
+    await p.close();
+  }
+
+  if (GATED && !AUTH) {
+    // Fails closed: nobody gets in until the build has a Worker URL.
+    const p = await newPage();
+    await p.goto(URL_);
+    await expectText(p, "SIGN-IN IS NOT CONFIGURED", "development build without VITE_AUTH_URL");
+    if (requests.some((u) => u.includes("/data/"))) problems.push("app loaded behind the gate");
+    console.log("smoke: no VITE_AUTH_URL, so the development build stays locked; gate checked");
+  } else if (GATED) {
+    // Signed out, then a CID without access: the gate holds and the app never loads.
+    const out = await browser.newContext();
+    const p1 = await out.newPage();
+    await p1.goto(URL_);
+    await expectText(p1, "SIGN IN WITH VATSIM", "development build, signed out");
+    await out.close();
+
+    me = { ...signedIn({ dev: false, admin: false }), cid: 222 };
+    const p2 = await newPage();
+    await p2.goto(URL_);
+    await expectText(p2, "ASK AN ADMIN FOR ACCESS", "development build, CID without access");
+    if (requests.some((u) => u.includes("/data/"))) problems.push("app loaded for a denied CID");
+    await p2.close();
+
+    me = signedIn({ dev: true, admin: false });
+    await checkApp(await newPage(), requests, problems);
+  } else {
+    await checkApp(await newPage(), requests, problems);
+  }
 } catch (e) {
   problems.push(String(e));
 } finally {

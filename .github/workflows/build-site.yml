@@ -31,6 +31,9 @@ jobs:
       # triggered the run, not necessarily this one.
       BUILD_BRANCH: ${{ inputs.ref }}
       PAGES_SUBPATH: ${{ inputs.subpath }}
+      # Auth Worker (auth-worker/) for sign-in on /dev/ and the admin page. Without the
+      # AUTH_URL repository variable both stay locked for everyone (they fail closed).
+      VITE_AUTH_URL: ${{ vars.AUTH_URL }}
     steps:
       - uses: actions/checkout@v4
         with:

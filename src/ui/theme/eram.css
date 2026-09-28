@@ -499,6 +499,132 @@ input[aria-invalid="true"] {
   padding: 2px 6px;
 }
 
+.eram-dev-user {
+  margin-left: 12px;
+}
+
+.eram-dev-user > * {
+  margin-left: 8px;
+}
+
+.eram-dev-user a {
+  color: inherit;
+}
+
+.eram-dev-user button {
+  padding: 0 6px;
+}
+
+/* ---- Access gate (/dev/, admin) and the admin page ---- */
+
+.eram-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 16px;
+}
+
+.eram-gate-box {
+  width: 100%;
+  max-width: 560px;
+  border: 1px solid var(--eram-window-border);
+  padding: 16px;
+}
+
+.eram-gate h1,
+.eram-gate h2,
+.eram-admin h1,
+.eram-admin h2 {
+  font-size: inherit;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.eram-gate h2 {
+  color: var(--eram-caution);
+}
+
+.eram-gate a,
+.eram-admin a {
+  color: var(--eram-toolbar-active);
+}
+
+.eram-gate .alert,
+.eram-admin .alert {
+  color: var(--eram-alert);
+}
+
+.eram-gate .dim,
+.eram-admin .dim {
+  color: var(--eram-datablock-dim);
+}
+
+.eram-admin .caution {
+  color: var(--eram-caution);
+}
+
+.eram-admin {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.eram-admin header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.eram-admin-page {
+  border: 1px solid var(--eram-window-border);
+  padding: 12px;
+  margin: 12px 0;
+}
+
+.eram-admin-page ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+
+.eram-admin-page li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.eram-admin-page .cid {
+  min-width: 9ch;
+}
+
+.eram-admin-page input {
+  width: 16ch;
+  background: var(--eram-bg);
+  color: var(--eram-text);
+  border: 1px solid var(--eram-window-border);
+  padding: 2px 4px;
+}
+
+.eram-admin-page form button {
+  margin-left: 8px;
+}
+
+.eram-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.eram-admin button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ---- Alerts (§6.2): blinking is the only animation allowed ---- */
 
 @keyframes eram-blink {

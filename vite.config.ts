@@ -94,10 +94,11 @@ function replayFixtures(): Plugin {
 }
 
 /**
- * Writes dist/build.json ({ branch, id }): what the build was stamped with. The deploy
- * checks it against the branch it meant to build before publishing anything.
+ * Writes dist/build.json ({ branch, id, authUrl }): what the build was stamped with. The
+ * deploy checks the branch against the one it meant to build before publishing anything;
+ * the smoke test uses authUrl to stub the auth Worker.
  */
-function buildInfo(branch: string, id: string): Plugin {
+function buildInfo(branch: string, id: string, authUrl: string): Plugin {
   return {
     name: "vam-build-info",
     apply: "build",
@@ -105,7 +106,7 @@ function buildInfo(branch: string, id: string): Plugin {
       this.emitFile({
         type: "asset",
         fileName: "build.json",
-        source: `${JSON.stringify({ branch, id })}\n`,
+        source: `${JSON.stringify({ branch, id, authUrl })}\n`,
       });
     },
   };
@@ -116,7 +117,11 @@ const BUILD_ID = buildId();
 
 export default defineConfig({
   base: pagesBase(),
-  plugins: [react(), replayFixtures(), buildInfo(BRANCH, BUILD_ID)],
+  plugins: [
+    react(),
+    replayFixtures(),
+    buildInfo(BRANCH, BUILD_ID, process.env.VITE_AUTH_URL?.trim() ?? ""),
+  ],
   server: {
     // Dev server reachable through an ngrok tunnel (hostnames only, no scheme).
     allowedHosts: ["amuck-yesterday-cilantro.ngrok-free.dev"],
@@ -124,6 +129,15 @@ export default defineConfig({
   define: {
     __BUILD_ID__: JSON.stringify(BUILD_ID),
     __BUILD_BRANCH__: JSON.stringify(BRANCH),
+  },
+  build: {
+    // Two pages: the app, and the access admin page at <base>admin/.
+    rollupOptions: {
+      input: {
+        main: path.resolve("index.html"),
+        admin: path.resolve("admin/index.html"),
+      },
+    },
   },
   worker: {
     format: "es",
