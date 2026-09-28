@@ -88,7 +88,10 @@ export interface VatsimPilot {
   callsign: string;
   lat: number;
   lon: number;
-  /** ft */
+  /**
+   * ft, as ATC sees it: pressure altitude at/above FL180, true altitude below
+   * (feedParse `atcAltitude`), not the feed's raw true altitude.
+   */
   altitude: number;
   /** kt */
   groundspeed: number;
@@ -189,6 +192,8 @@ export interface ScopeTarget {
   cid: number;
   callsign: string;
   aircraftType: string;
+  /** Filed destination (ICAO), "" if none filed. */
+  arrival: string;
   lat: number;
   lon: number;
   /** ft */

@@ -1,4 +1,5 @@
 // Messages between the main thread and the engine worker (§4.3).
+import type { AirportTraffic } from "../core/airportTraffic";
 import type { AlertEntry } from "../core/alerts";
 import type { MyPositionStatus } from "../core/myPosition";
 import type { NeighborStatus } from "../core/neighbors";
@@ -162,6 +163,12 @@ export interface NeighborsMessage {
   neighbors: NeighborStatus[];
 }
 
+/** Airports inside the selected airspace with ground or inbound traffic (AIRPORTS window). */
+export interface AirportsMessage {
+  type: "airports";
+  airports: AirportTraffic[];
+}
+
 export type FromEngine =
   | ReadyMessage
   | PollMessage
@@ -171,4 +178,5 @@ export type FromEngine =
   | PredictionsMessage
   | AlertsMessage
   | NavMessage
-  | NeighborsMessage;
+  | NeighborsMessage
+  | AirportsMessage;

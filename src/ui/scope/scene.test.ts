@@ -27,6 +27,7 @@ const target = (over: Partial<ScopeTarget> = {}): ScopeTarget => ({
   cid: 1,
   callsign: "DAL123",
   aircraftType: "B738",
+  arrival: "KMCI",
   lat: 36.5,
   lon: -90,
   altitude: 35_000,
@@ -78,9 +79,9 @@ function set(parts: Partial<PredictionSet>): PredictionSet {
 }
 
 describe("datablockLines (§7.5)", () => {
-  it("outbound: callsign, altitude, type + GS, exit-into + ETX + Zulu", () => {
+  it("outbound: callsign, altitude, type + GS + destination, exit-into + ETX + Zulu", () => {
     const d = datablockLines(target(), { p: pred({ exit }), kind: "outbound" }, T0);
-    expect(d.lines).toEqual(["DAL123", "350C", "B738 452", "ZKC 01:52 1801Z"]);
+    expect(d.lines).toEqual(["DAL123", "350C", "B738 452 KMCI", "ZKC 01:52 1801Z"]);
     expect(d.timeLine).toBe(3);
   });
 
@@ -91,13 +92,18 @@ describe("datablockLines (§7.5)", () => {
 
   it("resident: three lines, no time field", () => {
     const d = datablockLines(target(), { p: pred(), kind: "resident" }, T0);
-    expect(d).toEqual({ lines: ["DAL123", "350C", "B738 452"], timeLine: null });
+    expect(d).toEqual({ lines: ["DAL123", "350C", "B738 452 KMCI"], timeLine: null });
   });
 
-  it("unlisted: limited datablock, callsign + altitude", () => {
+  it("no destination filed: nothing is added", () => {
+    const d = datablockLines(target({ arrival: "" }), { p: pred(), kind: "resident" }, T0);
+    expect(d.lines[2]).toBe("B738 452");
+  });
+
+  it("unlisted: limited datablock, callsign + altitude + destination", () => {
     expect(datablockLines(target({ trend: "climb", altitude: 12_000 }), null, T0).lines).toEqual([
       "DAL123",
-      "120↑",
+      "120↑ KMCI",
     ]);
   });
 });

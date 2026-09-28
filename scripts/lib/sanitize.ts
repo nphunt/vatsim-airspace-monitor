@@ -84,6 +84,7 @@ export function sanitizeSnapshot(raw: unknown, opts: SanitizeOptions): Json {
           "latitude",
           "longitude",
           "altitude",
+          "qnh_i_hg",
           "groundspeed",
           "heading",
           "transponder",

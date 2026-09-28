@@ -218,3 +218,82 @@ describe("AlertMachine (§6.1)", () => {
     expect(m.list()).toHaveLength(0);
   });
 });
+
+describe("AlertMachine: exits into a staffed facility (HANDOFF, then XFER)", () => {
+  const ZKC_ON: FacilityStatus = {
+    ...ZKC,
+    staffed: true,
+    controller: { callsign: "KC_12_CTR", frequency: "127.900" },
+  };
+  const staffed = (cid: number, exitT: number) => {
+    const p = outbound(cid, exitT);
+    return { ...p, exit: { ...p.exit!, into: ZKC_ON } };
+  };
+  const at = (exitT: number, now: number, p = staffed(1, exitT)) =>
+    m.evaluate(input(set([p]), now));
+
+  it("HANDOFF goes ACTIVE at 4:00 with a tone, not before", () => {
+    const exitT = T0 + 241_000;
+    expect(at(exitT, T0).tone).toBe(false);
+    expect(m.list()).toHaveLength(0);
+    expect(at(exitT, T0 + 1_000).tone).toBe(true);
+    expect(m.list()[0]).toMatchObject({ state: "ACTIVE", stage: "HANDOFF" });
+  });
+
+  it("acked HANDOFF becomes an ACTIVE XFER at 1:00 with a new tone; ack again", () => {
+    const exitT = T0 + 200_000;
+    at(exitT, T0);
+    m.ack(1);
+    expect(at(exitT, T0 + 100_000).tone).toBe(false); // 1:40 left: still HANDOFF
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "HANDOFF" });
+    expect(at(exitT, T0 + 140_000).tone).toBe(true); // 1:00 left
+    expect(m.list()[0]).toMatchObject({ state: "ACTIVE", stage: "XFER" });
+    m.ack(1);
+    expect(at(exitT, T0 + 150_000).tone).toBe(false);
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "XFER" });
+  });
+
+  it("first seen inside 1:00 starts straight at XFER; slipping back keeps XFER", () => {
+    at(T0 + 50_000, T0);
+    expect(m.list()[0]).toMatchObject({ state: "ACTIVE", stage: "XFER" });
+    m.ack(1);
+    expect(at(T0 + 80_000, T0 + 10_000).tone).toBe(false); // 70 s left again
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "XFER" });
+  });
+
+  it("re-arms beyond 4:30", () => {
+    at(T0 + 200_000, T0);
+    at(T0 + 271_000, T0 + 1_000);
+    expect(m.list()).toHaveLength(1); // 4:30: still inside the margin
+    at(T0 + 272_000, T0 + 1_000);
+    expect(m.list()).toHaveLength(0);
+  });
+
+  it("controller logs off: relabeled ALERT (TERM CTL), kept if within the unstaffed threshold", () => {
+    at(T0 + 100_000, T0);
+    m.ack(1);
+    expect(m.evaluate(input(set([outbound(1, T0 + 100_000)]), T0 + 1_000)).tone).toBe(false);
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "ALERT" });
+    // Logged off with 3:00 left: beyond 2:00 + margin for an unstaffed exit, so dropped.
+    at(T0 + 400_000, T0 + 200_000);
+    m.evaluate(input(set([outbound(1, T0 + 400_000)]), T0 + 220_000));
+    expect(m.list()).toHaveLength(0);
+  });
+
+  it("controller logs on during an unstaffed ALERT: new ACTIVE HANDOFF with a tone", () => {
+    m.evaluate(input(set([outbound(1, T0 + 100_000)]), T0));
+    m.ack(1);
+    expect(at(T0 + 100_000, T0 + 1_000).tone).toBe(true);
+    expect(m.list()[0]).toMatchObject({ state: "ACTIVE", stage: "HANDOFF" });
+  });
+
+  it("unstaffed exits keep the single-stage 2:00 alert", () => {
+    m.evaluate(input(set([outbound(1, T0 + 200_000)]), T0));
+    expect(m.list()).toHaveLength(0);
+    m.evaluate(input(set([outbound(1, T0 + 200_000)]), T0 + 80_000));
+    expect(m.list()[0]).toMatchObject({ state: "ACTIVE", stage: "ALERT" });
+    m.ack(1);
+    m.evaluate(input(set([outbound(1, T0 + 200_000)]), T0 + 150_000)); // 0:50 left
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "ALERT" });
+  });
+});

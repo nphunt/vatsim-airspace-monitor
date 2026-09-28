@@ -16,6 +16,7 @@
   --eram-map-other: #3a3a3a;
   --eram-alert: #ff3030;
   --eram-caution: #ffd000;
+  --eram-handoff: #ff8c00;
 
   --eram-font: "IBM Plex Mono", ui-monospace, Consolas, monospace;
   --eram-font-size: 13px;
@@ -464,7 +465,11 @@ input[aria-invalid="true"] {
 }
 
 .eram-list tr.alert-active td,
-.eram-list tr.alert-acked td {
+.eram-list tr.alert-acked td,
+.eram-list tr.xfer-active td,
+.eram-list tr.xfer-acked td,
+.eram-list tr.handoff-active td,
+.eram-list tr.handoff-acked td {
   filter: none;
 }
 
@@ -479,6 +484,17 @@ input[aria-invalid="true"] {
   color: var(--eram-alert);
   border: 1px solid var(--eram-alert);
   padding: 4px 6px;
+}
+
+/* ---- Development build notice: anything not built from main ---- */
+
+.eram-dev-banner {
+  flex: none;
+  margin: 0;
+  background: var(--eram-bg);
+  color: var(--eram-caution);
+  border: 1px solid var(--eram-caution);
+  padding: 2px 6px;
 }
 
 /* ---- Alerts (§6.2): blinking is the only animation allowed ---- */
@@ -501,25 +517,76 @@ input[aria-invalid="true"] {
   color: var(--eram-alert);
 }
 
+/* Handoff stage 1, hand off the tag: the same flash in orange. */
+@keyframes eram-blink-handoff {
+  50% {
+    background: var(--eram-bg);
+    color: var(--eram-handoff);
+  }
+}
+
+.eram-list tr.handoff-active td {
+  background: var(--eram-handoff);
+  color: var(--eram-bg);
+  animation: eram-blink-handoff 1s steps(1) infinite;
+  cursor: pointer;
+}
+
+.eram-list tr.handoff-acked td {
+  color: var(--eram-handoff);
+}
+
+/* Handoff stage 2, transfer communications: the same flash in caution yellow. */
+@keyframes eram-blink-xfer {
+  50% {
+    background: var(--eram-bg);
+    color: var(--eram-caution);
+  }
+}
+
+.eram-list tr.xfer-active td {
+  background: var(--eram-caution);
+  color: var(--eram-bg);
+  animation: eram-blink-xfer 1s steps(1) infinite;
+  cursor: pointer;
+}
+
+.eram-list tr.xfer-acked td {
+  color: var(--eram-caution);
+}
+
 /* Dimmed cells (unstaffed facility) flash with the rest of an alert row. */
 .eram-list tr.alert-active .dim,
 .eram-list tr.alert-acked .dim,
 .eram-list tr.alert-active .dim-cell,
-.eram-list tr.alert-acked .dim-cell {
+.eram-list tr.alert-acked .dim-cell,
+.eram-list tr.xfer-active .dim,
+.eram-list tr.xfer-acked .dim,
+.eram-list tr.xfer-active .dim-cell,
+.eram-list tr.xfer-acked .dim-cell,
+.eram-list tr.handoff-active .dim,
+.eram-list tr.handoff-acked .dim,
+.eram-list tr.handoff-active .dim-cell,
+.eram-list tr.handoff-acked .dim-cell {
   color: inherit;
   opacity: 1;
 }
 
-.eram-list tr.alert-active:focus-visible {
+.eram-list tr.alert-active:focus-visible,
+.eram-list tr.xfer-active:focus-visible,
+.eram-list tr.handoff-active:focus-visible {
   outline: 1px solid var(--eram-toolbar-text);
 }
 
-.eram-list.eram-neighbors {
+.eram-list.eram-neighbors,
+.eram-list.eram-airports {
   width: auto;
 }
 
 .eram-neighbors th,
-.eram-neighbors td {
+.eram-neighbors td,
+.eram-airports th,
+.eram-airports td {
   padding-right: 2ch;
 }
 

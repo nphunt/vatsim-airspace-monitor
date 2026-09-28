@@ -1,5 +1,5 @@
 import { useStore } from "../../store/store";
-import { alertClass, formatCrossing } from "../format";
+import { alertAction, alertClass, formatCrossing } from "../format";
 import { useEngineNow } from "../hooks";
 
 export function AlertsTitle() {
@@ -10,8 +10,10 @@ export function AlertsTitle() {
 
 /**
  * ALERTS list (§5.9, §6.2), styled like ERAM's Conflict Alert list, by time:
- * `DAL123 B738 350 ZME→ZKC N 01:52 1732Z KC_12_CTR 127.900`; an exit into an unstaffed
- * facility shows `TERM CTL` (terminate control, frequency change approved) instead.
+ * `DAL123 B738 350 ZME→ZKC N 03:52 1732Z HANDOFF KC_12_CTR 127.900` (orange) from 4:00,
+ * then `XFER COMM KC_12_CTR 127.900` (yellow) from 1:00. An exit into an unstaffed
+ * facility alerts once, at the configured threshold, with `TERM CTL` (terminate
+ * control, frequency change approved).
  * Click a row, or focus it and press Enter, to acknowledge.
  */
 export function AlertsList() {
@@ -50,13 +52,7 @@ export function AlertsList() {
                   <td className={a.other.staffed ? undefined : "dim-cell"}>{route}</td>
                   <td>{a.kind === "exit" ? (a.dir ?? "") : "ENT"}</td>
                   <td>{formatCrossing(a.t, now)}</td>
-                  <td className="col-flg">
-                    {a.other.controller
-                      ? `${a.other.controller.callsign} ${a.other.controller.frequency}`
-                      : a.kind === "exit"
-                        ? "TERM CTL"
-                        : ""}
-                  </td>
+                  <td className="col-flg">{alertAction(a)}</td>
                 </>
               )}
             </tr>

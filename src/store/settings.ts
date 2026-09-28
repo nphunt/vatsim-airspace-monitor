@@ -26,6 +26,7 @@ export type WindowId =
   | "inbound"
   | "load"
   | "neighbors"
+  | "airports"
   | "airspace"
   | "settings"
   | "fpr"
@@ -37,6 +38,7 @@ export const WINDOW_IDS: readonly WindowId[] = [
   "inbound",
   "load",
   "neighbors",
+  "airports",
   "airspace",
   "settings",
   "fpr",
@@ -187,6 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
     scope: win({ docked: false, order: 7, x: 24, y: 80, w: 520, h: 520 }),
     about: win({ docked: false, order: 8, x: 64, y: 120, w: 420, h: 420 }),
     neighbors: win({ order: 9, weight: 0.5 }),
+    airports: win({ order: 10, weight: 0.5 }),
   },
 };
 

@@ -57,7 +57,7 @@ The user MUST be able to switch airspaces at any time, across the whole United S
 - **Feed:**
   - Response headers: `access-control-allow-origin: *`, `Cache-Control: public, max-age=15`. → **Poll every 15 s, never faster.** Use `fetch(url, { cache: "no-cache" })` so the browser revalidates instead of serving its own cached copy (otherwise effective updates drop to every 30 s).
   - `general.update_timestamp` (ISO string) – skip processing if unchanged from the last poll. A skipped (duplicate) poll does NOT count as a "missed" poll for any aircraft.
-  - `pilots[]` – fields used: `cid, callsign, latitude, longitude, altitude` (ft), `groundspeed` (kt), `heading` (deg, this is *heading* not *track*), `transponder`, `last_updated`, `flight_plan` (may be `null`) with `aircraft_short, aircraft_faa, departure, arrival, altitude, route, flight_rules, assigned_transponder`. **Do not store or display `name`.**
+  - `pilots[]` – fields used: `cid, callsign, latitude, longitude, altitude` (ft, **true** altitude), `qnh_i_hg` (local altimeter setting), `groundspeed` (kt), `heading` (deg, this is *heading* not *track*), `transponder`, `last_updated`, `flight_plan` (may be `null`) with `aircraft_short, aircraft_faa, departure, arrival, altitude, route, flight_rules, assigned_transponder`. **Do not store or display `name`.** The app works in the altitude ATC sees (`atcAltitude` in `feedParse.ts`): at/above FL180 the pressure altitude, `altitude + (29.92 − qnh_i_hg) × 1000`, as VATSIM Radar and a standard-set altimeter show it; below FL180 the true altitude; true altitude when `qnh_i_hg` is missing (older recordings).
   - `controllers[]` – `cid`, `callsign` (e.g. `MEM_22_CTR`), `facility` (6 = CTR), `frequency`. Used for staffing and My Position (§5.12).
   - `prefiles[]` – ignore in v1.
 - **Server time:** the live clock (§4.1) uses server-corrected time so a wrong PC clock doesn't break staleness or countdowns. ⚠ The HTTP `Date` header is **not readable** from JS (verified: no `Access-Control-Expose-Headers`, and `Date` is not CORS-safelisted). Also the CDN serves copies up to ~15 s old (`Age:` header observed at 11). So estimate the offset from `update_timestamp` only: per poll compute `sample = update_timestamp − localReceiveTime`; `serverOffset = max(sample)` over the last 20 polls (the freshest copy has the least CDN age, so the max is the tightest bound). Expected error: a few seconds, acceptable for 60 s staleness and MM:SS countdowns. Note: the `DATA Ns` indicator shows `clock.now() − update_timestamp`.
@@ -359,7 +359,7 @@ ACTIVE|ACKED ──(remaining > EXIT_ALERT_S + ALERT_REARM_MARGIN_S, OR no exit 
 ANY ──(aircraft dropped: disconnected, stale, or GS < MIN_GS_KT)──► removed (no sound)
 ```
 - **Hysteresis is required**: the 30 s re-arm margin prevents flapping around 2:00.
-- **Staffing does not change alerting** (owner decision): an exit into an unstaffed neighbor alerts exactly like a staffed one; only the display dims the `TO` facility and omits the controller/frequency.
+- **Staffed exits alert in two stages** (owner decision, 2026-09-28; replaces "staffing does not change alerting"): when the facility an aircraft exits into has a controller online, the alert goes ACTIVE at `HANDOFF_ALERT_S` (240 s) as **HANDOFF** (orange flash: hand the tag off to the next sector, `HANDOFF KC_12_CTR 127.900`), then ACTIVE again with a tone at `XFER_COMM_S` (60 s) as **XFER COMM** (yellow flash, `XFER COMM KC_12_CTR 127.900`), acknowledged separately. An exit into an unstaffed neighbor keeps the single-stage alert above at `EXIT_ALERT_S`, shown with `TERM CTL`, and the display dims the `TO` facility. Entry alerts are never staged. If staffing changes mid-alert the stage follows it: a logon turns an ALERT into a new ACTIVE HANDOFF; a logoff relabels it ALERT (dropped if beyond `EXIT_ALERT_S` + margin).
 - An aircraft alerts **at most once per exit event** (an exit event ends at EXITED or NONE).
 - **Countdown past zero:** if remaining reaches 0 but the next snapshot still shows the aircraft inside, display `00:00` (flashing) — never negative — until the next snapshot resolves it.
 - **Silent priming:** on page load, airspace switch, and replay start, the first evaluation puts qualifying aircraft straight into ACTIVE **without sound** (visual only). Otherwise a switch fires a burst of tones.
@@ -464,6 +464,8 @@ HORIZON_MIN = 30              // user-selectable 10/20/30/60
 MAX_GS_KT = 750               // prefilter bound only
 PATH_STEP_NM = 2
 EXIT_ALERT_S = 120
+HANDOFF_ALERT_S = 240
+XFER_COMM_S = 60
 ALERT_REARM_MARGIN_S = 30
 CLIP_REENTRY_S = 180
 EXITED_DISPLAY_S = 30

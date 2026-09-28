@@ -1,4 +1,11 @@
-import { ALERT_REARM_MARGIN_S, ENTRY_ALERT_S, EXITED_DISPLAY_S, EXIT_ALERT_S } from "../config";
+import {
+  ALERT_REARM_MARGIN_S,
+  ENTRY_ALERT_S,
+  EXITED_DISPLAY_S,
+  EXIT_ALERT_S,
+  HANDOFF_ALERT_S,
+  XFER_COMM_S,
+} from "../config";
 import type {
   Compass8,
   FacilityStatus,
@@ -15,9 +22,18 @@ import type {
 //   ACTIVE|ACKED -(now outside)-> EXITED (30 s) -> removed
 //   ACTIVE|ACKED -(remaining > 150 s | no exit predicted | CLP | ARR-suppressed)-> NONE
 //   any -(dropped: disconnected, stale, slow)-> removed, silently
+//
+// Exits into a staffed facility (a controller online to hand off to) go in two stages:
+//   HANDOFF at <= 4:00 (orange, ACTIVE -> ACKED as above), then XFER at <= 1:00: ACTIVE
+//   again (tone, yellow flash) until acked, telling the controller to transfer comms.
+// Unstaffed exits and entries have one stage, ALERT, at the configured threshold.
+// If staffing changes mid-alert the stage follows it; a controller logging on turns an
+// ALERT into a new (ACTIVE) HANDOFF.
 
 export type AlertKind = "exit" | "entry";
 export type AlertState = "ACTIVE" | "ACKED" | "EXITED";
+/** ALERT: single-stage (unstaffed exit, entry). HANDOFF/XFER: staffed exit stages. */
+export type AlertStage = "ALERT" | "HANDOFF" | "XFER";
 
 export interface AlertEntry {
   /** `${kind}:${cid}` */
@@ -29,6 +45,7 @@ export interface AlertEntry {
   altitude: number;
   trend: VerticalTrend;
   state: AlertState;
+  stage: AlertStage;
   /** Predicted exit (or entry) time, ms UTC. */
   t: number;
   dir?: Compass8;
@@ -41,6 +58,10 @@ export interface AlertEntry {
 
 export interface AlertConfig {
   exitAlertS: number;
+  /** Staffed exits: HANDOFF stage this long before the boundary. */
+  handoffAlertS: number;
+  /** Staffed exits: XFER (transfer communications) stage this long before the boundary. */
+  xferCommS: number;
   rearmMarginS: number;
   exitedDisplayS: number;
   /** Repeat the tone this often while ACTIVE and unacknowledged; null = off (§6.1). */
@@ -51,6 +72,8 @@ export interface AlertConfig {
 
 export const DEFAULT_ALERT_CONFIG: AlertConfig = {
   exitAlertS: EXIT_ALERT_S,
+  handoffAlertS: HANDOFF_ALERT_S,
+  xferCommS: XFER_COMM_S,
   rearmMarginS: ALERT_REARM_MARGIN_S,
   exitedDisplayS: EXITED_DISPLAY_S,
   repeatToneS: null,
@@ -149,6 +172,9 @@ export class AlertMachine {
       const key = `${kind}:${p.cid}`;
       seen.add(key);
       const remainingS = (t - now) / 1000;
+      const handoff = kind === "exit" && other.controller !== undefined;
+      if (handoff) thresholdS = c.handoffAlertS;
+      const stage: AlertStage = !handoff ? "ALERT" : remainingS <= c.xferCommS ? "XFER" : "HANDOFF";
       const e = this.entries.get(key);
       if (!e || e.state === "EXITED") {
         if (suppressed || remainingS > thresholdS) return;
@@ -161,6 +187,7 @@ export class AlertMachine {
           altitude: p.altitude,
           trend: p.trend,
           state: "ACTIVE",
+          stage,
           t,
           dir,
           other,
@@ -176,8 +203,27 @@ export class AlertMachine {
         changed = true;
         return;
       }
+      // A new stage that asks for a new action (hand off, transfer comms) fires again;
+      // losing the controller just relabels it.
+      if (stage !== e.stage) {
+        if (stage !== "ALERT" && !(e.stage === "XFER" && stage === "HANDOFF")) {
+          e.state = "ACTIVE";
+          e.activatedAt = now;
+          e.lastToneAt = now;
+          fired = true;
+        }
+        // XFER stays XFER if the exit time slips back a little.
+        if (!(e.stage === "XFER" && stage === "HANDOFF")) e.stage = stage;
+        changed = true;
+      }
       // Same exit event: update in place (exit-into may change), never re-fire (§5.9).
-      if (e.t !== t || e.other.key !== other.key || e.altitude !== p.altitude) changed = true;
+      if (
+        e.t !== t ||
+        e.other.key !== other.key ||
+        e.other.controller?.callsign !== other.controller?.callsign ||
+        e.altitude !== p.altitude
+      )
+        changed = true;
       Object.assign(e, {
         t,
         dir,

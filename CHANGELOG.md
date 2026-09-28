@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.1 — 2026-09-28
+
+Handoffs and airports: the alert tells you what to do and who to hand off to, you can see which airports are busy, and altitudes now match what ATC and VATSIM Radar show.
+
+### Two-stage handoff alerts
+
+- An exit into a facility **with a controller online** now alerts in two stages. At **4:00** before the boundary the aircraft flashes **orange**, `HANDOFF KC_12_CTR 127.900`: hand the tag off to the next sector. At **1:00** it flashes **yellow**, `XFER COMM KC_12_CTR 127.900`: transfer communications. Each stage plays one tone and is acknowledged separately. The OUTBOUND row and the scope's exit marker and time field follow the same colors.
+- An exit into a facility with **nobody online** keeps the single **red** alert at the configured lead time (default 2:00), now labeled `TERM CTL`: terminate radar service, frequency change approved (UNICOM 122.800).
+- If staffing changes during an alert, the stage follows it: a controller logging on turns a red alert into a new orange HANDOFF; one logging off turns it back into the red alert.
+- Entry alerts are unchanged (single stage).
+
+### Airports
+
+- New **AIRPORTS** window (`APT` in the toolbar): airports inside the selected airspace with traffic, busiest first. `GND` aircraft on the ground (slower than 40 kt within 3 nm), `DEP` those filed out of it, `INBD` airborne aircraft filed to it (within the horizon / total), and `NEXT` the soonest arrival with a straight-line ETA. Ground traffic is matched to its nearest airport, including ones just outside the airspace, so a neighbor's traffic is never counted as yours.
+- The **SCOPE** draws each of those airports as a small hollow square at its real position, with its ICAO code beside it.
+
+### Datablocks and lists
+
+- Scope datablocks show the **filed destination**: `B738 452 KMCI` on a full datablock, `350C KMCI` on a limited one.
+- The OUTBOUND and INBOUND lists never drop the `DEST` column, however narrow the window (TYPE goes first).
+
+### Altitudes
+
+- Altitudes are now shown the way ATC sees them. The VATSIM feed reports true altitude; at and above FL180 the app now shows **pressure altitude** (from the feed's altimeter setting, 1,000 ft per inHg from 29.92), and below FL180 the altitude on the local setting. A jet on FL450 on a high-pressure day showed as `452` before and shows `450` now, matching VATSIM Radar. Lists, datablocks, alerts, the altitude filter and LOAD all use it.
+
+### Window layout
+
+- Dock a window **anywhere**: drop it on the gap above, between or below the docked windows of any column, for example right under a SCOPE docked on the right; a line previews the spot. A docked window pulled out sideways can be dropped into another column the same way.
+- Floating windows **snap** their edges to the screen and to other windows when moved or resized. Hold **Alt** to place a window freely (no docking, no snapping).
+
+### Other
+
+- Development builds (the dev server, or any build not made from `main`) show a `DEVELOPMENT BUILD … SOME THINGS MAY BREAK` notice under the toolbar. The GitHub Pages site does not.
+- README updated for all of the above.
+
 ## v1.0 — 2026-09-28
 
 First release. An ERAM-styled companion window for VATUSA controllers, built as a web page that reads the public VATSIM data feed: who is about to leave your ARTCC, where to, and when; who is coming in; and how busy it will get.

@@ -1,3 +1,4 @@
+import type { AirportTraffic } from "../../core/airportTraffic";
 import type { AlertEntry } from "../../core/alerts";
 import { destination } from "../../core/geo";
 import type { Prediction, PredictionSet, ScopeTarget } from "../../data/types";
@@ -27,6 +28,8 @@ export interface SceneTarget {
   /** Index into `lines` of the time field (ETX/ETE), for flashing (§6.2). */
   timeLine: number | null;
   alert: AlertEntry["state"] | null;
+  /** Handoff stage (staffed exits): orange to hand off the tag, yellow to transfer comms. */
+  stage: AlertEntry["stage"] | null;
   selected: boolean;
   /** Route ahead on screen (selected RTE aircraft, or all with ROUTES on). */
   route: [number, number][] | null;
@@ -57,16 +60,20 @@ export interface SceneInput {
   datablockOffsets?: ReadonlyMap<number, DatablockOffset>;
 }
 
-/** Datablock text (§7.5): full for listed aircraft, callsign + altitude otherwise. */
+/**
+ * Datablock text (§7.5): full for listed aircraft (callsign, altitude, type + GS +
+ * filed destination, crossing), callsign + altitude + destination otherwise.
+ */
 export function datablockLines(
   t: ScopeTarget,
   found: { p: Prediction; kind: ReadoutKind } | null,
   now: number,
 ): { lines: string[]; timeLine: number | null } {
   const alt = formatAlt(t.altitude, t.trend);
-  if (!found) return { lines: [t.callsign, alt], timeLine: null };
+  const dest = t.arrival.trim() ? ` ${t.arrival.trim()}` : "";
+  if (!found) return { lines: [t.callsign, `${alt}${dest}`], timeLine: null };
   const gs = String(Math.round(t.groundspeed)).padStart(3, "0");
-  const lines = [t.callsign, alt, `${t.aircraftType || "----"} ${gs}`];
+  const lines = [t.callsign, alt, `${t.aircraftType || "----"} ${gs}${dest}`];
   const { p, kind } = found;
   if (kind === "outbound" && p.exit) {
     lines.push(`${p.exit.into.label} ${formatCrossing(p.exit.t, now)}`);
@@ -93,6 +100,28 @@ function screenPath(flat: readonly number[], from: number, input: SceneInput): [
     out.push(toScreen(input.view, input.width, input.height, x, y));
   }
   return out;
+}
+
+/** An airport with traffic, placed on screen at its reference point. */
+export interface SceneAirport {
+  icao: string;
+  x: number;
+  y: number;
+}
+
+/** Screen positions of the AIRPORTS window's airports (ground or inbound traffic). */
+export function buildAirportMarks(
+  airports: readonly Pick<AirportTraffic, "icao" | "lat" | "lon">[],
+  projection: Projection,
+  view: View,
+  width: number,
+  height: number,
+): SceneAirport[] {
+  return airports.map((a) => {
+    const [px, py] = project(projection, a.lat, a.lon);
+    const [x, y] = toScreen(view, width, height, px, py);
+    return { icao: a.icao, x, y };
+  });
 }
 
 export function buildScene(input: SceneInput): SceneTarget[] {
@@ -138,6 +167,7 @@ export function buildScene(input: SceneInput): SceneTarget[] {
       lines,
       timeLine,
       alert: alertByCid.get(t.cid)?.state ?? null,
+      stage: alertByCid.get(t.cid)?.stage ?? null,
       selected,
       // Skip the first point: it is the (older) reported position, not the extrapolated one.
       route: showRoute ? [[x, y], ...screenPath(t.routeAhead!, 2, input)] : null,

@@ -2,12 +2,28 @@ import { NEIGHBOR_CHANGE_HIGHLIGHT_S } from "../config";
 import type { AlertEntry } from "../core/alerts";
 import type { Prediction, PredictionSet, VerticalTrend } from "../data/types";
 
-/** Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). */
+/**
+ * Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). A handoff is
+ * orange, then yellow to transfer communications; other alerts are red.
+ */
 export function alertClass(a: AlertEntry | undefined): string | undefined {
   if (!a) return undefined;
-  if (a.state === "ACTIVE") return "alert-active";
-  if (a.state === "ACKED") return "alert-acked";
+  const color = a.stage === "XFER" ? "xfer" : a.stage === "HANDOFF" ? "handoff" : "alert";
+  if (a.state === "ACTIVE") return `${color}-active`;
+  if (a.state === "ACKED") return `${color}-acked`;
   return undefined;
+}
+
+/**
+ * What the controller should do for an alert: `HANDOFF KC_12_CTR 127.900`, then
+ * `XFER COMM KC_12_CTR 127.900`; `TERM CTL` for an exit with no controller to hand to.
+ */
+export function alertAction(a: AlertEntry): string {
+  const c = a.other.controller;
+  const to = c ? `${c.callsign} ${c.frequency}` : "";
+  if (a.stage === "HANDOFF") return `HANDOFF ${to}`;
+  if (a.stage === "XFER") return `XFER COMM ${to}`;
+  return a.kind === "exit" ? "TERM CTL" : to;
 }
 
 /** Adds the selected-row class (§7.3) to a row's alert/dim class. */
@@ -91,8 +107,8 @@ export interface ColumnLayout {
 
 /**
  * Columns that fit `chars` character cells (§7.3 narrow-width rules). GS appears when
- * wide; at <= 480 px (~61 chars) flags go single-letter; DEST is dropped before TYPE;
- * CALLSIGN, TO/FROM, DIR and the time are never dropped.
+ * wide; at <= 480 px (~61 chars) flags go single-letter; TYPE is dropped when narrow;
+ * CALLSIGN, TO/FROM, DIR, the time and DEST are never dropped.
  */
 export function listColumns(
   chars: number,
@@ -105,8 +121,8 @@ export function listColumns(
   if (chars >= 44) columns.push("type");
   columns.push("alt", "facility");
   if (kind === "outbound") columns.push("dir");
-  columns.push("time");
-  if (chars >= 50) columns.push("dest");
+  // DEST (filed destination) is never dropped.
+  columns.push("time", "dest");
   if (chars >= 76) columns.push("gs");
   columns.push("flg");
   return { columns, compactFlags };

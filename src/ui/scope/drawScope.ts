@@ -1,11 +1,18 @@
 import { ERAM_COLORS } from "../theme/colors";
 import { toScreen, type View } from "./projection";
-import { datablockRect, drawOrder, leaderLine, type SceneTarget } from "./scene";
+import { datablockRect, drawOrder, leaderLine, type SceneAirport, type SceneTarget } from "./scene";
 import type { MapFeature, ScopeMap } from "./scopeMap";
 
 // SCOPE painter (§7.5). Draw order: neighbor boundaries (dim) -> selected boundary
-// (brighter, thicker) -> facility labels (dimmed if unstaffed) -> exit markers -> targets
-// -> datablocks. No logic beyond styling; the scene is built in scene.ts.
+// (brighter, thicker) -> facility labels (dimmed if unstaffed) -> airports with traffic
+// (hollow square + ICAO) -> exit markers -> targets -> datablocks. No logic beyond styling; the scene is built in scene.ts.
+
+/** Alert color on the scope: orange to hand off, yellow to transfer comms, else red. */
+function alertColor(t: Pick<SceneTarget, "stage">): string {
+  if (t.stage === "HANDOFF") return ERAM_COLORS.handoff;
+  if (t.stage === "XFER") return ERAM_COLORS.caution;
+  return ERAM_COLORS.alert;
+}
 
 export interface DrawOptions {
   width: number;
@@ -22,7 +29,12 @@ export interface DrawOptions {
   /** BRIGHT (§7.1), 0..1: boundaries and labels; targets and datablocks. Alerts stay full. */
   mapBright: number;
   datablockBright: number;
+  /** Airports with ground or inbound traffic, at their real positions. */
+  airports: readonly SceneAirport[];
 }
+
+/** Airport square size, px: hollow, so it never reads as a (filled) target symbol. */
+const AIRPORT_SQUARE_PX = 6;
 
 const LEVEL_COLOR = {
   own: ERAM_COLORS.datablock,
@@ -109,6 +121,24 @@ export function drawScope(
     ctx.fillText(f.label, x, y);
   }
 
+  // Airports with traffic: a hollow square centered on the airport, ICAO to its right.
+  ctx.strokeStyle = ERAM_COLORS.mapOwn;
+  ctx.fillStyle = ERAM_COLORS.mapOwn;
+  ctx.lineWidth = 1;
+  ctx.textAlign = "left";
+  const half = AIRPORT_SQUARE_PX / 2;
+  for (const a of o.airports) {
+    if (a.x < -60 || a.x > w + 10 || a.y < -10 || a.y > h + 10) continue;
+    // Half-pixel offset keeps the 1 px outline crisp.
+    ctx.strokeRect(
+      Math.round(a.x - half) + 0.5,
+      Math.round(a.y - half) + 0.5,
+      AIRPORT_SQUARE_PX,
+      AIRPORT_SQUARE_PX,
+    );
+    ctx.fillText(a.icao, a.x + half + 4, a.y);
+  }
+
   // Routes ahead (dim, dashed) and exit markers with their target line.
   ctx.globalAlpha = dbA;
   ctx.lineWidth = 1;
@@ -121,7 +151,7 @@ export function drawScope(
   for (const t of targets) {
     if (!t.exit || t.exit.clip) continue;
     const hot = t.alert === "ACTIVE" || t.alert === "ACKED";
-    const color = hot ? ERAM_COLORS.alert : t.selected ? ERAM_COLORS.toolbarActive : null;
+    const color = hot ? alertColor(t) : t.selected ? ERAM_COLORS.toolbarActive : null;
     if (!color && t.level === "dim") continue;
     ctx.globalAlpha = hot ? 1 : dbA;
     ctx.strokeStyle = color ?? ERAM_COLORS.datablockDim;
@@ -168,12 +198,12 @@ export function drawScope(
     if (leader) polyline(ctx, leader);
     t.lines.forEach((line, i) => {
       let c: string = color;
-      if (i === t.timeLine && t.alert === "ACKED") c = ERAM_COLORS.alert;
+      if (i === t.timeLine && t.alert === "ACKED") c = alertColor(t);
       if (i === t.timeLine && t.alert === "ACTIVE") {
         if (!o.flashOn) return; // blink the time field (§6.2)
-        c = ERAM_COLORS.alert;
+        c = alertColor(t);
       }
-      ctx.globalAlpha = c === ERAM_COLORS.alert ? 1 : dbA;
+      ctx.globalAlpha = c === alertColor(t) ? 1 : dbA;
       ctx.fillStyle = c;
       ctx.fillText(line, rect.x, rect.y + i * o.linePx);
     });

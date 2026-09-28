@@ -31,24 +31,27 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 
 ### 4. Read the lists
 
-- **OUTBOUND**: aircraft inside your airspace predicted to leave within the horizon, soonest first. `TO` is the airspace it will enter (dimmed if nobody is staffing it), `DIR` the direction it leaves, `ETX` the time to exit as a countdown and the Zulu time it crosses (`01:52 1732Z`). The strip above the list counts exits per neighbor; click one to filter.
-- **ALERTS**: an aircraft flashes red 2:00 before it exits (change this in SETTINGS → `ALERT AT`) with one short tone. Click it, or press `A` for all, to acknowledge. It shows the neighbor's controller and frequency when staffed.
+- **OUTBOUND**: aircraft inside your airspace predicted to leave within the horizon, soonest first. `TO` is the airspace it will enter (dimmed if nobody is staffing it), `DIR` the direction it leaves, `ETX` the time to exit as a countdown and the Zulu time it crosses (`01:52 1732Z`), `DEST` its filed destination. The strip above the list counts exits per neighbor; click one to filter.
+- **ALERTS**, when the airspace it exits into **has a controller online**: the aircraft flashes **orange** 4:00 before the boundary, `HANDOFF KC_12_CTR 127.900`: hand the tag off. At 1:00 it flashes **yellow**, `XFER COMM KC_12_CTR 127.900`: transfer communications. Each stage plays one short tone and is acknowledged separately. Click a row, or press `A` for all, to acknowledge.
+- **ALERTS**, when **nobody is online** there: the aircraft flashes **red** 2:00 before it exits (change this in SETTINGS → `ALERT AT`), `TERM CTL`: terminate radar service and approve the frequency change (UNICOM 122.800).
 - **INBOUND**: aircraft predicted to enter, with `ETE` (countdown and Zulu time) and where they come from. With `SETTINGS` → `ALSO ALERT … BEFORE ENTRY` on, an aircraft about to enter flashes here and in ALERTS, like an exit.
 - `FLG` column: `RTE` (following its filed route) or `DR` (dead reckoning on its current track; less reliable before turns), `ARR` landing inside, `TRN` turning, `CLP` only clipping a corner (never alerts), `V` VFR.
 - Times are `MM:SS`; past an hour, `H+MM`.
 - Click any row to open the **flight plan readout**: route, filed altitude, squawk, and whether it is predicted by route or dead reckoning.
+- **NEIGHBORS** (`NBR` in the toolbar): every airspace bordering yours, clockwise from north, with who to hand off to (`ZKC NW KC_12_CTR 127.900`), or `TERM CTL UNICOM 122.800` when nobody is on. A logon, logoff or new handoff controller shows in yellow for 2 minutes, and so does the `NBR` button.
+- **AIRPORTS** (`APT`): airports in your airspace with traffic, busiest first. `GND` aircraft on the ground there, `DEP` those filed out of it, `INBD` airborne aircraft filed to it (within the horizon / in total), `NEXT` the soonest arrival with a straight-line ETA.
 
 ### 5. LOAD and SCOPE (optional)
 
 - **LOAD** forecasts how many aircraft will be in your airspace: `TACT` in 5-minute bins for the next hour, `STRAT` in 15-minute bins for two hours. A bar turns red at your threshold (set it in the window header, default 20). Click a bar to list the aircraft in it.
-- **SCOPE** is a simple map of your airspace with targets, datablocks and predicted exit points. Drag to pan, scroll to zoom. **Drag a datablock** to move it off its neighbors (the leader line follows it); double-click it to put it back, or `DB RESET` to reset them all. Moved datablocks keep their place when you pan and zoom. CRC stays the real scope; this is for a quick look.
+- **SCOPE** is a simple map of your airspace with targets, datablocks (with each aircraft's filed destination) and predicted exit points; airports with traffic show as small hollow squares with their code. Drag to pan, scroll to zoom. **Drag a datablock** to move it off its neighbors (the leader line follows it); double-click it to put it back, or `DB RESET` to reset them all. Moved datablocks keep their place when you pan and zoom. CRC stays the real scope; this is for a quick look.
 
 ### Toolbar
 
 | Button | Does |
 | --- | --- |
 | `AIRSPACE ZME` | Choose the airspace |
-| `OUTBOUND` `ALERTS` `INBOUND` `LOAD` `SCOPE` | Show or hide each window |
+| `OUTBOUND` `ALERTS` `INBOUND` `LOAD` `NBR` `APT` `SCOPE` | Show or hide each window |
 | `HORIZON 30` | How far ahead the lists look: 10, 20, 30 or 60 minutes |
 | `BRIGHT` `FONT` | Step list brightness and text size |
 | `MUTE` | Silence tones |
@@ -56,12 +59,13 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 | `DATA 12s` | Age of the traffic data. Red past 60 s: the feed is late or the page lost its connection |
 | `NAV DATA EXPIRED` | The bundled FAA route data is out of date; routes may predict worse |
 
-Each window can be minimized (`-`), undocked to float (`↗`) and closed (`X`). Drag a docked window's title bar **up or down** to move it within its stack: a line shows where it will land, and it snaps back in when you let go. Pull it **far to the side** and it pops out as a floating window (bring it back near the stack before letting go to keep it docked). Drop any window at the **left or right edge** of the page and it docks into a column on that side (a highlight shows where), above or below the windows already there by where you drop it; drop it anywhere else and it floats. Drag the gaps between columns or windows to resize them; `↙` sends a floating window back to the main stack. Layout and settings are saved in this browser only.
+Each window can be minimized (`-`), undocked to float (`↗`) and closed (`X`). Drag a docked window's title bar **up or down** to move it within its stack: a line shows where it will land, and it snaps back in when you let go. Pull it **far to the side** and it pops out as a floating window (bring it back near the stack before letting go to keep it docked). Drop any window at the **left or right edge** of the page and it docks into a column on that side (a highlight shows where). Drop it on the **gap above, between or below docked windows** in any column (for example right under a docked SCOPE) and it docks there; a line shows the spot. Drop it anywhere else and it floats; floating windows snap their edges to the screen and to each other. Hold `Alt` while dragging to place a window freely. Drag the gaps between columns or windows to resize them; `↙` sends a floating window back to the main stack. Layout and settings are saved in this browser only.
 
 ### Good to know
 
 - Predictions come from positions VATSIM publishes about every 15 s. Aircraft following their route are predicted well; dead reckoning is roughly ±15–30 s on a straight leg and poor right before a turn. Each row says which it is using.
 - Boundaries are VATSpy's lateral boundaries, not FAA sectors, with no altitude strata.
+- Altitudes are shown the way ATC sees them: at and above FL180 the pressure altitude (flight level), below it the altitude on the local altimeter setting, so they match VATSIM Radar rather than the feed's raw true altitude.
 - LOAD does not count aircraft still on the ground, so later bins under-count departures from airports inside your airspace.
 - `SETTINGS` also has an altitude floor/ceiling (for example, only FL240 and above). It filters the lists, alerts, LOAD and SCOPE, never the predictions themselves.
 - Found a problem? [Open an issue](https://github.com/nphunt/vatsim-airspace-monitor/issues) and paste the first line of `ABOUT` (`BUILD … · VATSPY … · AIRAC …`).
@@ -164,8 +168,6 @@ See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Three workflows 
 **Releasing:** merge to `main`; `deploy` publishes it. The ABOUT line (`BUILD <sha> · VATSPY <tag> · AIRAC <cycle>`) identifies the deploy.
 
 **Rolling back:** Actions → deploy → Run workflow on the last good commit (or revert on `main`).
-
-#This Project is built entirely by Claude Opus 5.5 and Claude Sonnet 5.
 
 **Data PRs:** merge them by hand; a boundary change can move exit-into results. GitHub disables scheduled workflows after 60 days without repo activity, so don't let them pile up.
 

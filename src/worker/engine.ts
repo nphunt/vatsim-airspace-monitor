@@ -7,6 +7,7 @@ import {
 } from "../config";
 import { AlertMachine, DEFAULT_ALERT_CONFIG, type AlertConfig } from "../core/alerts";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
+import { airportTraffic, airportsNear, type AirportPoint } from "../core/airportTraffic";
 import { altitudeFilterFt, filterByAltitude } from "../core/altitudeFilter";
 import { buildStaffing, type Staffing } from "../core/facilityLookup";
 import { MyPositionTracker, findMyPosition } from "../core/myPosition";
@@ -120,6 +121,8 @@ export class Engine {
   /** Facilities around the selected airspace (geometry; rebuilt on switch). */
   private neighbors: Neighbor[] = [];
   private neighborStatus: NeighborStatus[] | null = null;
+  /** Airports in and just around the selected airspace (rebuilt on switch). */
+  private airportPoints: AirportPoint[] = [];
   private eligibleCids: ReadonlySet<number> = new Set();
 
   constructor(post: (m: FromEngine) => void, deps: EngineDeps = {}) {
@@ -402,6 +405,8 @@ export class Engine {
       this.lastSet = null;
       this.neighbors = [];
       this.postNeighbors();
+      this.airportPoints = [];
+      this.post({ type: "airports", airports: [] });
       this.alerts.reset();
       this.post({ type: "predictions", set: null });
       this.postAlerts(false);
@@ -425,6 +430,7 @@ export class Engine {
     // A switch primes silently: no neighbor shows as "just changed" (§4.2).
     this.neighborStatus = null;
     this.postNeighbors();
+    this.airportPoints = airportsNear(this.selected.prepared, this.airports);
     // A switch resets alerts and primes silently (§4.2, §6.1).
     this.alerts.reset();
     this.lastSet = null;
@@ -454,6 +460,15 @@ export class Engine {
       this.lastSet = shown;
       this.eligibleCids = new Set(eligiblePilots(this.snapshot.pilots, now).map((p) => p.cid));
       this.post({ type: "predictions", set: shown });
+      this.post({
+        type: "airports",
+        airports: airportTraffic(
+          this.snapshot.pilots,
+          this.airportPoints,
+          now,
+          this.config.horizonMin,
+        ),
+      });
       this.evaluateAlerts(true);
     } catch (e) {
       this.error(`prediction failed: ${String(e)}`);

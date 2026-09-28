@@ -27,6 +27,22 @@ function buildId(): string {
 }
 
 /**
+ * Branch the build was made from: the pushed branch in CI (the PR's head branch for a
+ * pull request), else the local checkout. Only "main" is a production build.
+ */
+function buildBranch(): string {
+  const ci = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
+  if (ci) return ci;
+  try {
+    return execSync("git rev-parse --abbrev-ref HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
  * Dev-server-only replay source (§9.2). Recordings live in tests/fixtures (never public/,
  * which ships), so the dev server exposes them here:
  *   /__replay/                    -> ["2026-09-27T1917Z", ...]
@@ -81,6 +97,7 @@ export default defineConfig({
   },
   define: {
     __BUILD_ID__: JSON.stringify(buildId()),
+    __BUILD_BRANCH__: JSON.stringify(buildBranch()),
   },
   worker: {
     format: "es",

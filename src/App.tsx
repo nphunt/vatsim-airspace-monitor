@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useStore } from "./store/store";
 import { AudioController } from "./ui/AudioController";
+import { DevBuildBanner } from "./ui/DevBuildBanner";
 import { DisplayController } from "./ui/DisplayController";
 import { IdleController } from "./ui/IdleController";
 import { Toolbar } from "./ui/Toolbar";
@@ -15,6 +16,7 @@ export function App() {
     <div className="eram-app">
       <DisplayController />
       <Toolbar />
+      <DevBuildBanner />
       <IdleController />
       {errors.length > 0 && (
         <div className="eram-errors" role="alert">

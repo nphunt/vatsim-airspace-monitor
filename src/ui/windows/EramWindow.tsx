@@ -1,8 +1,6 @@
 import { useRef, useState, type PointerEvent, type ReactNode } from "react";
-import type { DockColumn, WindowState } from "../../store/settings";
-import { clampFloating, dockDragMode, snapZone, type DockDragMode } from "./layout";
-
-type SideColumn = Exclude<DockColumn, "main">;
+import type { WindowState } from "../../store/settings";
+import { clampFloating, dockDragMode, magnetSnap, type DockDragMode, type Rect } from "./layout";
 
 interface Props {
   title: ReactNode;
@@ -14,10 +12,13 @@ interface Props {
   onClose(): void;
   /** Move/resize finished away from the edges: commit floating geometry. */
   onGeometry(patch: Pick<WindowState, "x" | "y" | "w" | "h">): void;
-  /** Dropped at a side edge: dock into that column, positioned by the pointer's y. */
-  onSnap(column: SideColumn, clientY: number): void;
-  /** While dragging: the side column a drop would snap into, or null. */
-  onSnapPreview(column: SideColumn | null): void;
+  /**
+   * While dragging free: previews where a drop at the pointer would dock (a side edge, or a
+   * seam between docked windows in any column) and returns whether it would. Null clears.
+   */
+  onDockHover(pointer: { x: number; y: number } | null): boolean;
+  /** Dropped where onDockHover said it would dock: dock it there. */
+  onDockDrop(x: number, y: number): void;
   /** Docked, dragged up/down in its stack: where it would drop (pointer y), or null. */
   onReorderPreview(clientY: number | null): void;
   /** Docked, dropped while reordering: move it within its stack to the pointer's y. */
@@ -32,7 +33,10 @@ type Drag = {
   start: WindowState;
   /** A docked window only moves once the pointer has travelled a little (not on a click). */
   armed: boolean;
-  zone: SideColumn | null;
+  /** A drop now would dock (edge or seam), per onDockHover. */
+  docking: boolean;
+  /** Magnet targets: other windows' rects and the dock area, captured at drag start. */
+  magnet: { others: Rect[]; bounds: Rect } | null;
   /** Docked drags: where the window sat and where it was grabbed, and the current mode. */
   dock: { slot: DOMRect; columnW: number; grabX: number; grabY: number; mode: DockDragMode } | null;
 };
@@ -45,9 +49,13 @@ const TEAR_MAX_W = 520;
 /**
  * ERAM-style window frame (§7.2): title bar with name, minimize, dock/undock, close.
  * Any window drags by its title bar. A docked one moves up and down within its stack and
- * snaps back in where dropped; pulled far sideways it tears out to float. Dropping a
- * floating window at the left or right page edge snaps it into that side column. Floating windows resize from the
- * corner. Geometry is live locally and committed (persisted) on release.
+ * snaps back in where dropped; pulled far sideways it tears out to float. A free window
+ * docks where it is dropped: at the left or right page edge (that side column), or on a
+ * seam above, between or below docked windows in any column. Elsewhere it floats, with
+ * edges that snap to the screen and to other windows. Hold Alt to place it freely
+ * (no docking, no snapping).
+ * Floating windows resize from the corner. Geometry is live locally and committed
+ * (persisted) on release.
  */
 export function EramWindow(props: Props) {
   const { state, title } = props;
@@ -81,15 +89,31 @@ export function EramWindow(props: Props) {
       py: e.clientY,
       start: state,
       armed: !state.docked,
-      zone: null,
+      docking: false,
+      magnet: magnetTargets(e.currentTarget.closest("section")),
       dock,
     };
   }
 
-  function setZone(d: Drag, zone: SideColumn | null) {
-    if (zone === d.zone) return;
-    d.zone = zone;
-    props.onSnapPreview(zone);
+  /** Rects of every other window on screen, and the area below the toolbar. */
+  function magnetTargets(self: Element | null): Drag["magnet"] {
+    const area = document.querySelector(".eram-dock-area")?.getBoundingClientRect();
+    if (!area) return null;
+    const rect = (r: DOMRect): Rect => ({ x: r.left, y: r.top, w: r.width, h: r.height });
+    const others = [...document.querySelectorAll("section.eram-window")]
+      .filter((el) => el !== self)
+      .map((el) => rect(el.getBoundingClientRect()));
+    return { others, bounds: { x: 0, y: area.top, w: window.innerWidth, h: area.height } };
+  }
+
+  /** Free drag: dock preview first; otherwise magnetic edges. Alt turns both off. */
+  function place(d: Drag, next: WindowState, e: PointerEvent<HTMLElement>): WindowState {
+    if (d.kind === "move")
+      d.docking = props.onDockHover(e.altKey ? null : { x: e.clientX, y: e.clientY });
+    if (!d.docking && d.magnet && !e.altKey) {
+      next = { ...next, ...magnetSnap(next, d.magnet.others, d.magnet.bounds, d.kind) };
+    }
+    return clampFloating(next, window.innerWidth, window.innerHeight);
   }
 
   /**
@@ -100,7 +124,7 @@ export function EramWindow(props: Props) {
     const { slot, grabX, grabY } = d.dock;
     d.dock.mode = dockDragMode(e.clientX - d.px, d.dock.columnW, d.dock.mode);
     if (d.dock.mode === "reorder") {
-      setZone(d, null);
+      if (d.docking) d.docking = props.onDockHover(null);
       props.onReorderPreview(e.clientY);
       // Lifted as just its title bar, so the stack and the insertion line stay visible.
       setLive({ ...state, x: slot.left, y: e.clientY - grabY, w: slot.width, minimized: true });
@@ -110,14 +134,7 @@ export function EramWindow(props: Props) {
     const w = Math.min(slot.width, TEAR_MAX_W);
     const x = e.clientX - Math.min(grabX, w - 40);
     const h = Math.max(120, slot.height);
-    setLive(
-      clampFloating(
-        { ...state, x, y: e.clientY - grabY, w, h },
-        window.innerWidth,
-        window.innerHeight,
-      ),
-    );
-    setZone(d, snapZone(e.clientX, window.innerWidth));
+    setLive(place(d, { ...state, x, y: e.clientY - grabY, w, h }, e));
   }
 
   function move(e: PointerEvent<HTMLElement>) {
@@ -137,8 +154,7 @@ export function EramWindow(props: Props) {
       d.kind === "move"
         ? { ...d.start, x: d.start.x + dx, y: d.start.y + dy }
         : { ...d.start, w: Math.max(200, d.start.w + dx), h: Math.max(80, d.start.h + dy) };
-    setLive(clampFloating(next, window.innerWidth, window.innerHeight));
-    if (d.kind === "move") setZone(d, snapZone(e.clientX, window.innerWidth));
+    setLive(place(d, next, e));
   }
 
   function end(e: PointerEvent<HTMLElement>) {
@@ -146,10 +162,10 @@ export function EramWindow(props: Props) {
     drag.current = null;
     const reordering = d?.armed && d.dock?.mode === "reorder";
     if (reordering) props.onReorderPreview(null);
-    if (d?.zone) props.onSnapPreview(null);
+    if (d?.docking) props.onDockHover(null);
     if (e.type !== "pointercancel" && d?.armed) {
       if (reordering) props.onReorder(e.clientY);
-      else if (d.zone) props.onSnap(d.zone, e.clientY);
+      else if (d.docking) props.onDockDrop(e.clientX, e.clientY);
       else if (live) props.onGeometry({ x: live.x, y: live.y, w: live.w, h: live.h });
     }
     setLive(null);
@@ -178,7 +194,7 @@ export function EramWindow(props: Props) {
         title={
           state.docked
             ? "Drag up/down to reorder; pull sideways to undock"
-            : "Drag to move; drop at the left or right edge to dock there"
+            : "Drag to move; drop on a side edge or between docked windows to dock (Alt: place freely)"
         }
         onPointerDown={(e) => begin("move", e)}
         onPointerMove={move}
