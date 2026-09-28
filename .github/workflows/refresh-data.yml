@@ -1,0 +1,60 @@
+# Weekly data refresh (PUBLISHING_PLAN §3.3): VATSpy boundaries + FAA NASR nav data.
+# Opens a PR when anything under public/data changed; the owner merges it by hand.
+#
+# Needs the DATA_PR_TOKEN secret (fine-grained PAT or GitHub App token, this repo only,
+# contents + pull-requests write): PRs opened with the default GITHUB_TOKEN don't trigger
+# the ci workflow. Also enable Settings > Actions > General > "Allow GitHub Actions to
+# create and approve pull requests".
+name: refresh-data
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Both scripts fail instead of writing when a release breaks an assumption.
+      - run: npm run update-data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub API rate limit only
+      - run: npm run update-nav
+      - run: npm run validate-data
+      - run: npm test
+      - name: Describe the refresh
+        id: meta
+        run: |
+          echo "vatspy=$(node -p "require('./public/data/meta.json').vatspy.tag")" >> "$GITHUB_OUTPUT"
+          echo "airac=$(node -p "require('./public/data/nav/meta.json').cycle")" >> "$GITHUB_OUTPUT"
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.DATA_PR_TOKEN }}
+          branch: data-refresh
+          delete-branch: true
+          add-paths: public/data
+          commit-message: "Data refresh: VATSpy ${{ steps.meta.outputs.vatspy }}, AIRAC ${{ steps.meta.outputs.airac }}"
+          title: "Data refresh: VATSpy ${{ steps.meta.outputs.vatspy }}, AIRAC ${{ steps.meta.outputs.airac }}"
+          body: |
+            Automated weekly refresh from `refresh-data.yml`.
+
+            - VATSpy release: `${{ steps.meta.outputs.vatspy }}`
+            - FAA NASR cycle: `${{ steps.meta.outputs.airac }}`
+
+            `update-data`, `update-nav` and `validate-data` passed. A boundary change can
+            move exit-into results, so glance at the diff before merging.

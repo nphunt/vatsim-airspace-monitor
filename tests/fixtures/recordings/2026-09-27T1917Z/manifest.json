@@ -1,0 +1,9 @@
+{
+  "startedAt": "2026-09-27T19:17:00.022Z",
+  "endedAt": "2026-09-27T19:26:45.409Z",
+  "snapshots": 40,
+  "feedUrl": "https://data.vatsim.net/v3/vatsim-data.json",
+  "pseudonymizedCids": true,
+  "keptCid": false,
+  "vatspy": "v2609.2"
+}
