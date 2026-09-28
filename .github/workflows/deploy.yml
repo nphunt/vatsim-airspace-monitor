@@ -1,10 +1,7 @@
 # Build, re-test and deploy main to GitHub Pages (PUBLISHING_PLAN §3.2).
 # Rollback: run this workflow manually ("Run workflow") on the last good commit.
 #
-# Publishing is off until the repository variable PAGES_ENABLED is "true" (Settings >
-# Secrets and variables > Actions > Variables), set after Pages is enabled with
-# Source: GitHub Actions. Until then every push to main still runs the full test and
-# build checks; only the Pages upload and deploy are skipped.
+# Needs Settings > Pages > Build and deployment > Source: GitHub Actions.
 name: deploy
 
 on:
@@ -40,16 +37,13 @@ jobs:
       - run: npm run check-dist
       - run: npx playwright-core install --with-deps chromium
       - run: npm run smoke
-      - if: vars.PAGES_ENABLED == 'true'
-        uses: actions/configure-pages@v5
-      - if: vars.PAGES_ENABLED == 'true'
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
     needs: build
-    if: vars.PAGES_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
