@@ -104,6 +104,13 @@ describe("settings persistence", () => {
     expect(s.windows.load.open).toBe(false);
   });
 
+  it("keeps closed CIDs: positive integers, no duplicates", () => {
+    const s = parseSettings({ schemaVersion: 1, closed: [5, 5, -1, 1.5, "7", 9] });
+    expect(s.closed).toEqual([5, 9]);
+    expect(parseSettings({ schemaVersion: 1, closed: "x" }).closed).toEqual([]);
+    expect(parseSettings({ schemaVersion: 1 }).closed).toEqual([]);
+  });
+
   it("validates the scope vector length", () => {
     expect(parseSettings({ schemaVersion: 1, scopeVector: 4 }).scopeVector).toBe(4);
     expect(parseSettings({ schemaVersion: 1, scopeVector: 3 }).scopeVector).toBe(2);

@@ -6,6 +6,7 @@ import {
   buildScene,
   datablockAt,
   hitTest,
+  menuTargetAt,
   type DatablockOffset,
   type SceneTarget,
 } from "./scene";
@@ -84,12 +85,15 @@ export class ScopeController {
     canvas.addEventListener("wheel", onWheel, { passive: false });
     const onDblClick = (e: MouseEvent) => this.onDoubleClick(e);
     canvas.addEventListener("dblclick", onDblClick);
+    const onContextMenu = (e: MouseEvent) => this.onContextMenu(e);
+    canvas.addEventListener("contextmenu", onContextMenu);
     this.cleanup.push(
       () => ro.disconnect(),
       unsub,
       () => clearInterval(id),
       () => canvas.removeEventListener("wheel", onWheel),
       () => canvas.removeEventListener("dblclick", onDblClick),
+      () => canvas.removeEventListener("contextmenu", onContextMenu),
     );
     this.resize();
     // Redraw once the web font is in, so text and boxes switch to its metrics at once.
@@ -182,6 +186,7 @@ export class ScopeController {
           vectorMin: this.opts.vectorMin,
           showRoutes: this.opts.showRoutes,
           datablockOffsets,
+          closed: new Set(s.settings.closed),
         })
       : [];
     // Forget dragged datablocks of aircraft no longer on the scope.
@@ -264,13 +269,29 @@ export class ScopeController {
     if (db && datablockOffsets.delete(db.cid)) this.schedule();
   }
 
+  /** Right-click a listed aircraft (symbol or datablock): CLOSE/OPEN menu. */
+  private onContextMenu(e: MouseEvent): void {
+    e.preventDefault();
+    const { charPx, linePx } = this.metrics;
+    const t = menuTargetAt(this.scene, e.offsetX, e.offsetY, charPx, linePx);
+    if (t) {
+      useStore
+        .getState()
+        .openMenu({ cid: t.cid, callsign: t.callsign, x: e.clientX, y: e.clientY });
+    }
+  }
+
   pointerUp(e: PointerEvent): void {
     const d = this.drag;
     this.drag = null;
     if (!d || d.moved) return;
     const { charPx, linePx } = this.metrics;
     const cid = hitTest(this.scene, e.offsetX, e.offsetY, charPx, linePx);
-    if (cid !== null) useStore.getState().selectAircraft(cid, window.innerWidth);
+    const store = useStore.getState();
+    if (cid !== null) store.selectAircraft(cid, window.innerWidth);
+    // A click on empty scope (no target, no datablock) deselects; a pan never does.
+    else if (store.selection && !datablockAt(this.scene, e.offsetX, e.offsetY, charPx, linePx))
+      store.clearSelection();
   }
 
   pointerCancel(): void {

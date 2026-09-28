@@ -104,7 +104,7 @@ export function ScopeWindow() {
         <canvas
           ref={canvasRef}
           role="img"
-          aria-label="Scope: selected airspace, neighbors and traffic. Drag to pan, wheel to zoom, click an aircraft to select it. Drag a datablock to move it; double-click it to put it back."
+          aria-label="Scope: selected airspace, neighbors and traffic. Drag to pan, wheel to zoom, click an aircraft to select it or empty space to deselect, right-click it to close or open its datablock. Drag a datablock to move it; double-click it to put it back."
           onPointerDown={(e) => controller.current?.pointerDown(e.nativeEvent)}
           onPointerMove={(e) => controller.current?.pointerMove(e.nativeEvent)}
           onPointerUp={(e) => controller.current?.pointerUp(e.nativeEvent)}

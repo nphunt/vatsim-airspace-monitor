@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "./store/store";
+import { AircraftMenu } from "./ui/AircraftMenu";
 import { AudioController } from "./ui/AudioController";
 import { DevBuildBanner } from "./ui/DevBuildBanner";
 import { DisplayController } from "./ui/DisplayController";
@@ -27,6 +28,7 @@ export function App() {
       )}
       <WindowManager />
       <AudioController />
+      <AircraftMenu />
     </div>
   );
 }

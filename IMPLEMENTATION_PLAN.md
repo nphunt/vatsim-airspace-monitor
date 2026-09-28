@@ -55,7 +55,7 @@ The user MUST be able to switch airspaces at any time, across the whole United S
 - **Discovery (build time only):** ⚠ `status.vatsim.net/status.json` sends **no CORS header** (verified 2026-09-27 in a browser: `fetch` fails), so it MUST NOT be fetched from the app. `update-data.mjs` reads it in Node and writes `data.v3[0]` to `public/data/meta.json` as `feedUrl`; at runtime use `meta.feedUrl`, falling back to the hard-coded `https://data.vatsim.net/v3/vatsim-data.json`. See PUBLISHING_PLAN §0 B2.
 - **Timestamps** carry 5–7 fractional-second digits (e.g. `…17:34:11.2326506Z`). Parse with `core/parseVatsimTime` (truncate the fraction to 3 digits, `NaN` → skip the sample), never raw `Date.parse`. See PUBLISHING_PLAN §6.5.
 - **Feed:**
-  - Response headers: `access-control-allow-origin: *`, `Cache-Control: public, max-age=15`. → **Poll every 15 s, never faster.** Use `fetch(url, { cache: "no-cache" })` so the browser revalidates instead of serving its own cached copy (otherwise effective updates drop to every 30 s).
+  - Response headers: `access-control-allow-origin: *`, `Cache-Control: public, max-age=15`. → **Poll every 10 s** (owner decision 2026-09-28; was 15 s). The feed still updates about every 15 s and unchanged snapshots are dropped, so this only cuts the delay before a new update is picked up (~5 s on average instead of ~7.5 s), at 1.5× the requests. Use `fetch(url, { cache: "no-cache" })` so the browser revalidates instead of serving its own cached copy (otherwise effective updates drop to every 30 s).
   - `general.update_timestamp` (ISO string) – skip processing if unchanged from the last poll. A skipped (duplicate) poll does NOT count as a "missed" poll for any aircraft.
   - `pilots[]` – fields used: `cid, callsign, latitude, longitude, altitude` (ft, **true** altitude), `qnh_i_hg` (local altimeter setting), `groundspeed` (kt), `heading` (deg, this is *heading* not *track*), `transponder`, `last_updated`, `flight_plan` (may be `null`) with `aircraft_short, aircraft_faa, departure, arrival, altitude, route, flight_rules, assigned_transponder`. **Do not store or display `name`.** The app works in the altitude ATC sees (`atcAltitude` in `feedParse.ts`): at/above FL180 the pressure altitude, `altitude + (29.92 − qnh_i_hg) × 1000`, as VATSIM Radar and a standard-set altimeter show it; below FL180 the true altitude; true altitude when `qnh_i_hg` is missing (older recordings).
   - `controllers[]` – `cid`, `callsign` (e.g. `MEM_22_CTR`), `facility` (6 = CTR), `frequency`. Used for staffing and My Position (§5.12).
@@ -262,7 +262,8 @@ if no relevant crossing within horizon → not listed
 - **Antimeridian:** before geometry ops, shift longitudes into a continuous range around the selected airspace's center (e.g. PAZA: map to −250…−110 or 110…250 consistently for the airspace, its neighbors, and pilots). PAZA and PHZH MUST be selectable, and PAZA exits across 180° MUST resolve to the Russian FIR, not `UNK`.
 
 ### 5.6 Arrivals and departures
-- If `flight_plan.arrival` is an airport **inside** the selected airspace and the aircraft is inside: mark `ARR`. In RTE mode the path already ends at the destination, so a straight-line "exit" that the route doesn't make won't appear. In DR mode, still show the predicted exit but **suppress the exit alert** unless `distance(pos, arrivalAirport) > distance(pos, exitPoint) + ARR_SUPPRESS_MARGIN_NM`.
+- If `flight_plan.arrival` is an airport **inside** the selected airspace and the aircraft is inside: mark `ARR`. An ARR aircraft has **no exit** and never exit-alerts; instead it carries an **ETA** to the airport and is always listed in OUTBOUND (whatever the horizon), sorted with the exits. OUTBOUND shows the airport in TO, DIR blank, and the ETA as Zulu time (`1742Z`) with the countdown in the tooltip; the scope datablock shows `ETA 1742Z`.
+- ETA = distance / ground speed + `ARR_APPROACH_PAD_S`, anchored to the position report like exits. Distance runs along the predicted path to its point closest to the airport, then direct: an RTE path that ends at the airport gives the route distance; a path cut short by the horizon, or a DR path, is completed with the straight line.
 - Aircraft that depart inside the airspace appear automatically once `gs ≥ 40`.
 
 ### 5.7 Altitude filter (settings)
@@ -351,11 +352,11 @@ For each aircraft in (or predicted to enter) the selected airspace, compute **oc
 
 ### 6.1 State machine per aircraft (in `alerts.ts`)
 ```
-NONE ──(remaining ≤ EXIT_ALERT_S [120], not CLP, not ARR-suppressed)──► ACTIVE  (tone once, start flash)
+NONE ──(remaining ≤ EXIT_ALERT_S [120], not CLP, not ARR)──► ACTIVE  (tone once, start flash)
 ACTIVE ──(user acknowledges: click row or press key)──► ACKED (steady highlight, no flash, no sound)
 ACTIVE|ACKED ──(aircraft exits: inside becomes false)──► EXITED (show "EXITED ZID" for 30 s) ──► removed
 ACTIVE|ACKED ──(remaining > EXIT_ALERT_S + ALERT_REARM_MARGIN_S, OR no exit predicted within horizon,
-               OR becomes CLP/ARR-suppressed)──► NONE (re-armable)
+               OR becomes CLP/ARR)──► NONE (re-armable)
 ANY ──(aircraft dropped: disconnected, stale, or GS < MIN_GS_KT)──► removed (no sound)
 ```
 - **Hysteresis is required**: the 30 s re-arm margin prevents flapping around 2:00.
@@ -471,7 +472,7 @@ CLIP_REENTRY_S = 180
 EXITED_DISPLAY_S = 30
 ENTRY_ALERT_ENABLED = false
 ENTRY_ALERT_S = 120
-ARR_SUPPRESS_MARGIN_NM = 20
+ARR_APPROACH_PAD_S = 300
 TURN_THRESHOLD_DEG = 10
 ROUTE_CONFORM_NM = 5
 ROUTE_CONFORM_DEG = 30

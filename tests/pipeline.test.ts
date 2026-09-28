@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { destination } from "../src/core/geo";
+import { ARR_APPROACH_PAD_S } from "../src/config";
+import { destination, distanceNm } from "../src/core/geo";
 import { computePredictions, selectAirspace, type AirportIndex } from "../src/core/pipeline";
 import { TrackStore } from "../src/core/track";
 import type { FeedSnapshot, VatsimFlightPlan, VatsimPilot } from "../src/data/types";
@@ -117,28 +118,48 @@ describe("computePredictions (ZME)", () => {
 });
 
 describe("arrivals (§5.6)", () => {
-  it("flags ARR and suppresses a DR exit that is not clearly before the airport", () => {
-    // 35.5N heading north, landing KMEM (~30 nm south): the straight-line exit is far away.
-    const set = run(
-      "KZME",
-      snapshot([pilot({ lat: 35.5, flightPlan: fp({ arrival: "KMEM" }) })]),
-      undefined,
-      60,
-    );
-    const o = set.outbound[0]!;
+  const memphis = { lat: 35.5, flightPlan: fp({ arrival: "KMEM" }) };
+
+  it("replaces the exit with an ETA to the airport, plus approach padding", () => {
+    // 35.5N heading north, landing KMEM (~30 nm south): DR goes the other way, so the
+    // closest approach is the current position and the distance is direct.
+    const p = pilot(memphis);
+    const o = run("KZME", snapshot([p])).outbound[0]!;
     expect(o.arr).toBe(true);
-    expect(o.arrSuppressed).toBe(true);
+    expect(o.exit).toBeUndefined();
+    const [aLat, aLon] = airports.KMEM!;
+    expect(o.eta!.distNm).toBeCloseTo(distanceNm(p.lat, p.lon, aLat, aLon), 3);
+    expect(o.eta!.t).toBeCloseTo(
+      NOW + (o.eta!.distNm / 450) * 3_600_000 + ARR_APPROACH_PAD_S * 1000,
+      0,
+    );
   });
 
-  it("keeps the alert when the exit clearly comes before the airport", () => {
-    const set = run("KZME", snapshot([pilot({ lat: 36.9, flightPlan: fp({ arrival: "KMEM" }) })]));
-    const o = set.outbound[0]!;
-    expect(o.arr).toBe(true);
-    expect(o.arrSuppressed).toBe(false);
+  it("lists arrivals whatever the horizon, sorted with exits", () => {
+    const arr = pilot(memphis);
+    const exit = pilot({ lat: 36.9 });
+    // 1 min: the exit is past the horizon (resident), the arrival is listed anyway.
+    const short = run("KZME", snapshot([arr, exit]), undefined, 1);
+    expect(short.resident.map((p) => p.cid)).toEqual([exit.cid]);
+    expect(short.outbound.map((p) => p.cid)).toEqual([arr.cid]);
+    const wide = run("KZME", snapshot([arr, exit]));
+    expect(wide.outbound.map((p) => p.cid)).toEqual([exit.cid, arr.cid]);
+  });
+
+  it("measures along the path toward the airport", () => {
+    const p = pilot({ ...memphis, heading: 180 });
+    const o = run("KZME", snapshot([p])).outbound[0]!;
+    const [aLat, aLon] = airports.KMEM!;
+    const direct = distanceNm(p.lat, p.lon, aLat, aLon);
+    expect(o.eta!.distNm).toBeGreaterThanOrEqual(direct - 0.01);
+    expect(o.eta!.distNm).toBeLessThan(direct + 2);
   });
 
   it("is not ARR when landing outside the airspace", () => {
-    expect(run("KZME", snapshot([pilot()])).outbound[0]!.arr).toBe(false);
+    const o = run("KZME", snapshot([pilot()])).outbound[0]!;
+    expect(o.arr).toBe(false);
+    expect(o.eta).toBeUndefined();
+    expect(o.exit).toBeDefined();
   });
 });
 

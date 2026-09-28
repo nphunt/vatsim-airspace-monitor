@@ -86,8 +86,8 @@ describe.runIf(recording)("route-based prediction on the replay fixture (M6 acce
         const rte = computePredictions({ ...common, routes });
         const dr = computePredictions({ ...common, routes: null });
         hist.push({
-          rte: new Map(rte.outbound.map((p) => [p.cid, p])),
-          dr: new Map(dr.outbound.map((p) => [p.cid, p])),
+          rte: new Map(rte.outbound.filter((p) => p.exit).map((p) => [p.cid, p])),
+          dr: new Map(dr.outbound.filter((p) => p.exit).map((p) => [p.cid, p])),
           t: s.updateTimestamp,
         });
       }

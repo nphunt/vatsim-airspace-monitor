@@ -41,7 +41,6 @@ function outbound(
     turning: false,
     inside: true,
     arr: false,
-    arrSuppressed: false,
     exit: { t: exitT, distNm: 10, lat: 37, lon: -90, dir: "N", into: ZKC, clip },
     ...over,
   };
@@ -165,12 +164,21 @@ describe("AlertMachine (§6.1)", () => {
     expect(m.evaluate(input(set([outbound(3, T0 + 60_000)]), T0 + 5_000)).tone).toBe(true);
   });
 
-  it("never alerts for CLP or ARR-suppressed exits, and a later CLP clears it", () => {
+  it("never alerts for CLP exits or arrivals, and a later CLP clears it", () => {
     m.evaluate(input(set([outbound(1, T0 + 60_000, {}, true)]), T0));
-    m.evaluate(input(set([outbound(2, T0 + 60_000, { arr: true, arrSuppressed: true })]), T0));
+    const arr = { arr: true, exit: undefined, eta: { t: T0 + 60_000, distNm: 5 } };
+    m.evaluate(input(set([outbound(2, 0, arr)]), T0));
     expect(m.list()).toHaveLength(0);
     m.evaluate(input(set([outbound(3, T0 + 60_000)]), T0));
     m.evaluate(input(set([outbound(3, T0 + 55_000, {}, true)]), T0 + 5_000));
+    expect(m.list()).toHaveLength(0);
+  });
+
+  it("clears an exit alert when the aircraft becomes an arrival", () => {
+    m.evaluate(input(set([outbound(1, T0 + 60_000)]), T0));
+    expect(m.list()).toHaveLength(1);
+    const arr = { arr: true, exit: undefined, eta: { t: T0 + 600_000, distNm: 40 } };
+    m.evaluate(input(set([outbound(1, 0, arr)]), T0 + 1_000));
     expect(m.list()).toHaveLength(0);
   });
 
@@ -259,6 +267,26 @@ describe("AlertMachine: exits into a staffed facility (HANDOFF, then XFER)", () 
     m.ack(1);
     expect(at(T0 + 80_000, T0 + 10_000).tone).toBe(false); // 70 s left again
     expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "XFER" });
+  });
+
+  it("a closed aircraft alerts silently: ACKED, no tone, no XFER re-activation", () => {
+    m.evaluate(input(set([]), T0)); // prime
+    m.setClosed(new Set([1]));
+    const exitT = T0 + 200_000;
+    expect(at(exitT, T0 + 1_000).tone).toBe(false);
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "HANDOFF" });
+    expect(at(exitT, T0 + 140_000).tone).toBe(false);
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "XFER" });
+  });
+
+  it("closing acknowledges an ACTIVE alert; reopening lets the next stage sound", () => {
+    const exitT = T0 + 200_000;
+    at(exitT, T0);
+    expect(m.setClosed(new Set([1]))).toBe(true);
+    expect(m.list()[0]).toMatchObject({ state: "ACKED" });
+    m.setClosed(new Set());
+    expect(at(exitT, T0 + 140_000).tone).toBe(true);
+    expect(m.list()[0]).toMatchObject({ state: "ACTIVE", stage: "XFER" });
   });
 
   it("re-arms beyond 4:30", () => {
