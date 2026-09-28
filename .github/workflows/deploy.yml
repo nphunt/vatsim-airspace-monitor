@@ -23,7 +23,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # main's own build config must know how to be built next to /dev/ (BUILD_BRANCH).
+  # main's own build config must know how to be built next to /dev/ (PAGES_SUBPATH,
+  # BUILD_BRANCH). build-site.yml also checks every build's branch stamp.
   # Until the /dev/ setup is merged into main, a development push publishes nothing
   # rather than rebuild main with an older config that would stamp it "development".
   plan:
@@ -38,7 +39,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - id: check
         run: |
-          if grep -q BUILD_BRANCH vite.config.ts; then
+          if grep -q PAGES_SUBPATH vite.config.ts; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"

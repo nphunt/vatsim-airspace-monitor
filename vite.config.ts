@@ -93,16 +93,37 @@ function replayFixtures(): Plugin {
   };
 }
 
+/**
+ * Writes dist/build.json ({ branch, id }): what the build was stamped with. The deploy
+ * checks it against the branch it meant to build before publishing anything.
+ */
+function buildInfo(branch: string, id: string): Plugin {
+  return {
+    name: "vam-build-info",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "build.json",
+        source: `${JSON.stringify({ branch, id })}\n`,
+      });
+    },
+  };
+}
+
+const BRANCH = buildBranch();
+const BUILD_ID = buildId();
+
 export default defineConfig({
   base: pagesBase(),
-  plugins: [react(), replayFixtures()],
+  plugins: [react(), replayFixtures(), buildInfo(BRANCH, BUILD_ID)],
   server: {
     // Dev server reachable through an ngrok tunnel (hostnames only, no scheme).
     allowedHosts: ["amuck-yesterday-cilantro.ngrok-free.dev"],
   },
   define: {
-    __BUILD_ID__: JSON.stringify(buildId()),
-    __BUILD_BRANCH__: JSON.stringify(buildBranch()),
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+    __BUILD_BRANCH__: JSON.stringify(BRANCH),
   },
   worker: {
     format: "es",

@@ -46,6 +46,16 @@ jobs:
       - run: npm run validate-data
       # GITHUB_ACTIONS=true (always set here) builds with the /<repo>/[subpath/] base path.
       - run: npm run build
+      # The build must be stamped with the branch it was built from; a build config that
+      # doesn't honor BUILD_BRANCH (or writes no build.json) could put the development
+      # notice on the live site, so nothing publishes.
+      - name: Check the build's branch stamp
+        run: |
+          stamped=$(node -p "require('./dist/build.json').branch")
+          if [ "$stamped" != "$BUILD_BRANCH" ]; then
+            echo "::error::build stamped '$stamped', expected '$BUILD_BRANCH'"; exit 1
+          fi
+          echo "stamped $stamped @ $(node -p "require('./dist/build.json').id")"
       - run: npm run check-dist
       - run: npx playwright-core install --with-deps chromium
       - run: npm run smoke
