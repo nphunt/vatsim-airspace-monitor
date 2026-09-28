@@ -1,5 +1,6 @@
 import { useStore } from "../../store/store";
 import { alertAction, alertClass, formatCrossing } from "../format";
+import { onAircraftContextMenu, useClosed } from "../closedAircraft";
 import { useEngineNow } from "../hooks";
 
 export function AlertsTitle() {
@@ -14,13 +15,15 @@ export function AlertsTitle() {
  * then `XFER COMM KC_12_CTR 127.900` (yellow) from 1:00. An exit into an unstaffed
  * facility alerts once, at the configured threshold, with `TERM CTL` (terminate
  * control, frequency change approved).
- * Click a row, or focus it and press Enter, to acknowledge.
+ * Click a row, or focus it and press Enter, to acknowledge. A closed aircraft (right-click
+ * CLOSE) stays listed, dim and silent.
  */
 export function AlertsList() {
   const alerts = useStore((s) => s.engine.alerts);
   const selectedKey = useStore((s) => s.engine.predictions?.airspaceKey ?? null);
   const selectable = useStore((s) => s.engine.ready?.selectable);
   const ack = useStore((s) => s.ack);
+  const closed = useClosed();
   const now = useEngineNow();
   const own = selectable?.find((a) => a.key === selectedKey)?.label ?? "---";
 
@@ -36,10 +39,11 @@ export function AlertsList() {
           return (
             <tr
               key={a.key}
-              className={a.state === "EXITED" ? "dim" : alertClass(a)}
+              className={a.state === "EXITED" || closed.has(a.cid) ? "dim" : alertClass(a)}
               tabIndex={a.state === "ACTIVE" ? 0 : -1}
               onClick={onAck}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onAck()}
+              onContextMenu={(e) => onAircraftContextMenu(e, a.cid, a.callsign)}
               title={a.state === "ACTIVE" ? "Click to acknowledge" : undefined}
             >
               <td>{a.callsign}</td>

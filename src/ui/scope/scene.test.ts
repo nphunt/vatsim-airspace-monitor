@@ -10,6 +10,7 @@ import {
   datablockRect,
   hitTest,
   leaderLine,
+  menuTargetAt,
   type SceneTarget,
 } from "./scene";
 
@@ -178,6 +179,44 @@ describe("buildScene", () => {
       scope: [target(), target({ cid: 2 })],
     });
     expect(buildScene(input(s)).map((t) => t.level)).toEqual(["dim", "dim"]);
+  });
+});
+
+describe("closed datablocks", () => {
+  const input = (s: PredictionSet, closed: number[]) => ({
+    set: s,
+    alerts: [],
+    selectedCid: null,
+    projection: makeProjection(36.5, -90),
+    view: { cx: 0, cy: 0, pxPerNm: 1 },
+    width: 400,
+    height: 400,
+    now: T0,
+    vectorMin: 2,
+    showRoutes: false,
+    closed: new Set(closed),
+  });
+
+  it("a closed outbound draws limited and dim, with no exit marker", () => {
+    const s = set({ outbound: [pred({ exit })], scope: [target()] });
+    const [t] = buildScene(input(s, [1]));
+    expect(t).toMatchObject({ full: false, level: "dim", listed: true, closed: true, exit: null });
+    expect(t!.lines).toEqual(["DAL123", "350C KMCI"]);
+    const [open] = buildScene(input(s, []));
+    expect(open).toMatchObject({ full: true, closed: false });
+  });
+
+  it("closing unlisted traffic changes nothing", () => {
+    const [t] = buildScene(input(set({ scope: [target()] }), [1]));
+    expect(t).toMatchObject({ listed: false, closed: false });
+  });
+
+  it("right-click finds listed targets, closed or not, never unlisted ones", () => {
+    const s = set({ outbound: [pred({ exit })], scope: [target()] });
+    const [closed] = buildScene(input(s, [1]));
+    expect(menuTargetAt([closed!], closed!.x, closed!.y, 8, 15)?.cid).toBe(1);
+    const [unlisted] = buildScene(input(set({ scope: [target()] }), []));
+    expect(menuTargetAt([unlisted!], unlisted!.x, unlisted!.y, 8, 15)).toBeNull();
   });
 });
 

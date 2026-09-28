@@ -269,6 +269,26 @@ describe("AlertMachine: exits into a staffed facility (HANDOFF, then XFER)", () 
     expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "XFER" });
   });
 
+  it("a closed aircraft alerts silently: ACKED, no tone, no XFER re-activation", () => {
+    m.evaluate(input(set([]), T0)); // prime
+    m.setClosed(new Set([1]));
+    const exitT = T0 + 200_000;
+    expect(at(exitT, T0 + 1_000).tone).toBe(false);
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "HANDOFF" });
+    expect(at(exitT, T0 + 140_000).tone).toBe(false);
+    expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "XFER" });
+  });
+
+  it("closing acknowledges an ACTIVE alert; reopening lets the next stage sound", () => {
+    const exitT = T0 + 200_000;
+    at(exitT, T0);
+    expect(m.setClosed(new Set([1]))).toBe(true);
+    expect(m.list()[0]).toMatchObject({ state: "ACKED" });
+    m.setClosed(new Set());
+    expect(at(exitT, T0 + 140_000).tone).toBe(true);
+    expect(m.list()[0]).toMatchObject({ state: "ACTIVE", stage: "XFER" });
+  });
+
   it("re-arms beyond 4:30", () => {
     at(T0 + 200_000, T0);
     at(T0 + 271_000, T0 + 1_000);

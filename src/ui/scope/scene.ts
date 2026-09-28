@@ -13,6 +13,11 @@ export type TargetLevel = "own" | "inbound" | "dim";
 
 export interface SceneTarget {
   cid: number;
+  callsign: string;
+  /** In OUTBOUND, INBOUND or resident: has the right-click CLOSE/OPEN menu. */
+  listed: boolean;
+  /** Datablock closed by the user: shown limited and dim, with no exit marker. */
+  closed: boolean;
   /** Screen position, px (extrapolated to now). */
   x: number;
   y: number;
@@ -58,6 +63,8 @@ export interface SceneInput {
   showRoutes: boolean;
   /** Datablocks the user dragged, by CID; others use DEFAULT_DATABLOCK. */
   datablockOffsets?: ReadonlyMap<number, DatablockOffset>;
+  /** CIDs whose datablock the user closed (right-click CLOSE). */
+  closed?: ReadonlySet<number>;
 }
 
 /**
@@ -137,7 +144,10 @@ export function buildScene(input: SceneInput): SceneTarget[] {
   }
   const out: SceneTarget[] = [];
   for (const t of set.scope) {
-    const found = findPrediction(set, t.cid);
+    const listed = findPrediction(set, t.cid);
+    const closed = listed !== null && (input.closed?.has(t.cid) ?? false);
+    // A closed aircraft draws like unlisted traffic: limited datablock, dim, no exit marker.
+    const found = closed ? null : listed;
     const pos = extrapolate(t, now);
     const [px, py] = project(pr, pos.lat, pos.lon);
     const [x, y] = toScreen(view, w, h, px, py);
@@ -159,6 +169,9 @@ export function buildScene(input: SceneInput): SceneTarget[] {
     const showRoute = t.routeAhead && (selected || (input.showRoutes && found !== null));
     out.push({
       cid: t.cid,
+      callsign: t.callsign,
+      listed: listed !== null,
+      closed,
       x,
       y,
       trail: screenPath(t.trail, 0, input),
@@ -259,6 +272,30 @@ export function datablockAt(
     if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) return t;
   }
   return null;
+}
+
+/**
+ * The listed aircraft (closed or not) under a right-click: target symbol first, nearest,
+ * then a datablock under the pointer. Unlisted traffic has no menu.
+ */
+export function menuTargetAt(
+  targets: readonly SceneTarget[],
+  sx: number,
+  sy: number,
+  charPx: number,
+  linePx: number,
+): SceneTarget | null {
+  const listed = targets.filter((t) => t.listed);
+  let best: SceneTarget | null = null;
+  let bestD = HIT_RADIUS_PX;
+  for (const t of listed) {
+    const d = Math.hypot(t.x - sx, t.y - sy);
+    if (d <= bestD) {
+      best = t;
+      bestD = d;
+    }
+  }
+  return best ?? datablockAt(listed, sx, sy, charPx, linePx);
 }
 
 /** Pick radius around a target symbol, px. */

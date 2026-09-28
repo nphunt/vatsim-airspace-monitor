@@ -39,6 +39,8 @@ export interface EngineConfig {
   /** Altitude filter (§5.7), hundreds of feet; null = no bound. */
   altFloor: number | null;
   altCeiling: number | null;
+  /** CIDs whose datablock is closed: their alerts come up acknowledged, with no tone. */
+  closedCids: number[];
 }
 
 /** Select the airspace (id "KZME", key, or label "ZME"), or null for none. Recomputes immediately (§4.2). */
@@ -123,6 +125,8 @@ export interface StatusMessage {
   myPosition: MyPositionStatus | null;
   /** Set when My Position just auto-selected this airspace key. */
   autoSelected: string | null;
+  /** Closed CIDs no longer in the feed (disconnected): the main thread forgets them. */
+  closedGone: number[];
 }
 
 export interface ErrorMessage {

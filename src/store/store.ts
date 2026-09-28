@@ -20,6 +20,7 @@ import type { ReplayStatus } from "../worker/replay";
 import {
   loadSettings,
   saveSettings,
+  CLOSED_MAX,
   LOAD_THRESHOLD_MAX,
   altBounds,
   type AudioDevice,
@@ -70,6 +71,14 @@ export interface AircraftSelection {
   last: Prediction | null;
 }
 
+/** Right-click menu on an aircraft (list row or scope datablock), at page px. */
+export interface AircraftMenu {
+  cid: number;
+  callsign: string;
+  x: number;
+  y: number;
+}
+
 export interface AudioView {
   state: AudioState;
   sinkSupported: boolean;
@@ -88,6 +97,8 @@ interface AppState {
   selection: AircraftSelection | null;
   /** Idle stop (PUBLISHING_PLAN §4): polling paused until the user resumes. Not persisted. */
   paused: boolean;
+  /** Open right-click menu, or null. Not persisted. */
+  menu: AircraftMenu | null;
 
   engineStarted(localNow: number): void;
   engineMessage(msg: FromEngine, localNow: number): void;
@@ -105,6 +116,10 @@ interface AppState {
    */
   selectAircraft(cid: number, viewportWidth: number): void;
   clearSelection(): void;
+  /** Close (dim, limited datablock, silent alerts) or reopen an aircraft's datablock. */
+  setClosed(cid: number, closed: boolean): void;
+  openMenu(menu: AircraftMenu): void;
+  closeMenu(): void;
   patchWindow(id: WindowId, patch: Partial<WindowState>): void;
   setWindows(windows: Settings["windows"]): void;
   /** Dock column width weights (§7.2 side columns). */
@@ -176,11 +191,16 @@ export function engineConfig(s: Settings): EngineConfig {
     alertThresholdS: s.alertThresholdS,
     altFloor: s.altFloor,
     altCeiling: s.altCeiling,
+    closedCids: s.closed,
   };
 }
 
+const sameValue = (a: unknown, b: unknown) =>
+  a === b ||
+  (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]));
+
 const sameConfig = (a: EngineConfig, b: EngineConfig) =>
-  (Object.keys(a) as (keyof EngineConfig)[]).every((k) => a[k] === b[k]);
+  (Object.keys(a) as (keyof EngineConfig)[]).every((k) => sameValue(a[k], b[k]));
 
 /** Engine clock extrapolated to local time `localNow` (live or replay, §4.1). */
 export function engineNow(clock: ClockAnchor | null, localNow: number): number {
@@ -206,6 +226,7 @@ export const useStore = create<AppState>()((set, get) => {
     exitFilter: null,
     selection: null,
     paused: false,
+    menu: null,
 
     engineStarted: (localNow) => set({ engine: { ...initialEngine, startedAt: localNow } }),
 
@@ -231,6 +252,10 @@ export const useStore = create<AppState>()((set, get) => {
           e.staffed = new Set(msg.staffed);
           e.myPosition = msg.myPosition;
           if (msg.autoSelected) updateSettings({ selectedAirspace: msg.autoSelected });
+          if (msg.closedGone.length > 0) {
+            const gone = new Set(msg.closedGone);
+            updateSettings({ closed: get().settings.closed.filter((c) => !gone.has(c)) });
+          }
           break;
         case "predictions": {
           e.predictions = msg.set;
@@ -282,6 +307,12 @@ export const useStore = create<AppState>()((set, get) => {
       }
     },
     clearSelection: () => set({ selection: null }),
+    setClosed: (cid, closed) => {
+      const rest = get().settings.closed.filter((c) => c !== cid);
+      updateSettings({ closed: closed ? [...rest, cid].slice(-CLOSED_MAX) : rest });
+    },
+    openMenu: (menu) => set({ menu }),
+    closeMenu: () => set({ menu: null }),
     patchWindow: (id, patch) => {
       const windows = get().settings.windows;
       updateSettings({ windows: { ...windows, [id]: { ...windows[id], ...patch } } });

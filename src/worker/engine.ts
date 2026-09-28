@@ -64,6 +64,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
   alertThresholdS: EXIT_ALERT_S,
   altFloor: null,
   altCeiling: null,
+  closedCids: [],
 };
 
 /** Prediction horizon: the list horizon, or the load horizon while LOAD is open (§5.2). */
@@ -168,6 +169,7 @@ export class Engine {
     this.started = true;
     this.config = { ...msg.config };
     this.alerts.config = alertConfig(this.config);
+    this.alerts.setClosed(new Set(this.config.closedCids));
     const base = msg.dataBaseUrl;
 
     // Tick first, so the watchdog sees a live worker even while data is loading.
@@ -317,7 +319,15 @@ export class Engine {
       transition && this.config.autoSelect && transition !== this.selected?.airspace.key
         ? transition
         : null;
-    this.post({ type: "status", staffed: [...staffing.keys()], myPosition: me, autoSelected });
+    const live = new Set(this.snapshot.pilots.map((p) => p.cid));
+    const closedGone = this.config.closedCids.filter((cid) => !live.has(cid));
+    this.post({
+      type: "status",
+      staffed: [...staffing.keys()],
+      myPosition: me,
+      autoSelected,
+      closedGone,
+    });
     if (!autoSelected) this.postNeighbors(staffing);
     return autoSelected;
   }
@@ -365,6 +375,7 @@ export class Engine {
       config.altCeiling !== this.config.altCeiling;
     this.config = { ...config };
     this.alerts.config = alertConfig(this.config);
+    if (this.alerts.setClosed(new Set(config.closedCids))) this.postAlerts(false);
     if (cidChanged) {
       // Re-evaluate at once, so entering a CID while logged on auto-selects immediately.
       this.myPosition.reset();

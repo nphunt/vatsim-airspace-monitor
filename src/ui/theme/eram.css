@@ -768,3 +768,25 @@ input[aria-invalid="true"] {
 .eram-about a {
   color: var(--eram-toolbar-active);
 }
+
+/* Right-click menu on an aircraft (list row or scope datablock): CLOSE / OPEN. */
+.eram-context-menu {
+  position: fixed;
+  z-index: 1002;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--eram-window-border);
+  background: var(--eram-bg);
+}
+
+.eram-context-title {
+  padding: 2px 6px;
+  color: var(--eram-datablock-dim);
+  border-bottom: 1px solid var(--eram-window-border);
+}
+
+.eram-context-menu button {
+  text-align: left;
+  padding: 3px 6px;
+}

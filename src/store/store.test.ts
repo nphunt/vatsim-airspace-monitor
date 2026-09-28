@@ -67,11 +67,36 @@ describe("store", () => {
           selectable: true,
         },
         autoSelected: "KZME#dom",
+        closedGone: [],
       },
       1,
     );
     expect(useStore.getState().settings.selectedAirspace).toBe("KZME#dom");
     expect(useStore.getState().engine.staffed.has("KZME#dom")).toBe(true);
+  });
+
+  it("closing an aircraft persists, reaches the engine, and reopening undoes it", () => {
+    useStore.getState().setClosed(7, true);
+    expect(useStore.getState().settings.closed).toEqual([7]);
+    const last = sent[sent.length - 1];
+    expect(last).toMatchObject({ type: "config", config: { closedCids: [7] } });
+    useStore.getState().setClosed(7, true); // no duplicates
+    expect(useStore.getState().settings.closed).toEqual([7]);
+    useStore.getState().setClosed(7, false);
+    expect(useStore.getState().settings.closed).toEqual([]);
+  });
+
+  it("forgets closed aircraft the engine reports gone from the feed", () => {
+    useStore.getState().setClosed(7, true);
+    useStore.getState().setClosed(8, true);
+    useStore
+      .getState()
+      .engineMessage(
+        { type: "status", staffed: [], myPosition: null, autoSelected: null, closedGone: [7] },
+        1,
+      );
+    expect(useStore.getState().settings.closed).toEqual([8]);
+    useStore.getState().setClosed(8, false);
   });
 
   it("a row click selects, acks an ACTIVE alert and opens the readout", () => {

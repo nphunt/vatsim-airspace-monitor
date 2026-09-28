@@ -11,6 +11,12 @@ Changes on `development` that are not on `main` yet. At release, move these into
 - The SCOPE datablock shows `ETA 1742Z` in place of the exit time, and the flight plan readout shows `LANDING KMEM ETA 1742Z (12:34)`.
 - The AIRPORTS window's `NEXT` column still uses its own straight-line ETA without the 5 minutes, so it can differ from OUTBOUND.
 
+### Closing aircraft
+
+- **Right-click** an aircraft in OUTBOUND, INBOUND or ALERTS, or its target or datablock on the SCOPE, for a menu with **CLOSE**. A closed aircraft is drawn **dim** in the lists, drops to a **limited datablock** (callsign, altitude, destination) with no exit marker on the scope, and its alerts stay listed but **silent**: they come up acknowledged, never tone or flash, and a HANDOFF doesn't re-sound at XFER. Closing an aircraft with a flashing alert acknowledges it.
+- Right-click it again and choose **OPEN** to undo. Its next alert stage sounds as usual.
+- Closed aircraft are saved with the settings, so they stay closed across reloads, and are forgotten once the pilot disconnects.
+
 ### Feed
 
 - The VATSIM feed is polled every **10 s** instead of 15 s. VATSIM still publishes about every 15 s, so data is no newer than before, but each update shows up sooner: about 5 s after VATSIM publishes it on average, instead of 7.5 s. Failures back off 10 → 20 → 40 → 60 s.

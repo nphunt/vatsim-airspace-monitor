@@ -10,6 +10,7 @@ import {
   listColumns,
   rowClass,
 } from "../format";
+import { onAircraftContextMenu, useClosed } from "../closedAircraft";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -55,6 +56,7 @@ export function OutboundList() {
   const alerts = useStore((s) => s.engine.alerts);
   const selectedCid = useStore((s) => s.selection?.cid ?? null);
   const selectAircraft = useStore((s) => s.selectAircraft);
+  const closed = useClosed();
   const alertByCid = new Map(alerts.filter((a) => a.kind === "exit").map((a) => [a.cid, a]));
 
   const summary = exitSummary(rows);
@@ -102,10 +104,12 @@ export function OutboundList() {
                   <tr
                     key={p.cid}
                     className={rowClass(
-                      alertClass(alert) ?? (clip ? "dim" : undefined),
+                      // Closed (right-click CLOSE): dim, whatever its alert state.
+                      closed.has(p.cid) ? "dim" : (alertClass(alert) ?? (clip ? "dim" : undefined)),
                       p.cid === selectedCid,
                     )}
                     onClick={() => selectAircraft(p.cid, window.innerWidth)}
+                    onContextMenu={(e) => onAircraftContextMenu(e, p.cid, p.callsign)}
                   >
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>

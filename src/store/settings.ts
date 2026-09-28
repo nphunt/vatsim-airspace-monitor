@@ -129,6 +129,11 @@ export interface Settings {
   bright: Brightness;
   /** Pause polling after IDLE_STOP_MIN without input (PUBLISHING_PLAN §4). */
   idleStop: boolean;
+  /**
+   * CIDs whose datablock was closed (right-click CLOSE): dimmed in the lists, a limited
+   * datablock on the scope, alerts silent. Dropped once the pilot leaves the feed.
+   */
+  closed: number[];
   /** Dock column widths as flex weights (only columns holding windows are shown). */
   columns: Record<DockColumn, number>;
   windows: Record<WindowId, WindowState>;
@@ -185,6 +190,7 @@ export const DEFAULT_SETTINGS: Settings = {
   fontSizePx: FONT_SIZE_PX,
   bright: { list: 100, map: 100, datablock: 100 },
   idleStop: true,
+  closed: [],
   columns: { left: 1, main: 1, right: 1 },
   windows: {
     // Default open: OUTBOUND and ALERTS (§7.2). Lists dock; menus float.
@@ -259,6 +265,15 @@ function readColumns(v: unknown, d: Record<DockColumn, number>): Record<DockColu
   return { left: w("left"), main: w("main"), right: w("right") };
 }
 
+/** Most closed CIDs kept; the oldest go first. */
+export const CLOSED_MAX = 500;
+
+function readCids(v: unknown): number[] {
+  if (!Array.isArray(v)) return [];
+  const ok = v.filter((n): n is number => Number.isInteger(n) && (n as number) > 0);
+  return [...new Set(ok)].slice(-CLOSED_MAX);
+}
+
 /** Validates a parsed blob field by field against the defaults. */
 export function parseSettings(raw: unknown): Settings {
   const d = DEFAULT_SETTINGS;
@@ -299,6 +314,7 @@ export function parseSettings(raw: unknown): Settings {
     fontSizePx: oneOf(FONT_SIZE_CHOICES_PX, raw.fontSizePx, d.fontSizePx),
     bright: readBright(raw.bright, d.bright),
     idleStop: bool(raw.idleStop, d.idleStop),
+    closed: readCids(raw.closed),
     columns: readColumns(raw.columns, d.columns),
     windows: Object.fromEntries(
       WINDOW_IDS.map((id) => [id, readWindow(windows[id], d.windows[id])]),

@@ -29,6 +29,8 @@ import type {
 // Unstaffed exits and entries have one stage, ALERT, at the configured threshold.
 // If staffing changes mid-alert the stage follows it; a controller logging on turns an
 // ALERT into a new (ACTIVE) HANDOFF.
+// An aircraft whose datablock is closed (right-click CLOSE) still alerts, but silently:
+// its alerts come up ACKED, never re-activate, and closing one ACTIVE acknowledges it.
 
 export type AlertKind = "exit" | "entry";
 export type AlertState = "ACTIVE" | "ACKED" | "EXITED";
@@ -101,6 +103,7 @@ export class AlertMachine {
   private readonly entries = new Map<string, AlertEntry>();
   private priming = true;
   private lastToneAt = -Infinity;
+  private closed: ReadonlySet<number> = new Set();
   config: AlertConfig;
 
   constructor(config: AlertConfig = DEFAULT_ALERT_CONFIG) {
@@ -114,6 +117,14 @@ export class AlertMachine {
   reset(): void {
     this.entries.clear();
     this.priming = true;
+  }
+
+  /** CIDs with a closed datablock; their ACTIVE alerts are acknowledged. Returns changed. */
+  setClosed(cids: ReadonlySet<number>): boolean {
+    this.closed = cids;
+    let changed = false;
+    for (const cid of cids) if (this.ack(cid)) changed = true;
+    return changed;
   }
 
   /** ACTIVE -> ACKED. Returns whether anything changed. */
@@ -176,6 +187,7 @@ export class AlertMachine {
       if (handoff) thresholdS = c.handoffAlertS;
       const stage: AlertStage = !handoff ? "ALERT" : remainingS <= c.xferCommS ? "XFER" : "HANDOFF";
       const e = this.entries.get(key);
+      const silent = this.closed.has(p.cid);
       if (!e || e.state === "EXITED") {
         if (suppressed || remainingS > thresholdS) return;
         this.entries.set(key, {
@@ -186,7 +198,7 @@ export class AlertMachine {
           aircraftType: p.aircraftType,
           altitude: p.altitude,
           trend: p.trend,
-          state: "ACTIVE",
+          state: silent ? "ACKED" : "ACTIVE",
           stage,
           t,
           dir,
@@ -194,7 +206,7 @@ export class AlertMachine {
           activatedAt: now,
           lastToneAt: now,
         });
-        fired = true;
+        if (!silent) fired = true;
         changed = true;
         return;
       }
@@ -206,7 +218,7 @@ export class AlertMachine {
       // A new stage that asks for a new action (hand off, transfer comms) fires again;
       // losing the controller just relabels it.
       if (stage !== e.stage) {
-        if (stage !== "ALERT" && !(e.stage === "XFER" && stage === "HANDOFF")) {
+        if (!silent && stage !== "ALERT" && !(e.stage === "XFER" && stage === "HANDOFF")) {
           e.state = "ACTIVE";
           e.activatedAt = now;
           e.lastToneAt = now;

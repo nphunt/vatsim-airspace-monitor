@@ -45,6 +45,7 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 
 - **LOAD** forecasts how many aircraft will be in your airspace: `TACT` in 5-minute bins for the next hour, `STRAT` in 15-minute bins for two hours. A bar turns red at your threshold (set it in the window header, default 20). Click a bar to list the aircraft in it.
 - **SCOPE** is a simple map of your airspace with targets, datablocks (with each aircraft's filed destination) and predicted exit points; airports with traffic show as small hollow squares with their code. Drag to pan, scroll to zoom. **Drag a datablock** to move it off its neighbors (the leader line follows it); double-click it to put it back, or `DB RESET` to reset them all. Moved datablocks keep their place when you pan and zoom. CRC stays the real scope; this is for a quick look.
+- **Right-click** an aircraft (an OUTBOUND, INBOUND or ALERTS row, or its target or datablock on the SCOPE) and choose **CLOSE** once you're done with it: it goes dim in the lists, drops to a limited datablock on the scope, and its alerts stay listed but silent (no tone, no flashing). Right-click it again and choose **OPEN** to undo. Closed aircraft are remembered across reloads until the pilot disconnects.
 
 ### Toolbar
 
