@@ -103,6 +103,7 @@ export class ReplayFeed {
       lastError: null,
       nextPollAt: null,
       polls: [],
+      activeUrl: null,
     };
   }
 

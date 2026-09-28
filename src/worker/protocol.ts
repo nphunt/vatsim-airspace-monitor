@@ -15,6 +15,8 @@ export interface InitMessage {
    * (PUBLISHING_PLAN §2.3), so the main thread passes this explicitly.
    */
   dataBaseUrl: string;
+  /** Absolute backend API base ending in "/", or absent to poll VATSIM directly. */
+  apiBaseUrl?: string;
   config: EngineConfig;
   /** Dev-only replay (§9.2): absolute URL of the recording and the starting rate. */
   replay?: { baseUrl: string; rate: number };

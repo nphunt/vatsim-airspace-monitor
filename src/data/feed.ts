@@ -1,6 +1,18 @@
-import { FEED_BACKOFF_MAX_MS, FEED_FETCH_TIMEOUT_MS, FEED_POLL_MS, POLL_LOG_SIZE } from "../config";
+import {
+  FEED_BACKOFF_MAX_MS,
+  FEED_EARLY_MAX_RETRIES,
+  FEED_EARLY_RETRY_MS,
+  FEED_FETCH_TIMEOUT_MS,
+  FEED_LEAD_STEP_AFTER,
+  FEED_LEAD_STEP_MS,
+  FEED_POLL_MS,
+  FEED_PRIMARY_RETRY_MS,
+  FEED_PUBLISH_MS,
+  POLL_LOG_SIZE,
+} from "../config";
 import type { ServerOffsetEstimator } from "../core/clock";
 import { feedUpdateTimestamp, normalizeFeed } from "../core/feedParse";
+import { PollSchedule } from "./pollSchedule";
 import type { FeedSnapshot } from "./types";
 
 export type PollResult = "new" | "dup" | "error";
@@ -22,10 +34,17 @@ export interface FeedStatus {
   nextPollAt: number | null;
   /** Most recent polls, oldest first (§9.3 throttling check). */
   polls: PollRecord[];
+  /** URL the latest snapshot came from (backend or VATSIM), or null before the first. */
+  activeUrl: string | null;
 }
 
 export interface FeedPollerOptions {
   url: string;
+  /**
+   * Used when `url` fails (the backend is down or not running): that poll retries here at
+   * once, and `url` is skipped for FEED_PRIMARY_RETRY_MS.
+   */
+  fallbackUrl?: string;
   estimator: ServerOffsetEstimator;
   onSnapshot: (snapshot: FeedSnapshot) => void;
   onPoll?: (status: FeedStatus) => void;
@@ -35,15 +54,29 @@ export interface FeedPollerOptions {
   clearTimer?: (handle: unknown) => void;
 }
 
-/** FEED_POLL_MS (10 s) normally; doubling after each failure, 60 s max (§10 M2). */
+/** After failures: FEED_POLL_MS (10 s) doubling after each, 60 s max (§10 M2). */
 export function backoffDelay(consecutiveFailures: number): number {
   return Math.min(FEED_POLL_MS * 2 ** consecutiveFailures, FEED_BACKOFF_MAX_MS);
 }
 
+/** Poll timing for VATSIM's 15 s cycle. server/services/feedHub.ts builds the same. */
+export const vatsimPollSchedule = () =>
+  new PollSchedule({
+    publishMs: FEED_PUBLISH_MS,
+    fallbackMs: FEED_POLL_MS,
+    retryMs: FEED_EARLY_RETRY_MS,
+    maxRetries: FEED_EARLY_MAX_RETRIES,
+    stepMs: FEED_LEAD_STEP_MS,
+    stepAfter: FEED_LEAD_STEP_AFTER,
+    minDelayMs: FEED_EARLY_RETRY_MS,
+    maxDelayMs: FEED_PUBLISH_MS + FEED_EARLY_RETRY_MS,
+  });
+
 /**
- * Polls the VATSIM feed (§3.1): every FEED_POLL_MS (10 s), `cache: "no-cache"` so the
- * browser revalidates instead of reusing its own copy, and duplicate snapshots (unchanged
- * update_timestamp) are dropped without counting as a failure. Every response, duplicate
+ * Polls the VATSIM feed (§3.1): timed to land just after each update (PollSchedule),
+ * `cache: "no-cache"` so the browser revalidates instead of reusing its own copy, and
+ * duplicate snapshots (unchanged update_timestamp) are dropped without counting as a
+ * failure. Every response, duplicate
  * or not, feeds the server-offset estimator.
  */
 export class FeedPoller {
@@ -61,6 +94,10 @@ export class FeedPoller {
   private lastError: string | null = null;
   private nextPollAt: number | null = null;
   private polls: PollRecord[] = [];
+  private activeUrl: string | null = null;
+  /** Local ms before which `url` is skipped in favor of `fallbackUrl`. */
+  private primaryRetryAt = 0;
+  private readonly schedule = vatsimPollSchedule();
   private readonly opts: FeedPollerOptions;
 
   constructor(opts: FeedPollerOptions) {
@@ -93,7 +130,31 @@ export class FeedPoller {
       lastError: this.lastError,
       nextPollAt: this.nextPollAt,
       polls: [...this.polls],
+      activeUrl: this.activeUrl,
     };
+  }
+
+  private async fetchFeed(url: string) {
+    const res = await this.fetchImpl(url, {
+      cache: "no-cache",
+      signal: AbortSignal.timeout(FEED_FETCH_TIMEOUT_MS),
+    });
+    const receivedAt = this.localNow();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json: unknown = await res.json();
+    return { url, json, ts: feedUpdateTimestamp(json), receivedAt };
+  }
+
+  private async fetchWithFallback() {
+    const { url, fallbackUrl } = this.opts;
+    if (!fallbackUrl) return this.fetchFeed(url);
+    if (this.localNow() < this.primaryRetryAt) return this.fetchFeed(fallbackUrl);
+    try {
+      return await this.fetchFeed(url);
+    } catch {
+      this.primaryRetryAt = this.localNow() + FEED_PRIMARY_RETRY_MS;
+      return this.fetchFeed(fallbackUrl);
+    }
   }
 
   private async poll(): Promise<void> {
@@ -103,19 +164,15 @@ export class FeedPoller {
     const started = this.localNow();
     let result: PollResult;
     try {
-      const res = await this.fetchImpl(this.opts.url, {
-        cache: "no-cache",
-        signal: AbortSignal.timeout(FEED_FETCH_TIMEOUT_MS),
-      });
-      const receivedAt = this.localNow();
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: unknown = await res.json();
-      const ts = feedUpdateTimestamp(json);
+      const { url, json, ts, receivedAt } = await this.fetchWithFallback();
+      this.activeUrl = url;
       this.opts.estimator.addSample(ts, receivedAt);
       // An older CDN copy after a newer one is also not new.
       if (this.lastTs !== null && ts <= this.lastTs) {
         result = "dup";
+        this.schedule.onDup();
       } else {
+        this.schedule.onNew(ts, started);
         const snapshot = normalizeFeed(json);
         this.lastTs = ts;
         result = "new";
@@ -134,7 +191,8 @@ export class FeedPoller {
     if (generation !== this.generation) return; // stopped (and maybe restarted) meanwhile
 
     if (this.running) {
-      const delay = backoffDelay(this.failures);
+      const delay =
+        this.failures > 0 ? backoffDelay(this.failures) : this.schedule.nextDelay(this.localNow());
       this.nextPollAt = this.localNow() + delay;
       this.timer = this.setTimer(() => void this.poll(), delay);
     }

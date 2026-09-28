@@ -118,6 +118,8 @@ export default defineConfig({
   base: pagesBase(),
   plugins: [react(), replayFixtures(), buildInfo(BRANCH, BUILD_ID)],
   server: {
+    // `npm run server` alongside `npm run dev` makes /api/* same-origin in development.
+    proxy: { "/api": "http://127.0.0.1:3001" },
     // Dev server reachable through an ngrok tunnel (hostnames only, no scheme).
     allowedHosts: ["amuck-yesterday-cilantro.ngrok-free.dev"],
   },
@@ -129,7 +131,7 @@ export default defineConfig({
     format: "es",
   },
   test: {
-    include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "tests/**/*.test.ts", "server/**/*.test.ts"],
     environment: "node",
     // Vitest blanks CSS by default; colors.test.ts reads eram.css?raw.
     css: { include: /eram\.css/ },
