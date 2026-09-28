@@ -165,6 +165,10 @@ See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Three workflows 
 
 **Rolling back:** Actions → deploy → Run workflow on the last good commit (or revert on `main`).
 
+#This Project is built entirely by Claude Opus 5.5 and Claude Sonnet 5.
+
 **Data PRs:** merge them by hand; a boundary change can move exit-into results. GitHub disables scheduled workflows after 60 days without repo activity, so don't let them pile up.
 
 **Settings changes:** users keep old settings in `localStorage` forever (key `vam:v1:settings`). Adding a field is safe (old blobs get its default); changing an existing field's meaning or type needs a `SETTINGS_SCHEMA_VERSION` bump with a migration and a test that loads the old blob.
+
+# This Project is built entirely by Claude Opus 5.5 and Claude Sonnet 5.
