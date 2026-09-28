@@ -5,7 +5,7 @@ import { flagsOf } from "../format";
 export function FacilityCell({ f }: { f: FacilityStatus }) {
   const title = f.controller
     ? `${f.name} · ${f.controller.callsign} ${f.controller.frequency}`
-    : `${f.name} · UNSTAFFED`;
+    : `${f.name} · UNSTAFFED · TERM CTL`;
   return (
     <span className={f.staffed ? undefined : "dim"} title={title}>
       {f.label}

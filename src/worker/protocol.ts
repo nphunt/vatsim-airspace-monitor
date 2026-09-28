@@ -1,6 +1,7 @@
 // Messages between the main thread and the engine worker (§4.3).
 import type { AlertEntry } from "../core/alerts";
 import type { MyPositionStatus } from "../core/myPosition";
+import type { NeighborStatus } from "../core/neighbors";
 import type { FeedStatus } from "../data/feed";
 import type { PredictionSet } from "../data/types";
 import type { ReplayStatus } from "./replay";
@@ -151,6 +152,16 @@ export interface PredictionsMessage {
   set: PredictionSet | null;
 }
 
+/**
+ * Facilities around the selected airspace and who to hand off to (NEIGHBORS window).
+ * Posted on switch and per new snapshot; empty with airspaceKey null when none is selected.
+ */
+export interface NeighborsMessage {
+  type: "neighbors";
+  airspaceKey: string | null;
+  neighbors: NeighborStatus[];
+}
+
 export type FromEngine =
   | ReadyMessage
   | PollMessage
@@ -159,4 +170,5 @@ export type FromEngine =
   | ErrorMessage
   | PredictionsMessage
   | AlertsMessage
-  | NavMessage;
+  | NavMessage
+  | NeighborsMessage;

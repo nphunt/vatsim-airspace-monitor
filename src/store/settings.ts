@@ -21,12 +21,22 @@ import {
 export const SETTINGS_KEY = `${STORAGE_PREFIX}settings`;
 
 export type WindowId =
-  "outbound" | "alerts" | "inbound" | "load" | "airspace" | "settings" | "fpr" | "scope" | "about";
+  | "outbound"
+  | "alerts"
+  | "inbound"
+  | "load"
+  | "neighbors"
+  | "airspace"
+  | "settings"
+  | "fpr"
+  | "scope"
+  | "about";
 export const WINDOW_IDS: readonly WindowId[] = [
   "outbound",
   "alerts",
   "inbound",
   "load",
+  "neighbors",
   "airspace",
   "settings",
   "fpr",
@@ -176,6 +186,7 @@ export const DEFAULT_SETTINGS: Settings = {
     // Optional, off by default (§7.5); floats over the lists when there is room.
     scope: win({ docked: false, order: 7, x: 24, y: 80, w: 520, h: 520 }),
     about: win({ docked: false, order: 8, x: 64, y: 120, w: 420, h: 420 }),
+    neighbors: win({ order: 9, weight: 0.5 }),
   },
 };
 

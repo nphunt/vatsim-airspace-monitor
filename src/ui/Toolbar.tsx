@@ -4,12 +4,22 @@ import { BRIGHT_CHOICES_PCT, FONT_SIZE_CHOICES_PX, HORIZON_CHOICES_MIN } from ".
 import { parseCid } from "../core/myPosition";
 import type { WindowId } from "../store/settings";
 import { engineNow, useStore } from "../store/store";
-import { formatUtcClock } from "./format";
+import { formatUtcClock, recentlyChanged } from "./format";
 import { useLocalNow } from "./hooks";
 import { dataIndicator, isEngineStalled, isNavExpired } from "./status";
 import { openWindow } from "./windows/layout";
 
-function WindowButton({ id, label, alert }: { id: WindowId; label: string; alert?: boolean }) {
+function WindowButton({
+  id,
+  label,
+  alert,
+  caution,
+}: {
+  id: WindowId;
+  label: string;
+  alert?: boolean;
+  caution?: boolean;
+}) {
   const open = useStore((s) => s.settings.windows[id].open);
   const toggle = () => {
     const { settings, setWindows, patchWindow } = useStore.getState();
@@ -19,7 +29,7 @@ function WindowButton({ id, label, alert }: { id: WindowId; label: string; alert
   return (
     <button
       type="button"
-      className={`eram-tb-btn${alert ? " alert" : ""}`}
+      className={`eram-tb-btn${alert ? " alert" : caution ? " caution" : ""}`}
       aria-pressed={open}
       onClick={toggle}
     >
@@ -43,8 +53,13 @@ export function Toolbar() {
   const setMuted = useStore((s) => s.setMuted);
   const audio = useStore((s) => s.audio);
   const activeAlerts = engine.alerts.filter((a) => a.state === "ACTIVE").length;
+  const paused = useStore((s) => s.paused);
+  // While paused the staffing is stale, so the button shows no count.
+  const neighbors = paused ? [] : engine.neighbors;
+  const neighborsOnline = neighbors.filter((n) => n.staffed).length;
 
   const now = engineNow(engine.clock, localNow);
+  const neighborChanged = neighbors.some((n) => recentlyChanged(n, now));
   const stalled = isEngineStalled(localNow, engine.lastMessageAt, engine.startedAt);
   const data = dataIndicator(now, engine.feed?.lastUpdateTimestamp ?? null, stalled);
 
@@ -85,6 +100,11 @@ export function Toolbar() {
       />
       <WindowButton id="inbound" label="INBOUND" />
       <WindowButton id="load" label="LOAD" />
+      <WindowButton
+        id="neighbors"
+        label={neighborsOnline > 0 ? `NBR ${neighborsOnline}` : "NBR"}
+        caution={neighborChanged}
+      />
       <WindowButton id="scope" label="SCOPE" />
       <button
         type="button"
