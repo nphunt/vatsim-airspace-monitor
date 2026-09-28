@@ -20,7 +20,7 @@
 
 - URL: `https://nphunt.github.io/vatsim-airspace-monitor/` (project site; currently 404, so Pages is not yet enabled).
 - Source: GitHub Actions deployment (not a `gh-pages` branch). Settings → Pages → **Build and deployment → Source: GitHub Actions**.
-- `main` is production. Every merge to `main` deploys. No separate staging site in v1; the PR CI build (§3.1) plus `npm run preview` is the pre-merge check.
+- `main` is production. Every merge to `main` deploys. **Staging (added after v1.1):** `development` is published at `/dev/` in the same Pages site (one site per repo): `deploy.yml` builds both branches and publishes them together. The dev build shows a DEVELOPMENT BUILD notice and uses its own `localStorage` key (`vam-dev:v1:settings`), since it shares the origin with the live site.
 - Custom domain: not in v1. **Note:** changing the origin later (custom domain) orphans every user's `localStorage` settings, so decide before announcing the URL to VATUSA.
 
 ---

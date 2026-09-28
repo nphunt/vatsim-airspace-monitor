@@ -15,7 +15,9 @@ import { chromium } from "playwright-core";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REPO = process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "vatsim-airspace-monitor";
-const BASE = `/${REPO}/`;
+// PAGES_SUBPATH ("dev") = the development build, served from /<repo>/dev/.
+const SUB = process.env.PAGES_SUBPATH ?? "";
+const BASE = SUB ? `/${REPO}/${SUB}/` : `/${REPO}/`;
 const PORT = 4173;
 const URL_ = `http://localhost:${PORT}${BASE}`;
 const TIMEOUT_MS = 30_000;

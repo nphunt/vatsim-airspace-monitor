@@ -7,31 +7,36 @@ import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
 // GitHub Pages serves a project site from /<repo-name>/ (PUBLISHING_PLAN §2.1).
-// Reading the name from GITHUB_REPOSITORY keeps forks and renames working.
+// Reading the name from GITHUB_REPOSITORY keeps forks and renames working. PAGES_SUBPATH
+// ("dev") puts a build in a folder of the site: the development build at /<repo>/dev/.
 function pagesBase(): string {
   if (!process.env.GITHUB_ACTIONS) return "/";
   const repo = process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "vatsim-airspace-monitor";
-  return `/${repo}/`;
+  const sub = process.env.PAGES_SUBPATH ?? "";
+  if (sub && !/^[a-z0-9-]+$/.test(sub)) throw new Error(`bad PAGES_SUBPATH ${sub}`);
+  return sub ? `/${repo}/${sub}/` : `/${repo}/`;
 }
 
 // Cache-busts public/data/** fetches, which Vite does not hash (PUBLISHING_PLAN §2.4).
+// The checked-out commit first: the deploy builds main and development in one run, so
+// GITHUB_SHA (the commit that triggered it) is not always the one being built.
 function buildId(): string {
-  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
   try {
     return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
       .toString()
       .trim();
   } catch {
-    return "dev";
+    return process.env.GITHUB_SHA?.slice(0, 7) ?? "dev";
   }
 }
 
 /**
- * Branch the build was made from: the pushed branch in CI (the PR's head branch for a
+ * Branch the build was made from: BUILD_BRANCH when the deploy sets it (it builds main
+ * and development in one run), else the pushed branch in CI (the PR's head branch for a
  * pull request), else the local checkout. Only "main" is a production build.
  */
 function buildBranch(): string {
-  const ci = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
+  const ci = process.env.BUILD_BRANCH || process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
   if (ci) return ci;
   try {
     return execSync("git rev-parse --abbrev-ref HEAD", { stdio: ["ignore", "pipe", "ignore"] })
