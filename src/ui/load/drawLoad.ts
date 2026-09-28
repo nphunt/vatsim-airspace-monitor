@@ -5,10 +5,18 @@ import { ERAM_COLORS } from "../theme/colors";
 // LOAD chart (§7.4): one row per bin, `1715Z  ██████████  14`, drawn on canvas (§2: the
 // load chart is not React-rendered). Layout is pure so hit-testing is testable.
 
+/**
+ * Right margin kept clear of text, px: overlay scrollbars (drawn over the content, taking
+ * no layout width) would otherwise cover the right-aligned counts.
+ */
+export const RIGHT_GUTTER_PX = 16;
+
 export interface ChartLayout {
   rowH: number;
   labelW: number;
   countW: number;
+  /** Right edge of the right-aligned count, px. */
+  countX: number;
   barX: number;
   barW: number;
   /** Count that fills the whole bar width. */
@@ -27,11 +35,21 @@ export function chartLayout(
   const labelW = charPx * 6;
   const countW = charPx * 5;
   const barX = labelW + charPx;
-  const barW = Math.max(20, widthPx - barX - countW);
+  const countX = widthPx - RIGHT_GUTTER_PX;
+  const barW = Math.max(20, countX - barX - countW);
   const peak = Math.max(0, ...view.bins.map((b) => b.peak));
   // Leave room past the threshold line so "at threshold" doesn't fill the bar.
   const scaleMax = Math.max(peak, Math.ceil(threshold * 1.25), 1);
-  return { rowH, labelW, countW, barX, barW, scaleMax, height: rowH * view.bins.length };
+  return {
+    rowH,
+    labelW,
+    countW,
+    countX,
+    barX,
+    barW,
+    scaleMax,
+    height: rowH * view.bins.length,
+  };
 }
 
 /** Bin index under a y offset in the chart, or null. */
@@ -100,7 +118,7 @@ export function drawLoad(
     ctx.fillStyle =
       b.untrusted && level === "normal" ? ERAM_COLORS.datablockDim : LEVEL_COLOR[level];
     ctx.textAlign = "right";
-    ctx.fillText(String(b.peak), opts.widthPx - 2, mid);
+    ctx.fillText(String(b.peak), layout.countX, mid);
   });
 
   // Threshold line.
