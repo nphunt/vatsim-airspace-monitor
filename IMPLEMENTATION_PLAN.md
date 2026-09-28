@@ -262,7 +262,8 @@ if no relevant crossing within horizon → not listed
 - **Antimeridian:** before geometry ops, shift longitudes into a continuous range around the selected airspace's center (e.g. PAZA: map to −250…−110 or 110…250 consistently for the airspace, its neighbors, and pilots). PAZA and PHZH MUST be selectable, and PAZA exits across 180° MUST resolve to the Russian FIR, not `UNK`.
 
 ### 5.6 Arrivals and departures
-- If `flight_plan.arrival` is an airport **inside** the selected airspace and the aircraft is inside: mark `ARR`. In RTE mode the path already ends at the destination, so a straight-line "exit" that the route doesn't make won't appear. In DR mode, still show the predicted exit but **suppress the exit alert** unless `distance(pos, arrivalAirport) > distance(pos, exitPoint) + ARR_SUPPRESS_MARGIN_NM`.
+- If `flight_plan.arrival` is an airport **inside** the selected airspace and the aircraft is inside: mark `ARR`. An ARR aircraft has **no exit** and never exit-alerts; instead it carries an **ETA** to the airport and is always listed in OUTBOUND (whatever the horizon), sorted with the exits. OUTBOUND shows the airport in TO, DIR blank, and the ETA as Zulu time (`1742Z`) with the countdown in the tooltip; the scope datablock shows `ETA 1742Z`.
+- ETA = distance / ground speed + `ARR_APPROACH_PAD_S`, anchored to the position report like exits. Distance runs along the predicted path to its point closest to the airport, then direct: an RTE path that ends at the airport gives the route distance; a path cut short by the horizon, or a DR path, is completed with the straight line.
 - Aircraft that depart inside the airspace appear automatically once `gs ≥ 40`.
 
 ### 5.7 Altitude filter (settings)
@@ -351,11 +352,11 @@ For each aircraft in (or predicted to enter) the selected airspace, compute **oc
 
 ### 6.1 State machine per aircraft (in `alerts.ts`)
 ```
-NONE ──(remaining ≤ EXIT_ALERT_S [120], not CLP, not ARR-suppressed)──► ACTIVE  (tone once, start flash)
+NONE ──(remaining ≤ EXIT_ALERT_S [120], not CLP, not ARR)──► ACTIVE  (tone once, start flash)
 ACTIVE ──(user acknowledges: click row or press key)──► ACKED (steady highlight, no flash, no sound)
 ACTIVE|ACKED ──(aircraft exits: inside becomes false)──► EXITED (show "EXITED ZID" for 30 s) ──► removed
 ACTIVE|ACKED ──(remaining > EXIT_ALERT_S + ALERT_REARM_MARGIN_S, OR no exit predicted within horizon,
-               OR becomes CLP/ARR-suppressed)──► NONE (re-armable)
+               OR becomes CLP/ARR)──► NONE (re-armable)
 ANY ──(aircraft dropped: disconnected, stale, or GS < MIN_GS_KT)──► removed (no sound)
 ```
 - **Hysteresis is required**: the 30 s re-arm margin prevents flapping around 2:00.
@@ -471,7 +472,7 @@ CLIP_REENTRY_S = 180
 EXITED_DISPLAY_S = 30
 ENTRY_ALERT_ENABLED = false
 ENTRY_ALERT_S = 120
-ARR_SUPPRESS_MARGIN_NM = 20
+ARR_APPROACH_PAD_S = 300
 TURN_THRESHOLD_DEG = 10
 ROUTE_CONFORM_NM = 5
 ROUTE_CONFORM_DEG = 30

@@ -89,7 +89,12 @@ export function flagsOf(p: Prediction, clip: boolean): Flag[] {
       ? { word: "RTE", letter: "R", title: "Following filed route" }
       : { word: "DR", letter: "D", title: "Dead reckoning (straight line)" },
   ];
-  if (p.arr) f.push({ word: "ARR", letter: "A", title: "Landing inside this airspace" });
+  if (p.arr)
+    f.push({
+      word: "ARR",
+      letter: "A",
+      title: "Landing inside this airspace: TO is the airport, time is the ETA",
+    });
   if (p.turning) f.push({ word: "TRN", letter: "T", title: "Turning" });
   if (clip) f.push({ word: "CLP", letter: "C", title: "Corner clip: re-enters shortly" });
   if (p.vfr) f.push({ word: "V", letter: "V", title: "VFR flight plan" });
@@ -194,6 +199,10 @@ export function crossingLine(
   if (kind === "inbound" && p.entry) {
     const e = p.entry;
     return `ENTRY FROM ${e.from.label} (${e.from.name}) ${formatCrossing(e.t, now)}`;
+  }
+  if (p.eta) {
+    const t = p.eta.t;
+    return `LANDING ${p.arrival || "INSIDE"} ETA ${formatZulu(t)} (${formatCountdown(t - now)})`;
   }
   if (p.arr) return `LANDING ${p.arrival || "INSIDE"}`;
   return `NO EXIT WITHIN ${horizonMin} MIN`;

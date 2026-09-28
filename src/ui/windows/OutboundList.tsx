@@ -1,16 +1,31 @@
 import { useRef } from "react";
 import type { Prediction } from "../../data/types";
 import { useStore } from "../../store/store";
-import { alertClass, exitSummary, formatCrossing, listColumns, rowClass } from "../format";
+import {
+  alertClass,
+  exitSummary,
+  formatCountdown,
+  formatCrossing,
+  formatZulu,
+  listColumns,
+  rowClass,
+} from "../format";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
 
-/** Outbound rows within the list horizon, by exit time. */
+/** Outbound rows within the list horizon, by exit time; arrivals whatever their ETA. */
 function useOutboundRows(now: number): Prediction[] {
   const set = useStore((s) => s.engine.predictions);
   const horizonMin = useStore((s) => s.settings.horizonMin);
-  return (set?.outbound ?? []).filter((p) => p.exit!.t - now <= horizonMin * 60_000);
+  return (set?.outbound ?? []).filter(
+    (p) => p.eta !== undefined || p.exit!.t - now <= horizonMin * 60_000,
+  );
+}
+
+/** An arrival's ETA (§5.6): Zulu in the cell, countdown in the tooltip. */
+function EtaCell({ t, now }: { t: number; now: number }) {
+  return <span title={`ETA IN ${formatCountdown(t - now)}`}>{formatZulu(t)}</span>;
 }
 
 export function OutboundTitle() {
@@ -23,7 +38,8 @@ export function OutboundTitle() {
 
 /**
  * OUTBOUND list (§7.3): aircraft inside, predicted to exit within the horizon, with the
- * airspace they exit into (§5.9). Summary strip on top filters by exit-into.
+ * airspace they exit into (§5.9). Aircraft landing inside show their airport and ETA
+ * instead (§5.6). Summary strip on top filters by exit-into.
  */
 export function OutboundList() {
   const ref = useRef<HTMLDivElement>(null);
@@ -43,7 +59,7 @@ export function OutboundList() {
 
   const summary = exitSummary(rows);
   const active = filter && summary.some((x) => x.label === filter) ? filter : null;
-  const shown = active ? rows.filter((p) => p.exit!.into.label === active) : rows;
+  const shown = active ? rows.filter((p) => p.exit?.into.label === active) : rows;
   const layout = listColumns(width / ch, "outbound", width);
 
   return (
@@ -78,14 +94,15 @@ export function OutboundList() {
             </thead>
             <tbody>
               {shown.map((p) => {
-                const exit = p.exit!;
+                const exit = p.exit;
+                const clip = exit?.clip ?? false;
                 const alert = alertByCid.get(p.cid);
                 // Row click selects, acknowledges an ACTIVE alert and opens the readout (§7.3).
                 return (
                   <tr
                     key={p.cid}
                     className={rowClass(
-                      alertClass(alert) ?? (exit.clip ? "dim" : undefined),
+                      alertClass(alert) ?? (clip ? "dim" : undefined),
                       p.cid === selectedCid,
                     )}
                     onClick={() => selectAircraft(p.cid, window.innerWidth)}
@@ -93,10 +110,14 @@ export function OutboundList() {
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>
                         {commonCell(c, p, {
-                          facility: <FacilityCell f={exit.into} />,
-                          dir: exit.dir,
-                          time: formatCrossing(exit.t, now),
-                          clip: exit.clip,
+                          facility: exit ? <FacilityCell f={exit.into} /> : p.arrival,
+                          dir: exit?.dir,
+                          time: exit ? (
+                            formatCrossing(exit.t, now)
+                          ) : (
+                            <EtaCell t={p.eta!.t} now={now} />
+                          ),
+                          clip,
                           compact: layout.compactFlags,
                         })}
                       </td>

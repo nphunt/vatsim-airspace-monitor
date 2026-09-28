@@ -1,4 +1,4 @@
-import { ARR_SUPPRESS_MARGIN_NM, MAX_GS_KT, MIN_GS_KT, STALE_PILOT_S } from "../config";
+import { ARR_APPROACH_PAD_S, MAX_GS_KT, MIN_GS_KT, STALE_PILOT_S } from "../config";
 import type {
   Airspace,
   BBox,
@@ -25,7 +25,7 @@ import {
   type AltitudeFilter,
   type LoadEntry,
 } from "./load";
-import { buildDrPath, courseAt, pathLength, pointAt, turnPoints } from "./path";
+import { buildDrPath, courseAt, pathLength, pointAt, turnPoints, type PredictedPath } from "./path";
 import { findCrossings, summarizeCrossings, timeAlong } from "./predict";
 import type { RouteModeTracker } from "./routeMode";
 import { deriveTrack, type TrackStore } from "./track";
@@ -63,6 +63,29 @@ export function prefilterBox(prepared: PreparedAirspace, horizonMin: number): BB
   const poleLat = Math.min(89, Math.max(Math.abs(minY), Math.abs(maxY)));
   const lonPad = Math.min(360, nm / (60 * Math.cos((poleLat * Math.PI) / 180)));
   return [minX - lonPad, minY - latPad, maxX + lonPad, maxY + latPad];
+}
+
+/**
+ * Distance to an arrival airport (§5.6): along the path to its vertex closest to the
+ * airport, then direct. An RTE path ending at the airport gives the route distance; one cut
+ * short by the horizon, or a DR path, is completed with the straight line from there.
+ */
+export function distanceToAirportNm(path: PredictedPath, lat: number, lon: number): number {
+  let best = Infinity;
+  let bestI = 0;
+  for (let i = 0; i < path.n; i++) {
+    const d = distanceNm(path.lat[i]!, path.lon[i]!, lat, lon);
+    if (d < best) {
+      best = d;
+      bestI = i;
+    }
+  }
+  return path.dist[bestI]! + best;
+}
+
+/** OUTBOUND sort/filter time: the exit, or the ETA for an arrival. */
+export function outboundTime(p: Prediction): number {
+  return p.eta?.t ?? p.exit!.t;
 }
 
 function inBox(b: BBox, lat: number, lon: number): boolean {
@@ -208,12 +231,21 @@ export function computePredictions(input: PipelineInput): PredictionSet {
       turning: derived.turning,
       inside: summary.inside,
       arr: false,
-      arrSuppressed: false,
     };
 
     if (summary.inside) {
       const apt = airports[fp.arrival];
       base.arr = apt !== undefined && containsRaw(prepared, apt[0], apt[1]);
+      if (base.arr) {
+        // Landing inside: an ETA replaces the exit, listed whatever the horizon (§5.6).
+        const distNm = distanceToAirportNm(path, apt![0], apt![1]);
+        base.eta = {
+          t: timeAlong(p.lastUpdated, distNm, p.groundspeed) + ARR_APPROACH_PAD_S * 1000,
+          distNm,
+        };
+        outbound.push(base);
+        continue;
+      }
       if (!summary.exit) {
         resident.push(base);
         continue;
@@ -228,12 +260,6 @@ export function computePredictions(input: PipelineInput): PredictionSet {
         into: resolveExitInto(path, summary.exit.distNm, airspace.key, registry, staffing),
         clip: summary.exit.clip,
       };
-      // DR can't see the descent into the destination, so a straight-line "exit" past the
-      // airport alerts only if it clearly comes first (§5.6).
-      if (base.arr && apt && path.mode === "DR") {
-        const toApt = distanceNm(p.lat, p.lon, apt[0], apt[1]);
-        base.arrSuppressed = !(toApt > summary.exit.distNm + ARR_SUPPRESS_MARGIN_NM);
-      }
       outbound.push(base);
     } else if (summary.entry) {
       const at = pointAt(path, summary.entry.distNm);
@@ -254,7 +280,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     }
   }
 
-  outbound.sort((a, b) => a.exit!.t - b.exit!.t);
+  outbound.sort((a, b) => outboundTime(a) - outboundTime(b));
   inbound.sort((a, b) => a.entry!.t - b.entry!.t);
 
   return {

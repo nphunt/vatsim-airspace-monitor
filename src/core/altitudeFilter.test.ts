@@ -29,7 +29,6 @@ function pred(cid: number, altitude: number, exitInS: number | null): Prediction
     turning: false,
     inside: true,
     arr: false,
-    arrSuppressed: false,
     exit:
       exitInS === null
         ? undefined

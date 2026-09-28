@@ -19,7 +19,7 @@ export const CLIP_REENTRY_S = 180;
 export const EXITED_DISPLAY_S = 30;
 export const ENTRY_ALERT_ENABLED = false;
 export const ENTRY_ALERT_S = 120;
-export const ARR_SUPPRESS_MARGIN_NM = 20;
+export const ARR_APPROACH_PAD_S = 300; // added to an arrival's distance / GS ETA (§5.6)
 export const TURN_THRESHOLD_DEG = 10;
 // US transition altitude: at/above it ATC sees pressure altitude (flight levels, 29.92),
 // below it altitude on the local altimeter setting (about true altitude).

@@ -2,7 +2,7 @@ import type { AirportTraffic } from "../../core/airportTraffic";
 import type { AlertEntry } from "../../core/alerts";
 import { destination } from "../../core/geo";
 import type { Prediction, PredictionSet, ScopeTarget } from "../../data/types";
-import { findPrediction, formatAlt, formatCrossing, type ReadoutKind } from "../format";
+import { findPrediction, formatAlt, formatCrossing, formatZulu, type ReadoutKind } from "../format";
 import { extrapolate, project, toScreen, type Projection, type View } from "./projection";
 
 // Everything the SCOPE draws in one frame (§7.5), as plain data: target positions on
@@ -77,6 +77,8 @@ export function datablockLines(
   const { p, kind } = found;
   if (kind === "outbound" && p.exit) {
     lines.push(`${p.exit.into.label} ${formatCrossing(p.exit.t, now)}`);
+  } else if (kind === "outbound" && p.eta) {
+    lines.push(`ETA ${formatZulu(p.eta.t)}`);
   } else if (kind === "inbound" && p.entry) {
     lines.push(`E ${formatCrossing(p.entry.t, now)}`);
   } else {

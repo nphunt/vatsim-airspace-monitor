@@ -149,6 +149,14 @@ export interface PredictedEntry {
   clip: boolean;
 }
 
+/** Arrival at a destination inside the selected airspace (§5.6). */
+export interface PredictedArrival {
+  /** Absolute ms UTC: distance / ground speed + ARR_APPROACH_PAD_S, anchored like exits. */
+  t: number;
+  /** Distance to the airport: along the path to its closest approach, then direct. */
+  distNm: number;
+}
+
 /** One aircraft relative to the selected airspace. Lists show a subset of these fields. */
 export interface Prediction {
   cid: number;
@@ -177,8 +185,8 @@ export interface Prediction {
   inside: boolean;
   /** Landing at an airport inside the selected airspace while inside it (§5.6). */
   arr: boolean;
-  /** ARR in DR mode with the exit not clearly before the airport: no exit alert (§5.6). */
-  arrSuppressed: boolean;
+  /** ARR aircraft carry an ETA instead of an exit, and never exit-alert (§5.6). */
+  eta?: PredictedArrival;
   exit?: PredictedExit;
   entry?: PredictedEntry;
 }
@@ -215,11 +223,14 @@ export interface PredictionSet {
   /** Feed update_timestamp it was computed from. */
   snapshotTime: number;
   horizonMin: number;
-  /** Inside, predicted to exit within the horizon; by exit time. */
+  /**
+   * Inside, predicted to exit within the horizon, plus every ARR aircraft (with `eta`, no
+   * `exit`, whatever the horizon); by exit time or ETA.
+   */
   outbound: Prediction[];
   /** Outside, predicted to enter within the horizon; by entry time. */
   inbound: Prediction[];
-  /** Inside with no exit within the horizon. */
+  /** Inside, not ARR, with no exit within the horizon. */
   resident: Prediction[];
   /** CIDs of every eligible aircraft currently inside (alerts: "exited" vs "no exit"). */
   insideCids: number[];

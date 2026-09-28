@@ -77,7 +77,6 @@ const pred = (over: Partial<Prediction> = {}): Prediction => ({
   turning: false,
   inside: true,
   arr: false,
-  arrSuppressed: false,
   ...over,
 });
 

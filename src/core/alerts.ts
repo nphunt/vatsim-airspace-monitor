@@ -17,10 +17,10 @@ import type {
 // Exit (and optional entry) alert state machine, §6.1. Pure; runs in the worker on every
 // 1 Hz tick and every recompute.
 //
-//   NONE -(remaining <= 120 s, not CLP/ARR-suppressed)-> ACTIVE (tone, flash)
+//   NONE -(remaining <= 120 s, not CLP, not ARR)-> ACTIVE (tone, flash)
 //   ACTIVE -(ack)-> ACKED
 //   ACTIVE|ACKED -(now outside)-> EXITED (30 s) -> removed
-//   ACTIVE|ACKED -(remaining > 150 s | no exit predicted | CLP | ARR-suppressed)-> NONE
+//   ACTIVE|ACKED -(remaining > 150 s | no exit predicted | CLP | ARR)-> NONE
 //   any -(dropped: disconnected, stale, slow)-> removed, silently
 //
 // Exits into a staffed facility (a controller online to hand off to) go in two stages:
@@ -235,8 +235,10 @@ export class AlertMachine {
     };
 
     for (const p of set.outbound) {
-      const x = p.exit!;
-      consider("exit", p, x.t, x.into, x.clip || p.arrSuppressed, c.exitAlertS, x.dir);
+      const x = p.exit;
+      // Arrivals (§5.6) carry an ETA, not an exit, and never exit-alert.
+      if (!x) continue;
+      consider("exit", p, x.t, x.into, x.clip, c.exitAlertS, x.dir);
     }
     if (c.entryAlerts) {
       for (const p of set.inbound) {
