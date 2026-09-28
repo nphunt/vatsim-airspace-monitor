@@ -3,6 +3,7 @@ import { LOAD_THRESHOLD_DEFAULT } from "../config";
 import {
   DEFAULT_SETTINGS,
   SETTINGS_KEY,
+  settingsKey,
   loadSettings,
   loadThreshold,
   parseSettings,
@@ -25,7 +26,13 @@ function memoryStorage(initial: Record<string, string> = {}): Storage {
 
 describe("settings persistence", () => {
   it("uses the specific vam:v1: prefix, never a generic key", () => {
-    expect(SETTINGS_KEY).toBe("vam:v1:settings");
+    expect(settingsKey(false)).toBe("vam:v1:settings");
+  });
+
+  it("development builds (the /dev/ site) keep separate settings from the live site", () => {
+    expect(settingsKey(true)).toBe("vam-dev:v1:settings");
+    // Tests run as a development build.
+    expect(SETTINGS_KEY).toBe("vam-dev:v1:settings");
   });
 
   it("round-trips", () => {

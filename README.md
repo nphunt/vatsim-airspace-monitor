@@ -146,12 +146,17 @@ The feed poller and clock run in a Web Worker so they keep going when the page i
 
 ## Maintaining the hosted site
 
-See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Three workflows in `.github/workflows/`:
+The site has two copies:
+
+- **Live:** <https://nphunt.github.io/vatsim-airspace-monitor/>, built from `main`.
+- **Development:** <https://nphunt.github.io/vatsim-airspace-monitor/dev/>, built from `development`, for testing before a release. It shows a `DEVELOPMENT BUILD … SOME THINGS MAY BREAK` notice and keeps its own settings (`vam-dev:v1:settings`), so testing there never changes anyone's live layout.
+
+See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Workflows in `.github/workflows/`:
 
 | Workflow | When | Does |
 | --- | --- | --- |
 | `ci.yml` | PRs, pushes to non-main branches | lint, test, validate data, build under `/<repo>/`, publish checks, smoke test |
-| `deploy.yml` | push to `main`, or manually | the same checks again, then deploy to GitHub Pages and check the live URL |
+| `deploy.yml` | push to `main` or `development`, or manually | builds both branches (via `build-site.yml`, each with the full checks), publishes `main` at the root and `development` at `/dev/`, then checks both URLs. A `development` build that fails its checks never blocks `main`: a `main` push then publishes without `/dev/`, and a `development` push publishes nothing |
 | `refresh-data.yml` | Mondays 06:00 UTC (once `DATA_REFRESH_ENABLED` is set), or manually | `update-data` + `update-nav` + `validate-data`; opens a `Data refresh: VATSpy <tag>, AIRAC <cycle>` PR when `public/data` changed |
 
 **One-time repo setup (owner):**
@@ -161,16 +166,18 @@ See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Three workflows 
 - [ ] Branch protection on `main`: require a PR and the `ci` check.
 - [ ] Settings → Actions → General: allow GitHub Actions to create and approve pull requests.
 - [ ] Secret `DATA_PR_TOKEN`: fine-grained PAT or GitHub App token for this repo only, contents + pull-requests write. (PRs opened with the default token don't run `ci`.)
-- [ ] Environment `github-pages`: deployments from `main` only.
+- [ ] Environment `github-pages`: deployments from `main` and `development` only (pushes to either publish the site).
 - [ ] Add the repository variable `DATA_REFRESH_ENABLED` = `true` to turn on the weekly schedule (a manual run works without it).
 - [ ] Run `refresh-data` once by hand (Actions → refresh-data → Run workflow) and check `ci` runs on its PR.
 
-**Releasing:** merge to `main`; `deploy` publishes it. The ABOUT line (`BUILD <sha> · VATSPY <tag> · AIRAC <cycle>`) identifies the deploy.
+**Testing a change:** push to `development`; about two minutes later it is at `/dev/`.
 
-**Rolling back:** Actions → deploy → Run workflow on the last good commit (or revert on `main`).
+**Releasing:** merge `development` into `main`; `deploy` publishes it. The ABOUT line (`BUILD <sha> · VATSPY <tag> · AIRAC <cycle>`) identifies the deploy.
+
+**Rolling back:** revert the bad commit on `main`. (`deploy` always builds the tip of each branch, so re-running it on an old commit does not roll back.)
 
 **Data PRs:** merge them by hand; a boundary change can move exit-into results. GitHub disables scheduled workflows after 60 days without repo activity, so don't let them pile up.
 
-**Settings changes:** users keep old settings in `localStorage` forever (key `vam:v1:settings`). Adding a field is safe (old blobs get its default); changing an existing field's meaning or type needs a `SETTINGS_SCHEMA_VERSION` bump with a migration and a test that loads the old blob.
+**Settings changes:** users keep old settings in `localStorage` forever (key `vam:v1:settings`; `vam-dev:v1:settings` on `/dev/`). Adding a field is safe (old blobs get its default); changing an existing field's meaning or type needs a `SETTINGS_SCHEMA_VERSION` bump with a migration and a test that loads the old blob.
 
 # This Project is built entirely by Claude Opus 5.5 and Claude Sonnet 5.

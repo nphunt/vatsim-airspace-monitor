@@ -1,12 +1,16 @@
-# Build, re-test and deploy main to GitHub Pages (PUBLISHING_PLAN §3.2).
-# Rollback: run this workflow manually ("Run workflow") on the last good commit.
+# Build, re-test and deploy to GitHub Pages (PUBLISHING_PLAN §3.2): main at the site root,
+# development at /dev/ (a testing copy with the DEVELOPMENT BUILD notice). A push to either
+# branch rebuilds and publishes both, since Pages replaces the whole site on each deploy.
+# A broken development build never holds up main: main still publishes, without /dev/.
 #
-# Needs Settings > Pages > Build and deployment > Source: GitHub Actions.
+# Rollback: revert the bad commit on main (this workflow always builds the tip of each
+# branch). Needs Settings > Pages > Build and deployment > Source: GitHub Actions, and,
+# if the github-pages environment restricts deployment branches, development allowed too.
 name: deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, development]
   workflow_dispatch:
 
 permissions:
@@ -19,31 +23,75 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  # main's own build config must know how to be built next to /dev/ (PAGES_SUBPATH,
+  # BUILD_BRANCH). build-site.yml also checks every build's branch stamp.
+  # Until the /dev/ setup is merged into main, a development push publishes nothing
+  # rather than rebuild main with an older config that would stamp it "development".
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      # Never deploy an untested build.
-      - run: npm run lint
-      - run: npm test
-      - run: npm run validate-data
-      - run: npm run build
-      - run: npm run check-dist
-      - run: npx playwright-core install --with-deps chromium
-      - run: npm run smoke
+          ref: main
+          sparse-checkout: vite.config.ts
+          sparse-checkout-cone-mode: false
+      - id: check
+        run: |
+          if grep -q PAGES_SUBPATH vite.config.ts; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::main does not have the /dev/ deploy setup yet; merge it into main first. Nothing published."
+          fi
+
+  main:
+    needs: plan
+    if: needs.plan.outputs.ready == 'true'
+    uses: ./.github/workflows/build-site.yml
+    with:
+      ref: main
+      artifact: site-main
+
+  dev:
+    needs: plan
+    if: needs.plan.outputs.ready == 'true'
+    uses: ./.github/workflows/build-site.yml
+    with:
+      ref: development
+      subpath: dev
+      artifact: site-dev
+
+  assemble:
+    needs: [main, dev]
+    # main must pass. development may fail on a main push (then /dev/ is left out); a
+    # development push whose build fails publishes nothing, since only /dev/ changed.
+    if: >-
+      always() && needs.main.result == 'success' &&
+      (needs.dev.result == 'success' || github.ref_name != 'development')
+    runs-on: ubuntu-latest
+    outputs:
+      dev: ${{ needs.dev.result == 'success' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-main
+          path: site
+      - if: needs.dev.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: site-dev
+          path: site/dev
+      - if: needs.dev.result != 'success'
+        run: echo "::warning::development failed its checks; publishing main without /dev/."
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: site
 
   deploy:
-    needs: build
+    needs: assemble
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -54,11 +102,14 @@ jobs:
       - name: Check the deployed site
         env:
           PAGE_URL: ${{ steps.d.outputs.page_url }}
+          WITH_DEV: ${{ needs.assemble.outputs.dev }}
         run: |
+          urls="$PAGE_URL ${PAGE_URL}data/meta.json"
+          if [ "$WITH_DEV" = "true" ]; then urls="$urls ${PAGE_URL}dev/ ${PAGE_URL}dev/data/meta.json"; fi
           for i in 1 2 3 4 5; do
-            if curl -fsS -o /dev/null "$PAGE_URL" && curl -fsS -o /dev/null "${PAGE_URL}data/meta.json"; then
-              echo "ok: $PAGE_URL"; exit 0
-            fi
+            ok=1
+            for u in $urls; do curl -fsS -o /dev/null "$u" || ok=0; done
+            if [ "$ok" = 1 ]; then echo "ok: $urls"; exit 0; fi
             sleep 15
           done
-          echo "deployed site did not respond at $PAGE_URL"; exit 1
+          echo "deployed site did not respond: $urls"; exit 1

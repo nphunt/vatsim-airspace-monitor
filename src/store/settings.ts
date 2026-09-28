@@ -11,6 +11,7 @@ import {
   SETTINGS_SCHEMA_VERSION,
   STORAGE_PREFIX,
 } from "../config";
+import { isDevBuild } from "../ui/devBuild";
 
 // Persisted user settings (§4.2, §8). One key under the app prefix, with a schema version;
 // anything unreadable or from another version falls back to defaults, never a crash.
@@ -18,7 +19,17 @@ import {
 // or type of an existing field needs a SETTINGS_SCHEMA_VERSION bump with a migration
 // (PUBLISHING_PLAN §5.4).
 
-export const SETTINGS_KEY = `${STORAGE_PREFIX}settings`;
+/**
+ * Development builds keep their own settings: the /dev/ site shares the github.io origin
+ * (and so localStorage) with the live site, and testing there must never change anyone's
+ * live layout or selection.
+ */
+export function settingsKey(dev: boolean = isDevBuild()): string {
+  const prefix = dev ? STORAGE_PREFIX.replace(/^vam:/, "vam-dev:") : STORAGE_PREFIX;
+  return `${prefix}settings`;
+}
+
+export const SETTINGS_KEY = settingsKey();
 
 export type WindowId =
   | "outbound"
