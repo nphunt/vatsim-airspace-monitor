@@ -85,6 +85,8 @@ export class ScopeController {
       () => canvas.removeEventListener("dblclick", onDblClick),
     );
     this.resize();
+    // Redraw once the web font is in, so text and boxes switch to its metrics at once.
+    void document.fonts?.ready.then(() => this.schedule());
   }
 
   destroy(): void {
@@ -128,23 +130,31 @@ export class ScopeController {
     this.canvas.height = Math.max(1, Math.round(h * dpr));
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
+    this.draw();
+  }
+
+  /**
+   * Font metrics for datablocks, measured on every draw: the FONT setting changes the size
+   * without resizing the canvas, and the web font can finish loading after the first
+   * measurement (the fallback font is wider, which made the selection box too big).
+   */
+  private measure(ctx: CanvasRenderingContext2D): void {
     const style = getComputedStyle(this.container);
     const fontPx = parseFloat(style.fontSize) || 13;
     const font = `${style.fontSize} ${style.fontFamily}`;
-    const ctx = this.canvas.getContext("2d");
-    if (ctx) ctx.font = font;
+    ctx.font = font;
     this.metrics = {
       font,
-      charPx: ctx?.measureText("0").width || fontPx * 0.6,
+      charPx: ctx.measureText("0").width || fontPx * 0.6,
       linePx: Math.round(fontPx * 1.15),
     };
-    this.draw();
   }
 
   private draw(): void {
     const ctx = this.canvas.getContext("2d");
     const { w, h } = this.size;
     if (!ctx || w <= 0 || h <= 0) return;
+    this.measure(ctx);
     const m = this.map;
     if (m && (this.needsFit || !this.view)) {
       this.view = fitView(m.selected.bbox, w, h);

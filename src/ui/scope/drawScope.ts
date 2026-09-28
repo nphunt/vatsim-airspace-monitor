@@ -179,8 +179,11 @@ export function drawScope(
     });
     ctx.globalAlpha = dbA;
     if (t.selected) {
+      // Sized from the text as actually rendered, so the box hugs the datablock whatever
+      // font and size the browser drew it in.
+      const textW = Math.max(...t.lines.map((l) => ctx.measureText(l).width));
       ctx.strokeStyle = ERAM_COLORS.toolbarActive;
-      ctx.strokeRect(rect.x - 2.5, rect.y - 1.5, rect.w + 4, rect.h + 2);
+      ctx.strokeRect(rect.x - 2.5, rect.y - 1.5, textW + 4, rect.h + 2);
     }
   }
   ctx.globalAlpha = 1;
