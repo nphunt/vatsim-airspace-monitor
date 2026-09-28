@@ -1,3 +1,4 @@
+import { NEIGHBOR_CHANGE_HIGHLIGHT_S } from "../config";
 import type { AlertEntry } from "../core/alerts";
 import type { Prediction, PredictionSet, VerticalTrend } from "../data/types";
 
@@ -189,4 +190,9 @@ export function aboutLine(
   navCycle: string | null | undefined,
 ): string {
   return `BUILD ${buildId} · VATSPY ${vatspyTag ?? "--"} · AIRAC ${navCycle ?? "--"}`;
+}
+
+/** A neighbor's staffing changed (logon, logoff, new handoff target) within the highlight window. */
+export function recentlyChanged(n: { changedAt: number | null }, now: number): boolean {
+  return n.changedAt !== null && now - n.changedAt < NEIGHBOR_CHANGE_HIGHLIGHT_S * 1000;
 }

@@ -319,4 +319,30 @@ describe("Engine", () => {
       other: { label: "ZKC" },
     });
   });
+
+  it("posts ZME's neighbors with the handoff target, and TERM CTL where no CTR is online", async () => {
+    const messages: FromEngine[] = [];
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl: fakeFetch([]),
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    await engine.handle({ type: "init", dataBaseUrl: BASE, config: DEFAULT_CONFIG });
+    await waitFor(() => messages.some((m) => m.type === "poll"));
+    await engine.handle({ type: "select", airspace: "ZME" });
+    const last = messages.filter((m) => m.type === "neighbors").at(-1);
+    const neighbors = last?.type === "neighbors" ? last.neighbors : [];
+    expect(last?.type === "neighbors" && last.airspaceKey).toBe("KZME#dom");
+    expect(neighbors.map((n) => n.label).sort()).toEqual(["ZFW", "ZHU", "ZID", "ZKC", "ZTL"]);
+    expect(neighbors.find((n) => n.label === "ZKC")).toMatchObject({
+      staffed: true,
+      controller: { callsign: "KC_12_CTR", frequency: "127.900" },
+      changedAt: null, // a switch primes silently
+    });
+    expect(neighbors.find((n) => n.label === "ZTL")).toMatchObject({ staffed: false });
+
+    await engine.handle({ type: "select", airspace: null });
+    const cleared = messages.filter((m) => m.type === "neighbors").at(-1);
+    expect(cleared).toEqual({ type: "neighbors", airspaceKey: null, neighbors: [] });
+  });
 });

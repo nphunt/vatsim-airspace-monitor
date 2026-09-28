@@ -18,6 +18,7 @@ import {
   splitWeights,
   toggleDock,
 } from "./layout";
+import { NeighborsList, NeighborsTitle } from "./NeighborsList";
 import { OutboundList, OutboundTitle } from "./OutboundList";
 import { ScopeTitle, ScopeWindow } from "./ScopeWindow";
 import { SettingsWindow } from "./SettingsWindow";
@@ -27,6 +28,7 @@ const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode 
   alerts: { title: () => <AlertsTitle />, body: () => <AlertsList /> },
   inbound: { title: () => <InboundTitle />, body: () => <InboundList /> },
   load: { title: () => <LoadTitle />, body: () => <LoadWindow /> },
+  neighbors: { title: () => <NeighborsTitle />, body: () => <NeighborsList /> },
   airspace: { title: () => <AirspaceMenuTitle />, body: () => <AirspaceMenu /> },
   settings: { title: () => "SETTINGS", body: () => <SettingsWindow /> },
   fpr: { title: () => <FlightPlanReadoutTitle />, body: () => <FlightPlanReadout /> },

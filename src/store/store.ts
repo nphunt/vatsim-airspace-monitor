@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { AudioState, OutputDevice } from "../audio/alertAudio";
 import type { AlertEntry } from "../core/alerts";
 import { parseCid } from "../core/myPosition";
+import type { NeighborStatus } from "../core/neighbors";
 import type { MyPositionStatus } from "../core/myPosition";
 import type { FeedStatus } from "../data/feed";
 import type { Prediction, PredictionSet } from "../data/types";
@@ -55,6 +56,8 @@ export interface EngineView {
   alerts: AlertEntry[];
   /** Nav data status (§3.3); null until the background load finishes or fails. */
   nav: Omit<NavMessage, "type"> | null;
+  /** Facilities around the selected airspace, with handoff targets (NEIGHBORS). */
+  neighbors: NeighborStatus[];
 }
 
 /** The aircraft shown in the Flight Plan Readout (§7.3). */
@@ -141,6 +144,7 @@ const initialEngine: EngineView = {
   predictions: null,
   alerts: [],
   nav: null,
+  neighbors: [],
 };
 
 // The engine port is injected by the worker client, so the store never imports it.
@@ -238,6 +242,9 @@ export const useStore = create<AppState>()((set, get) => {
         case "nav":
           // A load error also arrives as an "error" message, for the errors list.
           e.nav = { cycle: msg.cycle, expires: msg.expires, error: msg.error };
+          break;
+        case "neighbors":
+          e.neighbors = msg.neighbors;
           break;
         case "error":
           e.errors = [...e.errors, msg.message].slice(-10);

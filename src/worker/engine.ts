@@ -8,8 +8,14 @@ import {
 import { AlertMachine, DEFAULT_ALERT_CONFIG, type AlertConfig } from "../core/alerts";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
 import { altitudeFilterFt, filterByAltitude } from "../core/altitudeFilter";
-import { buildStaffing } from "../core/facilityLookup";
+import { buildStaffing, type Staffing } from "../core/facilityLookup";
 import { MyPositionTracker, findMyPosition } from "../core/myPosition";
+import {
+  findNeighbors,
+  neighborStatuses,
+  type Neighbor,
+  type NeighborStatus,
+} from "../core/neighbors";
 import {
   computePredictions,
   eligiblePilots,
@@ -111,6 +117,9 @@ export class Engine {
   /** Route-following state; null until nav data loads (then predictions start using it). */
   routes: RouteModeTracker | null = null;
   private lastSet: PredictionSet | null = null;
+  /** Facilities around the selected airspace (geometry; rebuilt on switch). */
+  private neighbors: Neighbor[] = [];
+  private neighborStatus: NeighborStatus[] | null = null;
   private eligibleCids: ReadonlySet<number> = new Set();
 
   constructor(post: (m: FromEngine) => void, deps: EngineDeps = {}) {
@@ -306,7 +315,30 @@ export class Engine {
         ? transition
         : null;
     this.post({ type: "status", staffed: [...staffing.keys()], myPosition: me, autoSelected });
+    if (!autoSelected) this.postNeighbors(staffing);
     return autoSelected;
+  }
+
+  /** Neighbor staffing for the latest snapshot (on switch, and per snapshot). */
+  private postNeighbors(staffing?: Staffing): void {
+    if (!this.selected) {
+      this.neighborStatus = null;
+      this.post({ type: "neighbors", airspaceKey: null, neighbors: [] });
+      return;
+    }
+    const registry = this.airspaces;
+    if (!staffing && this.snapshot && registry)
+      staffing = buildStaffing(this.snapshot.controllers, registry, (k) => registry.getAirspace(k));
+    const neighbors = neighborStatuses(
+      this.neighbors,
+      staffing ?? new Map(),
+      this.neighborStatus,
+      this.clock.now(),
+    );
+    // Before the first snapshot everything reads unstaffed; don't let that make the
+    // first real staffing look like a logon.
+    this.neighborStatus = this.snapshot ? neighbors : null;
+    this.post({ type: "neighbors", airspaceKey: this.selected.airspace.key, neighbors });
   }
 
   private postPoll(feed: FeedStatus): void {
@@ -358,6 +390,8 @@ export class Engine {
       this.tracks.clear();
       this.routes?.clear();
       this.alerts.reset();
+      // Staffing changes while paused are not "just now": prime silently like a switch.
+      this.neighborStatus = null;
       this.poller?.start();
     }
   }
@@ -366,6 +400,8 @@ export class Engine {
     if (idOrKey === null) {
       this.selected = null;
       this.lastSet = null;
+      this.neighbors = [];
+      this.postNeighbors();
       this.alerts.reset();
       this.post({ type: "predictions", set: null });
       this.postAlerts(false);
@@ -384,6 +420,11 @@ export class Engine {
       return;
     }
     this.selected = selectAirspace(a);
+    const registry = this.airspaces;
+    this.neighbors = findNeighbors(a, registry, (k) => registry.getAirspace(k));
+    // A switch primes silently: no neighbor shows as "just changed" (§4.2).
+    this.neighborStatus = null;
+    this.postNeighbors();
     // A switch resets alerts and primes silently (§4.2, §6.1).
     this.alerts.reset();
     this.lastSet = null;

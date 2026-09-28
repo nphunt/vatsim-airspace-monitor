@@ -43,6 +43,13 @@ export const STORAGE_PREFIX = `vam:v${SETTINGS_SCHEMA_VERSION}:`;
 
 export const REPO_URL = "https://github.com/nphunt/vatsim-airspace-monitor";
 
+// NEIGHBORS window: facilities sharing a boundary with the selected airspace.
+export const NEIGHBOR_STEP_NM = 10; // boundary sampling step
+export const NEIGHBOR_PROBE_NM = 3; // probe distance to each side of the boundary
+export const NEIGHBOR_MIN_SHARED_NM = 10; // shorter shared boundary = sliver/corner, dropped
+export const NEIGHBOR_CHANGE_HIGHLIGHT_S = 120; // a logon/logoff is highlighted this long
+export const UNICOM_FREQUENCY = "122.800"; // VATSIM UNICOM, for "terminate control"
+
 export const FALLBACK_FEED_URL = "https://data.vatsim.net/v3/vatsim-data.json";
 
 // Feed polling (§3.1, M2).

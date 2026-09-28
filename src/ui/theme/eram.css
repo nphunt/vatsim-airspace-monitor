@@ -514,6 +514,20 @@ input[aria-invalid="true"] {
   outline: 1px solid var(--eram-toolbar-text);
 }
 
+.eram-list.eram-neighbors {
+  width: auto;
+}
+
+.eram-neighbors th,
+.eram-neighbors td {
+  padding-right: 2ch;
+}
+
+/* NEIGHBORS: a logon, logoff or new handoff target, for NEIGHBOR_CHANGE_HIGHLIGHT_S. */
+.eram-list tr.changed td {
+  color: var(--eram-caution);
+}
+
 .eram-alerts .dim-cell {
   opacity: 0.75;
 }
