@@ -7,6 +7,11 @@ import type { MapFeature, ScopeMap } from "./scopeMap";
 // (brighter, thicker) -> facility labels (dimmed if unstaffed) -> exit markers -> targets
 // -> datablocks. No logic beyond styling; the scene is built in scene.ts.
 
+/** Alert color on the scope: red, or caution yellow for the transfer-communications stage. */
+function alertColor(t: { xfer: boolean }): string {
+  return t.xfer ? ERAM_COLORS.caution : ERAM_COLORS.alert;
+}
+
 export interface DrawOptions {
   width: number;
   height: number;
@@ -121,7 +126,7 @@ export function drawScope(
   for (const t of targets) {
     if (!t.exit || t.exit.clip) continue;
     const hot = t.alert === "ACTIVE" || t.alert === "ACKED";
-    const color = hot ? ERAM_COLORS.alert : t.selected ? ERAM_COLORS.toolbarActive : null;
+    const color = hot ? alertColor(t) : t.selected ? ERAM_COLORS.toolbarActive : null;
     if (!color && t.level === "dim") continue;
     ctx.globalAlpha = hot ? 1 : dbA;
     ctx.strokeStyle = color ?? ERAM_COLORS.datablockDim;
@@ -168,12 +173,12 @@ export function drawScope(
     if (leader) polyline(ctx, leader);
     t.lines.forEach((line, i) => {
       let c: string = color;
-      if (i === t.timeLine && t.alert === "ACKED") c = ERAM_COLORS.alert;
+      if (i === t.timeLine && t.alert === "ACKED") c = alertColor(t);
       if (i === t.timeLine && t.alert === "ACTIVE") {
         if (!o.flashOn) return; // blink the time field (§6.2)
-        c = ERAM_COLORS.alert;
+        c = alertColor(t);
       }
-      ctx.globalAlpha = c === ERAM_COLORS.alert ? 1 : dbA;
+      ctx.globalAlpha = c === alertColor(t) ? 1 : dbA;
       ctx.fillStyle = c;
       ctx.fillText(line, rect.x, rect.y + i * o.linePx);
     });

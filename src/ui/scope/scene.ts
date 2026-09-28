@@ -27,6 +27,8 @@ export interface SceneTarget {
   /** Index into `lines` of the time field (ETX/ETE), for flashing (§6.2). */
   timeLine: number | null;
   alert: AlertEntry["state"] | null;
+  /** Transfer-communications stage of a handoff: drawn in caution yellow, not red. */
+  xfer: boolean;
   selected: boolean;
   /** Route ahead on screen (selected RTE aircraft, or all with ROUTES on). */
   route: [number, number][] | null;
@@ -138,6 +140,7 @@ export function buildScene(input: SceneInput): SceneTarget[] {
       lines,
       timeLine,
       alert: alertByCid.get(t.cid)?.state ?? null,
+      xfer: alertByCid.get(t.cid)?.stage === "XFER",
       selected,
       // Skip the first point: it is the (older) reported position, not the extrapolated one.
       route: showRoute ? [[x, y], ...screenPath(t.routeAhead!, 2, input)] : null,

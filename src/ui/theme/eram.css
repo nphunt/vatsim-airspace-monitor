@@ -464,7 +464,9 @@ input[aria-invalid="true"] {
 }
 
 .eram-list tr.alert-active td,
-.eram-list tr.alert-acked td {
+.eram-list tr.alert-acked td,
+.eram-list tr.xfer-active td,
+.eram-list tr.xfer-acked td {
   filter: none;
 }
 
@@ -501,16 +503,40 @@ input[aria-invalid="true"] {
   color: var(--eram-alert);
 }
 
+/* Handoff stage 2, transfer communications: the same flash in caution yellow. */
+@keyframes eram-blink-xfer {
+  50% {
+    background: var(--eram-bg);
+    color: var(--eram-caution);
+  }
+}
+
+.eram-list tr.xfer-active td {
+  background: var(--eram-caution);
+  color: var(--eram-bg);
+  animation: eram-blink-xfer 1s steps(1) infinite;
+  cursor: pointer;
+}
+
+.eram-list tr.xfer-acked td {
+  color: var(--eram-caution);
+}
+
 /* Dimmed cells (unstaffed facility) flash with the rest of an alert row. */
 .eram-list tr.alert-active .dim,
 .eram-list tr.alert-acked .dim,
 .eram-list tr.alert-active .dim-cell,
-.eram-list tr.alert-acked .dim-cell {
+.eram-list tr.alert-acked .dim-cell,
+.eram-list tr.xfer-active .dim,
+.eram-list tr.xfer-acked .dim,
+.eram-list tr.xfer-active .dim-cell,
+.eram-list tr.xfer-acked .dim-cell {
   color: inherit;
   opacity: 1;
 }
 
-.eram-list tr.alert-active:focus-visible {
+.eram-list tr.alert-active:focus-visible,
+.eram-list tr.xfer-active:focus-visible {
   outline: 1px solid var(--eram-toolbar-text);
 }
 

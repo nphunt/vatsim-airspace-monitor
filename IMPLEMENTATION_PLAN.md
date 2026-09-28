@@ -359,7 +359,7 @@ ACTIVE|ACKED ──(remaining > EXIT_ALERT_S + ALERT_REARM_MARGIN_S, OR no exit 
 ANY ──(aircraft dropped: disconnected, stale, or GS < MIN_GS_KT)──► removed (no sound)
 ```
 - **Hysteresis is required**: the 30 s re-arm margin prevents flapping around 2:00.
-- **Staffing does not change alerting** (owner decision): an exit into an unstaffed neighbor alerts exactly like a staffed one; only the display dims the `TO` facility and omits the controller/frequency.
+- **Staffed exits alert in two stages** (owner decision, 2026-09-28; replaces "staffing does not change alerting"): when the facility an aircraft exits into has a controller online, the alert goes ACTIVE at `HANDOFF_ALERT_S` (240 s) as **HANDOFF** (red, `HANDOFF KC_12_CTR 127.900`), then ACTIVE again with a tone at `XFER_COMM_S` (60 s) as **XFER COMM** (yellow flash, `XFER COMM KC_12_CTR 127.900`), acknowledged separately. An exit into an unstaffed neighbor keeps the single-stage alert above at `EXIT_ALERT_S`, shown with `TERM CTL`, and the display dims the `TO` facility. Entry alerts are never staged. If staffing changes mid-alert the stage follows it: a logon turns an ALERT into a new ACTIVE HANDOFF; a logoff relabels it ALERT (dropped if beyond `EXIT_ALERT_S` + margin).
 - An aircraft alerts **at most once per exit event** (an exit event ends at EXITED or NONE).
 - **Countdown past zero:** if remaining reaches 0 but the next snapshot still shows the aircraft inside, display `00:00` (flashing) — never negative — until the next snapshot resolves it.
 - **Silent priming:** on page load, airspace switch, and replay start, the first evaluation puts qualifying aircraft straight into ACTIVE **without sound** (visual only). Otherwise a switch fires a burst of tones.
@@ -464,6 +464,8 @@ HORIZON_MIN = 30              // user-selectable 10/20/30/60
 MAX_GS_KT = 750               // prefilter bound only
 PATH_STEP_NM = 2
 EXIT_ALERT_S = 120
+HANDOFF_ALERT_S = 240
+XFER_COMM_S = 60
 ALERT_REARM_MARGIN_S = 30
 CLIP_REENTRY_S = 180
 EXITED_DISPLAY_S = 30

@@ -2,12 +2,28 @@ import { NEIGHBOR_CHANGE_HIGHLIGHT_S } from "../config";
 import type { AlertEntry } from "../core/alerts";
 import type { Prediction, PredictionSet, VerticalTrend } from "../data/types";
 
-/** Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). */
+/**
+ * Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). Red, except the
+ * transfer-communications stage of a handoff, which is yellow.
+ */
 export function alertClass(a: AlertEntry | undefined): string | undefined {
   if (!a) return undefined;
-  if (a.state === "ACTIVE") return "alert-active";
-  if (a.state === "ACKED") return "alert-acked";
+  const color = a.stage === "XFER" ? "xfer" : "alert";
+  if (a.state === "ACTIVE") return `${color}-active`;
+  if (a.state === "ACKED") return `${color}-acked`;
   return undefined;
+}
+
+/**
+ * What the controller should do for an alert: `HANDOFF KC_12_CTR 127.900`, then
+ * `XFER COMM KC_12_CTR 127.900`; `TERM CTL` for an exit with no controller to hand to.
+ */
+export function alertAction(a: AlertEntry): string {
+  const c = a.other.controller;
+  const to = c ? `${c.callsign} ${c.frequency}` : "";
+  if (a.stage === "HANDOFF") return `HANDOFF ${to}`;
+  if (a.stage === "XFER") return `XFER COMM ${to}`;
+  return a.kind === "exit" ? "TERM CTL" : to;
 }
 
 /** Adds the selected-row class (§7.3) to a row's alert/dim class. */

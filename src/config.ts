@@ -8,6 +8,10 @@ export const HORIZON_CHOICES_MIN = [10, 20, 30, 60] as const;
 export const MAX_GS_KT = 750; // prefilter bound only
 export const PATH_STEP_NM = 2;
 export const EXIT_ALERT_S = 120;
+// Exits into a facility with a controller online: HANDOFF (red) this long before the
+// boundary, then TRANSFER COMMUNICATIONS (yellow). Unstaffed exits use EXIT_ALERT_S.
+export const HANDOFF_ALERT_S = 240;
+export const XFER_COMM_S = 60;
 export const ALERT_REARM_MARGIN_S = 30;
 export const CLIP_REENTRY_S = 180;
 export const EXITED_DISPLAY_S = 30;
