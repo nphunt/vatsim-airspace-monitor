@@ -15,6 +15,8 @@ import {
   dockedOrder,
   dropIndex,
   floatingIds,
+  seamIndex,
+  snapZone,
   splitWeights,
   toggleDock,
 } from "./layout";
@@ -60,7 +62,8 @@ function splitterDrag(
 /**
  * Dock area (§7.2): up to three columns (left, main, right), each a stack of docked
  * windows with splitters, and column splitters between them; floating windows on top.
- * Dragging any window to the left or right page edge snaps it into that side column.
+ * A dragged window docks where it is dropped: at the left or right page edge (that side
+ * column), or on a seam above, between or below the docked windows of any column.
  */
 export function WindowManager() {
   const windows = useStore((s) => s.settings.windows);
@@ -108,10 +111,53 @@ export function WindowManager() {
     return { others, index: dropIndex(mids, clientY) };
   }
 
-  /** Dock `id` into `column` where it was dropped (side-edge snap, or a stack reorder). */
+  /** Dock `id` into `column` where it was dropped (a stack reorder). */
   function dropInto(id: WindowId, column: DockColumn, clientY: number) {
     const { index } = dropSlot(id, column, clientY);
     setWindows(dockTo(useStore.getState().settings.windows, id, column, index));
+  }
+
+  /**
+   * Where a free drag at (x, y) would dock: a side page edge (that column, at the
+   * pointer's height), or a seam between docked windows in the column under the pointer.
+   */
+  function dockTarget(id: WindowId, x: number, y: number) {
+    const edge = snapZone(x, window.innerWidth);
+    if (edge) return { column: edge, index: dropSlot(id, edge, y).index, edge: true };
+    for (const column of DOCK_COLUMNS) {
+      const col = columnRefs.current.get(column)?.getBoundingClientRect();
+      if (!col || x < col.left || x > col.right) continue;
+      const slots = stackRects(id, column).flatMap(({ r }) => (r ? [r] : []));
+      const index = seamIndex(slots, y);
+      return index === null ? null : { column, index, edge: false, slots, col };
+    }
+    return null;
+  }
+
+  /** Previews a free drag's dock target (side overlay or insertion line); true if any. */
+  function hoverDock(id: WindowId, p: { x: number; y: number } | null): boolean {
+    const t = p && dockTarget(id, p.x, p.y);
+    if (!t) {
+      setSnapPreview(null);
+      setInsertLine(null);
+      return false;
+    }
+    if (t.edge || !t.col) {
+      setInsertLine(null);
+      setSnapPreview(t.column);
+      return true;
+    }
+    setSnapPreview(null);
+    const below = t.slots[t.index];
+    const above = t.slots[t.index - 1];
+    const lineY = below ? below.top - 3 : above ? above.bottom - 3 : t.col.top;
+    setInsertLine({ x: t.col.left + 2, y: lineY, w: t.col.width - 4 });
+    return true;
+  }
+
+  function dropDock(id: WindowId, x: number, y: number) {
+    const t = dockTarget(id, x, y);
+    if (t) setWindows(dockTo(useStore.getState().settings.windows, id, t.column, t.index));
   }
 
   /** Insertion line for a reorder drag: the gap above/below the window it lands next to. */
@@ -145,8 +191,8 @@ export function WindowManager() {
           focus(id);
           patchWindow(id, { ...g, docked: false, positioned: true });
         }}
-        onSnap={(column, y) => dropInto(id, column, y)}
-        onSnapPreview={setSnapPreview}
+        onDockHover={(p) => hoverDock(id, p)}
+        onDockDrop={(x, y) => dropDock(id, x, y)}
         onReorderPreview={(y) => previewReorder(id, y)}
         onReorder={(y) => dropInto(id, windows[id].column, y)}
       >

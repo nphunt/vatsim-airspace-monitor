@@ -9,6 +9,8 @@ import {
   dockedOrder,
   dropIndex,
   floatingIds,
+  magnetSnap,
+  seamIndex,
   openWindow,
   snapZone,
   splitWeights,
@@ -112,5 +114,53 @@ describe("window layout", () => {
     expect(dockDragMode(70, 960, "float")).toBe("reorder");
     // Narrow column: 40% of 300 = 120 px.
     expect(dockDragMode(125, 300, "reorder")).toBe("float");
+  });
+});
+
+describe("seamIndex", () => {
+  // Two docked windows, e.g. SCOPE over LOAD in the right column, with a 4 px splitter.
+  const slots = [
+    { top: 50, bottom: 400 },
+    { top: 404, bottom: 700 },
+  ];
+
+  it("docks above, between or below the column's windows near a seam", () => {
+    expect(seamIndex(slots, 45)).toBe(0);
+    expect(seamIndex(slots, 410)).toBe(1); // under SCOPE
+    expect(seamIndex(slots, 690)).toBe(2);
+  });
+
+  it("stays floating away from the seams, or in an empty column", () => {
+    expect(seamIndex(slots, 200)).toBeNull();
+    expect(seamIndex(slots, 550)).toBeNull();
+    expect(seamIndex([], 100)).toBeNull();
+  });
+});
+
+describe("magnetSnap", () => {
+  const bounds = { x: 0, y: 30, w: 1200, h: 800 };
+  const scope = { x: 700, y: 30, w: 500, h: 400 };
+
+  it("butts a moved window against the bottom and edges of another window", () => {
+    const r = magnetSnap({ x: 694, y: 436, w: 300, h: 200 }, [scope], bounds, "move");
+    expect(r).toEqual({ x: 700, y: 430, w: 300, h: 200 });
+  });
+
+  it("snaps to the screen edges", () => {
+    const r = magnetSnap({ x: 6, y: 36, w: 300, h: 200 }, [], bounds, "move");
+    expect(r).toMatchObject({ x: 0, y: 30 });
+  });
+
+  it("ignores edges of windows it doesn't line up with, and anything beyond the threshold", () => {
+    // Far below the scope: its left edge (x 700) is not a target.
+    const far = magnetSnap({ x: 694, y: 600, w: 100, h: 100 }, [scope], bounds, "move");
+    expect(far.x).toBe(694);
+    const loose = magnetSnap({ x: 680, y: 450, w: 300, h: 200 }, [scope], bounds, "move");
+    expect(loose).toMatchObject({ x: 680, y: 450 });
+  });
+
+  it("resizing moves only the right and bottom edges", () => {
+    const r = magnetSnap({ x: 100, y: 100, w: 595, h: 200 }, [scope], bounds, "resize");
+    expect(r).toEqual({ x: 100, y: 100, w: 600, h: 200 });
   });
 });

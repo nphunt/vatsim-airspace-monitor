@@ -18,6 +18,11 @@ export const SNAP_EDGE_PX = 32;
 /** Sideways drag that pulls a docked window out of its stack to float, px (at most). */
 export const TEAR_OUT_PX = 160;
 
+/** A dragged window's pointer this close to a seam between docked windows docks it there, px. */
+export const SEAM_SNAP_PX = 24;
+/** Floating window edges this close to the screen edge or another window's edge snap to it, px. */
+export const MAGNET_PX = 10;
+
 /** Minimum column width while dragging a column splitter, px. */
 export const MIN_COLUMN_W = 200;
 
@@ -52,6 +57,79 @@ export function snapZone(clientX: number, vw: number): Exclude<DockColumn, "main
   if (clientX <= SNAP_EDGE_PX) return "left";
   if (clientX >= vw - SNAP_EDGE_PX) return "right";
   return null;
+}
+
+/**
+ * Seam a drop at `y` would dock into, among a column's docked windows (top to bottom,
+ * excluding the dragged one): 0 = above the first, i = between i-1 and i, n = below the
+ * last. Null unless the pointer is within `threshold` of one, so a floating window can
+ * still be dropped anywhere else over the stack without docking.
+ */
+export function seamIndex(
+  slots: readonly { top: number; bottom: number }[],
+  y: number,
+  threshold = SEAM_SNAP_PX,
+): number | null {
+  if (slots.length === 0) return null;
+  const seams = [
+    slots[0]!.top,
+    ...slots.slice(1).map((s, i) => (slots[i]!.bottom + s.top) / 2),
+    slots.at(-1)!.bottom,
+  ];
+  let best: number | null = null;
+  for (let i = 0; i < seams.length; i++) {
+    const d = Math.abs(y - seams[i]!);
+    if (d <= threshold && (best === null || d < Math.abs(y - seams[best]!))) best = i;
+  }
+  return best;
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Smallest correction (within `threshold`) that puts one of `edges` on one of `lines`. */
+function nearest(edges: number[], lines: number[], threshold: number): number {
+  let best = Infinity;
+  for (const e of edges)
+    for (const l of lines)
+      if (Math.abs(l - e) <= threshold && Math.abs(l - e) < Math.abs(best)) best = l - e;
+  return Number.isFinite(best) ? best : 0;
+}
+
+/**
+ * Magnetic edges for a floating window being moved or resized: its edges snap to the
+ * bounds (the area below the toolbar) and to the edges of other windows it lines up with,
+ * so windows can be butted against each other anywhere on screen. A move shifts the
+ * window; a resize only moves its right and bottom edges.
+ */
+export function magnetSnap(
+  r: Rect,
+  others: readonly Rect[],
+  bounds: Rect,
+  kind: "move" | "resize",
+  threshold = MAGNET_PX,
+): Rect {
+  // Only windows beside/above/below it count: a far-off window's edge line is not a target.
+  const near = (a0: number, a1: number, b0: number, b1: number) =>
+    a0 <= b1 + threshold && b0 <= a1 + threshold;
+  const xLines = [bounds.x, bounds.x + bounds.w];
+  const yLines = [bounds.y, bounds.y + bounds.h];
+  for (const o of others) {
+    if (near(r.y, r.y + r.h, o.y, o.y + o.h)) xLines.push(o.x, o.x + o.w);
+    if (near(r.x, r.x + r.w, o.x, o.x + o.w)) yLines.push(o.y, o.y + o.h);
+  }
+  if (kind === "move") {
+    const dx = nearest([r.x, r.x + r.w], xLines, threshold);
+    const dy = nearest([r.y, r.y + r.h], yLines, threshold);
+    return { ...r, x: r.x + dx, y: r.y + dy };
+  }
+  const dw = nearest([r.x + r.w], xLines, threshold);
+  const dh = nearest([r.y + r.h], yLines, threshold);
+  return { ...r, w: r.w + dw, h: r.h + dh };
 }
 
 /** Insertion index for a drop at `y`, given the vertical midpoints of a column's windows. */
