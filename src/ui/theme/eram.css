@@ -486,6 +486,17 @@ input[aria-invalid="true"] {
   padding: 4px 6px;
 }
 
+/* ---- Development build notice: anything not built from main ---- */
+
+.eram-dev-banner {
+  flex: none;
+  margin: 0;
+  background: var(--eram-bg);
+  color: var(--eram-caution);
+  border: 1px solid var(--eram-caution);
+  padding: 2px 6px;
+}
+
 /* ---- Alerts (§6.2): blinking is the only animation allowed ---- */
 
 @keyframes eram-blink {
