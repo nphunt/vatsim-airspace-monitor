@@ -29,11 +29,7 @@ jobs:
       - run: npm test
       - run: npm run validate-data
       # GITHUB_ACTIONS=true (always set here) builds with the real /<repo>/ base path.
-      # The smoke test stubs the auth Worker, so a placeholder URL is enough without the
-      # AUTH_URL variable; this build is never published.
       - run: npm run build
-        env:
-          VITE_AUTH_URL: ${{ vars.AUTH_URL || 'https://auth.smoke.invalid' }}
       - run: npm run check-dist
       - run: npx playwright-core install --with-deps chromium
       - run: npm run smoke

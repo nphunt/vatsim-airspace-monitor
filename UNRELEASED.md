@@ -2,13 +2,6 @@
 
 Changes on `development` that are not on `main` yet. At release, move these into a new version section of [CHANGELOG.md](CHANGELOG.md) and empty this file back to its headings.
 
-### Access control
-
-- The **development site** (`/dev/`) now asks you to **sign in with VATSIM** and only opens for CIDs an admin has allowed. Anyone else sees `ACCESS DENIED: CID … DOES NOT HAVE ACCESS TO THE DEVELOPMENT SITE (/DEV/). ASK AN ADMIN FOR ACCESS.` The live site is unchanged and open to everyone.
-- New **admin page** at `admin/`, for admins only: add or remove the CIDs allowed on each page (the development site and the admin page itself). Admins can open every page. CID **1935951** is a built-in admin that can't be removed.
-- Once you're signed in on `/dev/`, the development notice shows your CID, a **SIGN OUT** button and, for admins, an **ADMIN** link.
-- Sign-in and the lists run on a small Cloudflare Worker (`auth-worker/`). The owner deploys it once and sets the `AUTH_URL` repository variable; until then `/dev/` and the admin page stay locked.
-
 ### Arrivals
 
 - An aircraft inside the selected airspace that is **filed to land at an airport inside it** (`ARR`) no longer shows an exit countdown. OUTBOUND shows the airport in `TO`, leaves `DIR` blank, and shows the **ETA** as Zulu time (`1742Z`); hover it for the countdown (`ETA IN 12:34`).
