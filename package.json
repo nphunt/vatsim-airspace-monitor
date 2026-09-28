@@ -11,6 +11,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "server": "node server/index.ts",
+    "server:dev": "node --watch server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",

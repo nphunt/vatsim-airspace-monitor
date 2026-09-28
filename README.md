@@ -82,6 +82,7 @@ npm test          # Vitest
 npm run lint      # ESLint + Prettier check
 npm run build     # type-check and production build to dist/
 npm run bench     # prediction performance budget (< 500 ms per recompute) on the replay fixture
+npm run server    # optional Express backend on :3001 (feed fan-out, vNAS proxy), see server/README.md
 ```
 
 Publish checks, the same ones CI runs:
