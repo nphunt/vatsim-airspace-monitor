@@ -1,11 +1,11 @@
 import { ERAM_COLORS } from "../theme/colors";
 import { toScreen, type View } from "./projection";
-import { datablockRect, drawOrder, leaderLine, type SceneTarget } from "./scene";
+import { datablockRect, drawOrder, leaderLine, type SceneAirport, type SceneTarget } from "./scene";
 import type { MapFeature, ScopeMap } from "./scopeMap";
 
 // SCOPE painter (§7.5). Draw order: neighbor boundaries (dim) -> selected boundary
-// (brighter, thicker) -> facility labels (dimmed if unstaffed) -> exit markers -> targets
-// -> datablocks. No logic beyond styling; the scene is built in scene.ts.
+// (brighter, thicker) -> facility labels (dimmed if unstaffed) -> airports with traffic
+// (hollow square + ICAO) -> exit markers -> targets -> datablocks. No logic beyond styling; the scene is built in scene.ts.
 
 /** Alert color on the scope: orange to hand off, yellow to transfer comms, else red. */
 function alertColor(t: Pick<SceneTarget, "stage">): string {
@@ -29,7 +29,12 @@ export interface DrawOptions {
   /** BRIGHT (§7.1), 0..1: boundaries and labels; targets and datablocks. Alerts stay full. */
   mapBright: number;
   datablockBright: number;
+  /** Airports with ground or inbound traffic, at their real positions. */
+  airports: readonly SceneAirport[];
 }
+
+/** Airport square size, px: hollow, so it never reads as a (filled) target symbol. */
+const AIRPORT_SQUARE_PX = 6;
 
 const LEVEL_COLOR = {
   own: ERAM_COLORS.datablock,
@@ -114,6 +119,24 @@ export function drawScope(
         ? ERAM_COLORS.text
         : ERAM_COLORS.mapOther;
     ctx.fillText(f.label, x, y);
+  }
+
+  // Airports with traffic: a hollow square centered on the airport, ICAO to its right.
+  ctx.strokeStyle = ERAM_COLORS.mapOwn;
+  ctx.fillStyle = ERAM_COLORS.mapOwn;
+  ctx.lineWidth = 1;
+  ctx.textAlign = "left";
+  const half = AIRPORT_SQUARE_PX / 2;
+  for (const a of o.airports) {
+    if (a.x < -60 || a.x > w + 10 || a.y < -10 || a.y > h + 10) continue;
+    // Half-pixel offset keeps the 1 px outline crisp.
+    ctx.strokeRect(
+      Math.round(a.x - half) + 0.5,
+      Math.round(a.y - half) + 0.5,
+      AIRPORT_SQUARE_PX,
+      AIRPORT_SQUARE_PX,
+    );
+    ctx.fillText(a.icao, a.x + half + 4, a.y);
   }
 
   // Routes ahead (dim, dashed) and exit markers with their target line.

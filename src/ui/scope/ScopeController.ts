@@ -1,7 +1,14 @@
 import { engineNow, useStore } from "../../store/store";
 import { drawScope } from "./drawScope";
 import { fitView, panBy, zoomAt, type View } from "./projection";
-import { buildScene, datablockAt, hitTest, type DatablockOffset, type SceneTarget } from "./scene";
+import {
+  buildAirportMarks,
+  buildScene,
+  datablockAt,
+  hitTest,
+  type DatablockOffset,
+  type SceneTarget,
+} from "./scene";
 import type { ScopeMap } from "./scopeMap";
 
 /** Idle redraw interval: countdowns, extrapolated positions and the 1 Hz blink (§6.2). */
@@ -199,6 +206,8 @@ export class ScopeController {
       flashOn: Math.floor(Date.now() / 500) % 2 === 0,
       mapBright: this.opts.mapBright,
       datablockBright: this.opts.datablockBright,
+      // Traffic counts are as old as an idle pause: show no airports then, like AIRPORTS.
+      airports: m && !s.paused ? buildAirportMarks(s.engine.airports, m.projection, v, w, h) : [],
     });
   }
 

@@ -1,3 +1,4 @@
+import type { AirportTraffic } from "../../core/airportTraffic";
 import type { AlertEntry } from "../../core/alerts";
 import { destination } from "../../core/geo";
 import type { Prediction, PredictionSet, ScopeTarget } from "../../data/types";
@@ -95,6 +96,28 @@ function screenPath(flat: readonly number[], from: number, input: SceneInput): [
     out.push(toScreen(input.view, input.width, input.height, x, y));
   }
   return out;
+}
+
+/** An airport with traffic, placed on screen at its reference point. */
+export interface SceneAirport {
+  icao: string;
+  x: number;
+  y: number;
+}
+
+/** Screen positions of the AIRPORTS window's airports (ground or inbound traffic). */
+export function buildAirportMarks(
+  airports: readonly Pick<AirportTraffic, "icao" | "lat" | "lon">[],
+  projection: Projection,
+  view: View,
+  width: number,
+  height: number,
+): SceneAirport[] {
+  return airports.map((a) => {
+    const [px, py] = project(projection, a.lat, a.lon);
+    const [x, y] = toScreen(view, width, height, px, py);
+    return { icao: a.icao, x, y };
+  });
 }
 
 export function buildScene(input: SceneInput): SceneTarget[] {

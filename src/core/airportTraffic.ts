@@ -33,6 +33,9 @@ export function airportsNear(
 /** One airport in the selected airspace with traffic on the ground or inbound. */
 export interface AirportTraffic {
   icao: string;
+  /** Airport reference point, for the scope. */
+  lat: number;
+  lon: number;
   /** On the ground at the airport (slower than MIN_GS_KT within AIRPORT_GROUND_NM). */
   ground: number;
   /** Of those, with a flight plan departing this airport. */
@@ -62,11 +65,13 @@ export function airportTraffic(
 ): AirportTraffic[] {
   const byIcao = new Map(airports.filter((a) => a.inside).map((a) => [a.icao, a]));
   const out = new Map<string, AirportTraffic>();
-  const row = (icao: string): AirportTraffic => {
+  const row = ({ icao, lat, lon }: AirportPoint): AirportTraffic => {
     let r = out.get(icao);
     if (!r) {
       r = {
         icao,
+        lat,
+        lon,
         ground: 0,
         departures: 0,
         inbound: 0,
@@ -104,7 +109,7 @@ export function airportTraffic(
         }
       }
       if (!best?.inside) continue;
-      const r = row(best.icao);
+      const r = row(best);
       r.ground += 1;
       if (p.flightPlan?.departure === best.icao) r.departures += 1;
       continue;
@@ -112,7 +117,7 @@ export function airportTraffic(
     const arr = p.flightPlan?.arrival;
     const a = arr ? byIcao.get(arr) : undefined;
     if (!a) continue;
-    const r = row(a.icao);
+    const r = row(a);
     r.inbound += 1;
     const eta =
       p.lastUpdated + (distanceNm(p.lat, p.lon, a.lat, a.lon) / p.groundspeed) * 3_600_000;
