@@ -2,7 +2,7 @@ import { useRef } from "react";
 import type { Prediction } from "../../data/types";
 import { useStore } from "../../store/store";
 import { alertClass, formatCrossing, listColumns, rowClass } from "../format";
-import { onAircraftContextMenu, useClosed } from "../closedAircraft";
+import { onAircraftContextMenu, onListBackgroundClick, useClosed } from "../closedAircraft";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -43,7 +43,7 @@ export function InboundList() {
   const alertByCid = new Map(alerts.filter((a) => a.kind === "entry").map((a) => [a.cid, a]));
 
   return (
-    <div className="eram-list-wrap" ref={ref}>
+    <div className="eram-list-wrap" ref={ref} onClick={onListBackgroundClick}>
       {predictions === null ? (
         <p className="eram-empty">{paused ? "PAUSED" : "NO AIRSPACE SELECTED"}</p>
       ) : (

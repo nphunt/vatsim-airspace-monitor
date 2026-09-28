@@ -10,7 +10,7 @@ import {
   listColumns,
   rowClass,
 } from "../format";
-import { onAircraftContextMenu, useClosed } from "../closedAircraft";
+import { onAircraftContextMenu, onListBackgroundClick, useClosed } from "../closedAircraft";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -65,7 +65,7 @@ export function OutboundList() {
   const layout = listColumns(width / ch, "outbound", width);
 
   return (
-    <div className="eram-list-wrap" ref={ref}>
+    <div className="eram-list-wrap" ref={ref} onClick={onListBackgroundClick}>
       {predictions === null ? (
         <p className="eram-empty">{paused ? "PAUSED" : "NO AIRSPACE SELECTED"}</p>
       ) : (

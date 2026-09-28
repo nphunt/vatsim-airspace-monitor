@@ -17,6 +17,11 @@ Changes on `development` that are not on `main` yet. At release, move these into
 - Right-click it again and choose **OPEN** to undo. Its next alert stage sounds as usual.
 - Closed aircraft are saved with the settings, so they stay closed across reloads, and are forgotten once the pilot disconnects.
 
+### Deselecting
+
+- Click an **empty part** of OUTBOUND, INBOUND or ALERTS (below the rows, or the header), or an empty spot on the SCOPE (no target, no datablock), to **deselect** the aircraft: the highlight goes and the FLIGHT PLAN window closes. Panning the scope or using the exit-summary filter buttons doesn't deselect.
+- Closing the FLIGHT PLAN window with its `X` deselects too, so the next click on an aircraft opens it fresh.
+
 ### Feed
 
 - The VATSIM feed is polled every **10 s** instead of 15 s. VATSIM still publishes about every 15 s, so data is no newer than before, but each update shows up sooner: about 5 s after VATSIM publishes it on average, instead of 7.5 s. Failures back off 10 → 20 → 40 → 60 s.

@@ -287,7 +287,11 @@ export class ScopeController {
     if (!d || d.moved) return;
     const { charPx, linePx } = this.metrics;
     const cid = hitTest(this.scene, e.offsetX, e.offsetY, charPx, linePx);
-    if (cid !== null) useStore.getState().selectAircraft(cid, window.innerWidth);
+    const store = useStore.getState();
+    if (cid !== null) store.selectAircraft(cid, window.innerWidth);
+    // A click on empty scope (no target, no datablock) deselects; a pan never does.
+    else if (store.selection && !datablockAt(this.scene, e.offsetX, e.offsetY, charPx, linePx))
+      store.clearSelection();
   }
 
   pointerCancel(): void {

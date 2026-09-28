@@ -37,7 +37,7 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 - **INBOUND**: aircraft predicted to enter, with `ETE` (countdown and Zulu time) and where they come from. With `SETTINGS` → `ALSO ALERT … BEFORE ENTRY` on, an aircraft about to enter flashes here and in ALERTS, like an exit.
 - `FLG` column: `RTE` (following its filed route) or `DR` (dead reckoning on its current track; less reliable before turns), `ARR` landing inside, `TRN` turning, `CLP` only clipping a corner (never alerts), `V` VFR.
 - Times are `MM:SS`; past an hour, `H+MM`.
-- Click any row to open the **flight plan readout**: route, filed altitude, squawk, and whether it is predicted by route or dead reckoning.
+- Click any row to open the **flight plan readout**: route, filed altitude, squawk, and whether it is predicted by route or dead reckoning. Click an empty part of a list or of the SCOPE (no aircraft, no datablock), or close the readout with its `X`, to deselect.
 - **NEIGHBORS** (`NBR` in the toolbar): every airspace bordering yours, clockwise from north, with who to hand off to (`ZKC NW KC_12_CTR 127.900`), or `TERM CTL UNICOM 122.800` when nobody is on. A logon, logoff or new handoff controller shows in yellow for 2 minutes, and so does the `NBR` button.
 - **AIRPORTS** (`APT`): airports in your airspace with traffic, busiest first. `GND` aircraft on the ground there, `DEP` those filed out of it, `INBD` airborne aircraft filed to it (within the horizon / in total), `NEXT` the soonest arrival with a straight-line ETA.
 

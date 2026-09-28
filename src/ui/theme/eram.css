@@ -343,6 +343,8 @@ input[aria-invalid="true"] {
 
 .eram-list-wrap {
   min-width: 0;
+  /* Fill the window, so a click below the last row deselects (onListBackgroundClick). */
+  min-height: 100%;
 }
 
 .eram-summary {

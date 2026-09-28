@@ -1,6 +1,6 @@
 import { useStore } from "../../store/store";
 import { alertAction, alertClass, formatCrossing } from "../format";
-import { onAircraftContextMenu, useClosed } from "../closedAircraft";
+import { onAircraftContextMenu, onListBackgroundClick, useClosed } from "../closedAircraft";
 import { useEngineNow } from "../hooks";
 
 export function AlertsTitle() {
@@ -27,42 +27,49 @@ export function AlertsList() {
   const now = useEngineNow();
   const own = selectable?.find((a) => a.key === selectedKey)?.label ?? "---";
 
-  if (alerts.length === 0) return <p className="eram-empty">NO ALERTS</p>;
+  if (alerts.length === 0)
+    return (
+      <div className="eram-list-wrap" onClick={onListBackgroundClick}>
+        <p className="eram-empty">NO ALERTS</p>
+      </div>
+    );
 
   return (
-    <table className="eram-list eram-alerts">
-      <tbody>
-        {alerts.map((a) => {
-          const alt = String(Math.max(0, Math.round(a.altitude / 100))).padStart(3, "0");
-          const route = a.kind === "exit" ? `${own}→${a.other.label}` : `${a.other.label}→${own}`;
-          const onAck = () => a.state === "ACTIVE" && ack(a.cid);
-          return (
-            <tr
-              key={a.key}
-              className={a.state === "EXITED" || closed.has(a.cid) ? "dim" : alertClass(a)}
-              tabIndex={a.state === "ACTIVE" ? 0 : -1}
-              onClick={onAck}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onAck()}
-              onContextMenu={(e) => onAircraftContextMenu(e, a.cid, a.callsign)}
-              title={a.state === "ACTIVE" ? "Click to acknowledge" : undefined}
-            >
-              <td>{a.callsign}</td>
-              <td>{a.aircraftType}</td>
-              <td>{alt}</td>
-              {a.state === "EXITED" ? (
-                <td colSpan={4}>EXITED {a.other.label}</td>
-              ) : (
-                <>
-                  <td className={a.other.staffed ? undefined : "dim-cell"}>{route}</td>
-                  <td>{a.kind === "exit" ? (a.dir ?? "") : "ENT"}</td>
-                  <td>{formatCrossing(a.t, now)}</td>
-                  <td className="col-flg">{alertAction(a)}</td>
-                </>
-              )}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="eram-list-wrap" onClick={onListBackgroundClick}>
+      <table className="eram-list eram-alerts">
+        <tbody>
+          {alerts.map((a) => {
+            const alt = String(Math.max(0, Math.round(a.altitude / 100))).padStart(3, "0");
+            const route = a.kind === "exit" ? `${own}→${a.other.label}` : `${a.other.label}→${own}`;
+            const onAck = () => a.state === "ACTIVE" && ack(a.cid);
+            return (
+              <tr
+                key={a.key}
+                className={a.state === "EXITED" || closed.has(a.cid) ? "dim" : alertClass(a)}
+                tabIndex={a.state === "ACTIVE" ? 0 : -1}
+                onClick={onAck}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onAck()}
+                onContextMenu={(e) => onAircraftContextMenu(e, a.cid, a.callsign)}
+                title={a.state === "ACTIVE" ? "Click to acknowledge" : undefined}
+              >
+                <td>{a.callsign}</td>
+                <td>{a.aircraftType}</td>
+                <td>{alt}</td>
+                {a.state === "EXITED" ? (
+                  <td colSpan={4}>EXITED {a.other.label}</td>
+                ) : (
+                  <>
+                    <td className={a.other.staffed ? undefined : "dim-cell"}>{route}</td>
+                    <td>{a.kind === "exit" ? (a.dir ?? "") : "ENT"}</td>
+                    <td>{formatCrossing(a.t, now)}</td>
+                    <td className="col-flg">{alertAction(a)}</td>
+                  </>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }

@@ -71,6 +71,7 @@ export function WindowManager() {
   const windows = useStore((s) => s.settings.windows);
   const columnWeights = useStore((s) => s.settings.columns);
   const patchWindow = useStore((s) => s.patchWindow);
+  const clearSelection = useStore((s) => s.clearSelection);
   const setWindows = useStore((s) => s.setWindows);
   const setColumns = useStore((s) => s.setColumns);
   const [zOrder, setZOrder] = useState<WindowId[]>([]);
@@ -188,7 +189,7 @@ export function WindowManager() {
         onFocus={() => focus(id)}
         onMinimize={() => patchWindow(id, { minimized: !w.minimized })}
         onToggleDock={() => setWindows(toggleDock(windows, id))}
-        onClose={() => patchWindow(id, { open: false })}
+        onClose={() => (id === "fpr" ? clearSelection() : patchWindow(id, { open: false }))}
         onGeometry={(g) => {
           focus(id);
           patchWindow(id, { ...g, docked: false, positioned: true });

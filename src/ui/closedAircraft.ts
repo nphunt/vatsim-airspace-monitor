@@ -12,3 +12,12 @@ export function onAircraftContextMenu(e: MouseEvent, cid: number, callsign: stri
   e.preventDefault();
   useStore.getState().openMenu({ cid, callsign, x: e.clientX, y: e.clientY });
 }
+
+/**
+ * Click on a list's background (not an aircraft row, not a control): deselects the aircraft
+ * and closes the FLIGHT PLAN readout.
+ */
+export function onListBackgroundClick(e: MouseEvent): void {
+  if ((e.target as Element).closest("tbody tr, button, input, select, a")) return;
+  if (useStore.getState().selection) useStore.getState().clearSelection();
+}

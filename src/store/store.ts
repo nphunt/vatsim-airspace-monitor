@@ -115,6 +115,7 @@ interface AppState {
    * Flight Plan Readout. `viewportWidth` decides whether a never-placed window docks.
    */
   selectAircraft(cid: number, viewportWidth: number): void;
+  /** Deselect (click off an aircraft, or close FLIGHT PLAN): clears it and closes the readout. */
   clearSelection(): void;
   /** Close (dim, limited datablock, silent alerts) or reopen an aircraft's datablock. */
   setClosed(cid: number, closed: boolean): void;
@@ -306,7 +307,12 @@ export const useStore = create<AppState>()((set, get) => {
         updateSettings({ windows: openWindow(settings.windows, "fpr", viewportWidth) });
       }
     },
-    clearSelection: () => set({ selection: null }),
+    clearSelection: () => {
+      set({ selection: null });
+      const windows = get().settings.windows;
+      if (windows.fpr.open)
+        updateSettings({ windows: { ...windows, fpr: { ...windows.fpr, open: false } } });
+    },
     setClosed: (cid, closed) => {
       const rest = get().settings.closed.filter((c) => c !== cid);
       updateSettings({ closed: closed ? [...rest, cid].slice(-CLOSED_MAX) : rest });

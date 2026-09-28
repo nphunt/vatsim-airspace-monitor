@@ -99,6 +99,15 @@ describe("store", () => {
     useStore.getState().setClosed(8, false);
   });
 
+  it("deselecting clears the selection and closes the readout", () => {
+    const s = useStore.getState();
+    s.selectAircraft(9, 1200);
+    expect(useStore.getState().settings.windows.fpr.open).toBe(true);
+    useStore.getState().clearSelection();
+    expect(useStore.getState().selection).toBeNull();
+    expect(useStore.getState().settings.windows.fpr.open).toBe(false);
+  });
+
   it("a row click selects, acks an ACTIVE alert and opens the readout", () => {
     const p = { cid: 7, callsign: "DAL123" } as Prediction;
     const set = { outbound: [p], inbound: [], resident: [] } as unknown as PredictionSet;
