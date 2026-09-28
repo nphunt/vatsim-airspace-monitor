@@ -88,7 +88,10 @@ export interface VatsimPilot {
   callsign: string;
   lat: number;
   lon: number;
-  /** ft */
+  /**
+   * ft, as ATC sees it: pressure altitude at/above FL180, true altitude below
+   * (feedParse `atcAltitude`), not the feed's raw true altitude.
+   */
   altitude: number;
   /** kt */
   groundspeed: number;

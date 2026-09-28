@@ -19,6 +19,10 @@ export const ENTRY_ALERT_ENABLED = false;
 export const ENTRY_ALERT_S = 120;
 export const ARR_SUPPRESS_MARGIN_NM = 20;
 export const TURN_THRESHOLD_DEG = 10;
+// US transition altitude: at/above it ATC sees pressure altitude (flight levels, 29.92),
+// below it altitude on the local altimeter setting (about true altitude).
+export const TRANSITION_ALT_FT = 18_000;
+export const STANDARD_ALTIMETER_INHG = 29.92;
 export const ROUTE_CONFORM_NM = 5;
 export const ROUTE_CONFORM_DEG = 30;
 export const LOAD_STRATEGIC_MIN = 120; // 15-min bins
