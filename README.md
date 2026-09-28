@@ -147,17 +147,18 @@ See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Three workflows 
 | Workflow | When | Does |
 | --- | --- | --- |
 | `ci.yml` | PRs, pushes to non-main branches | lint, test, validate data, build under `/<repo>/`, publish checks, smoke test |
-| `deploy.yml` | push to `main`, or manually | the same checks again, then deploy to GitHub Pages and check the live URL |
-| `refresh-data.yml` | Mondays 06:00 UTC, or manually | `update-data` + `update-nav` + `validate-data`; opens a `Data refresh: VATSpy <tag>, AIRAC <cycle>` PR when `public/data` changed |
+| `deploy.yml` | push to `main`, or manually | the same checks again, then (once `PAGES_ENABLED` is set) deploy to GitHub Pages and check the live URL |
+| `refresh-data.yml` | Mondays 06:00 UTC (once `DATA_REFRESH_ENABLED` is set), or manually | `update-data` + `update-nav` + `validate-data`; opens a `Data refresh: VATSpy <tag>, AIRAC <cycle>` PR when `public/data` changed |
 
 **One-time repo setup (owner):**
 
 - [ ] Repo public (Pages on a private repo needs a paid plan).
-- [ ] Settings → Pages → Source: **GitHub Actions**; Enforce HTTPS on.
+- [ ] Settings → Pages → Source: **GitHub Actions**; Enforce HTTPS on. Then add the repository variable `PAGES_ENABLED` = `true` (Settings → Secrets and variables → Actions → Variables). Until it is set, `deploy` only runs the checks on `main` and skips publishing.
 - [ ] Branch protection on `main`: require a PR and the `ci` check.
 - [ ] Settings → Actions → General: allow GitHub Actions to create and approve pull requests.
 - [ ] Secret `DATA_PR_TOKEN`: fine-grained PAT or GitHub App token for this repo only, contents + pull-requests write. (PRs opened with the default token don't run `ci`.)
 - [ ] Environment `github-pages`: deployments from `main` only.
+- [ ] Add the repository variable `DATA_REFRESH_ENABLED` = `true` to turn on the weekly schedule (a manual run works without it).
 - [ ] Run `refresh-data` once by hand (Actions → refresh-data → Run workflow) and check `ci` runs on its PR.
 
 **Releasing:** merge to `main`; `deploy` publishes it. The ABOUT line (`BUILD <sha> · VATSPY <tag> · AIRAC <cycle>`) identifies the deploy.
