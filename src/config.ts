@@ -1,7 +1,7 @@
 // All tunables in one place (IMPLEMENTATION_PLAN §8). Units are in the names.
 
-// VATSIM publishes about every 15 s; polling every 10 s picks each update up sooner (on
-// average ~5 s after it appears instead of ~7.5 s). Unchanged snapshots are dropped.
+// Feed polls are timed to each VATSIM update (src/data/pollSchedule.ts). FEED_POLL_MS is
+// the interval before that is learned or when updates stop coming, and the backoff base.
 export const FEED_POLL_MS = 10_000;
 export const STALE_PILOT_S = 60;
 export const MIN_GS_KT = 40;
@@ -69,6 +69,11 @@ export const FEED_FETCH_TIMEOUT_MS = 12_000;
 // With a backend (VITE_API_BASE), a failed /api/feed poll falls back to VATSIM directly
 // and the backend is tried again after this long.
 export const FEED_PRIMARY_RETRY_MS = 60_000;
+export const FEED_PUBLISH_MS = 15_000; // VATSIM's update cycle
+export const FEED_EARLY_RETRY_MS = 2_000; // a poll that came too early retries this soon
+export const FEED_EARLY_MAX_RETRIES = 3; // then falls back to FEED_POLL_MS
+export const FEED_LEAD_STEP_MS = 1_000; // aim this much earlier ...
+export const FEED_LEAD_STEP_AFTER = 3; // ... after this many on-time polls in a row
 export const POLL_LOG_SIZE = 60; // recent polls kept for the §9.3 throttling check
 export const DATA_STALE_S = 60; // toolbar DATA turns alert color beyond this age (§7.2)
 

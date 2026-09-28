@@ -1,12 +1,18 @@
 import {
   FEED_BACKOFF_MAX_MS,
+  FEED_EARLY_MAX_RETRIES,
+  FEED_EARLY_RETRY_MS,
   FEED_FETCH_TIMEOUT_MS,
+  FEED_LEAD_STEP_AFTER,
+  FEED_LEAD_STEP_MS,
   FEED_POLL_MS,
   FEED_PRIMARY_RETRY_MS,
+  FEED_PUBLISH_MS,
   POLL_LOG_SIZE,
 } from "../config";
 import type { ServerOffsetEstimator } from "../core/clock";
 import { feedUpdateTimestamp, normalizeFeed } from "../core/feedParse";
+import { PollSchedule } from "./pollSchedule";
 import type { FeedSnapshot } from "./types";
 
 export type PollResult = "new" | "dup" | "error";
@@ -48,15 +54,29 @@ export interface FeedPollerOptions {
   clearTimer?: (handle: unknown) => void;
 }
 
-/** FEED_POLL_MS (10 s) normally; doubling after each failure, 60 s max (§10 M2). */
+/** After failures: FEED_POLL_MS (10 s) doubling after each, 60 s max (§10 M2). */
 export function backoffDelay(consecutiveFailures: number): number {
   return Math.min(FEED_POLL_MS * 2 ** consecutiveFailures, FEED_BACKOFF_MAX_MS);
 }
 
+/** Poll timing for VATSIM's 15 s cycle. server/services/feedHub.ts builds the same. */
+export const vatsimPollSchedule = () =>
+  new PollSchedule({
+    publishMs: FEED_PUBLISH_MS,
+    fallbackMs: FEED_POLL_MS,
+    retryMs: FEED_EARLY_RETRY_MS,
+    maxRetries: FEED_EARLY_MAX_RETRIES,
+    stepMs: FEED_LEAD_STEP_MS,
+    stepAfter: FEED_LEAD_STEP_AFTER,
+    minDelayMs: FEED_EARLY_RETRY_MS,
+    maxDelayMs: FEED_PUBLISH_MS + FEED_EARLY_RETRY_MS,
+  });
+
 /**
- * Polls the VATSIM feed (§3.1): every FEED_POLL_MS (10 s), `cache: "no-cache"` so the
- * browser revalidates instead of reusing its own copy, and duplicate snapshots (unchanged
- * update_timestamp) are dropped without counting as a failure. Every response, duplicate
+ * Polls the VATSIM feed (§3.1): timed to land just after each update (PollSchedule),
+ * `cache: "no-cache"` so the browser revalidates instead of reusing its own copy, and
+ * duplicate snapshots (unchanged update_timestamp) are dropped without counting as a
+ * failure. Every response, duplicate
  * or not, feeds the server-offset estimator.
  */
 export class FeedPoller {
@@ -77,6 +97,7 @@ export class FeedPoller {
   private activeUrl: string | null = null;
   /** Local ms before which `url` is skipped in favor of `fallbackUrl`. */
   private primaryRetryAt = 0;
+  private readonly schedule = vatsimPollSchedule();
   private readonly opts: FeedPollerOptions;
 
   constructor(opts: FeedPollerOptions) {
@@ -149,7 +170,9 @@ export class FeedPoller {
       // An older CDN copy after a newer one is also not new.
       if (this.lastTs !== null && ts <= this.lastTs) {
         result = "dup";
+        this.schedule.onDup();
       } else {
+        this.schedule.onNew(ts, started);
         const snapshot = normalizeFeed(json);
         this.lastTs = ts;
         result = "new";
@@ -168,7 +191,8 @@ export class FeedPoller {
     if (generation !== this.generation) return; // stopped (and maybe restarted) meanwhile
 
     if (this.running) {
-      const delay = backoffDelay(this.failures);
+      const delay =
+        this.failures > 0 ? backoffDelay(this.failures) : this.schedule.nextDelay(this.localNow());
       this.nextPollAt = this.localNow() + delay;
       this.timer = this.setTimer(() => void this.poll(), delay);
     }

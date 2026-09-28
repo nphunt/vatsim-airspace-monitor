@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import { FEED_BACKOFF_MAX_MS, FEED_FETCH_TIMEOUT_MS, FEED_POLL_MS } from "../../src/config.ts";
+import {
+  FEED_BACKOFF_MAX_MS,
+  FEED_EARLY_MAX_RETRIES,
+  FEED_EARLY_RETRY_MS,
+  FEED_FETCH_TIMEOUT_MS,
+  FEED_LEAD_STEP_AFTER,
+  FEED_LEAD_STEP_MS,
+  FEED_POLL_MS,
+  FEED_PUBLISH_MS,
+} from "../../src/config.ts";
 import { parseVatsimTime } from "../../src/core/time.ts";
+import { PollSchedule } from "../../src/data/pollSchedule.ts";
 import { fetchUpstream } from "./upstream.ts";
 
 export interface FeedDocument {
@@ -43,6 +53,18 @@ export class FeedHub {
   private running = false;
   private failures = 0;
   private lastError: string | null = null;
+  // Same timing as the browser's vatsimPollSchedule() (src/data/feed.ts can't be imported
+  // here: its imports have no .ts extensions).
+  private readonly schedule = new PollSchedule({
+    publishMs: FEED_PUBLISH_MS,
+    fallbackMs: FEED_POLL_MS,
+    retryMs: FEED_EARLY_RETRY_MS,
+    maxRetries: FEED_EARLY_MAX_RETRIES,
+    stepMs: FEED_LEAD_STEP_MS,
+    stepAfter: FEED_LEAD_STEP_AFTER,
+    minDelayMs: FEED_EARLY_RETRY_MS,
+    maxDelayMs: FEED_PUBLISH_MS + FEED_EARLY_RETRY_MS,
+  });
 
   constructor(opts: FeedHubOptions) {
     this.opts = opts;
@@ -78,6 +100,7 @@ export class FeedHub {
   /** One fetch; exposed for tests. Older or equal snapshots (CDN lag) are ignored. */
   async poll(): Promise<void> {
     this.timer = null;
+    const started = this.now();
     try {
       const res = await fetchUpstream(this.opts.url, {
         userAgent: this.opts.userAgent,
@@ -91,7 +114,10 @@ export class FeedHub {
           ? parseVatsimTime((json.general as { update_timestamp?: unknown })?.update_timestamp)
           : NaN;
       if (Number.isNaN(ts)) throw new Error("feed has no valid general.update_timestamp");
-      if (this.doc === null || ts > this.doc.updateTimestamp) {
+      if (this.doc !== null && ts <= this.doc.updateTimestamp) {
+        this.schedule.onDup();
+      } else {
+        this.schedule.onNew(ts, started);
         this.doc = {
           updateTimestamp: ts,
           fetchedAt: this.now(),
@@ -107,7 +133,10 @@ export class FeedHub {
       this.lastError = e instanceof Error ? e.message : String(e);
     }
     if (this.running) {
-      const delay = Math.min(FEED_POLL_MS * 2 ** this.failures, FEED_BACKOFF_MAX_MS);
+      const delay =
+        this.failures > 0
+          ? Math.min(FEED_POLL_MS * 2 ** this.failures, FEED_BACKOFF_MAX_MS)
+          : this.schedule.nextDelay(this.now());
       this.timer = setTimeout(() => void this.poll(), delay);
       this.timer.unref();
     }

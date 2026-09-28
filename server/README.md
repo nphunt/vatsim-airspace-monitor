@@ -8,7 +8,7 @@ server adds what a browser alone cannot do well.
 | Problem | Server answer |
 |---|---|
 | vNAS API sends no CORS header (SECTOR_PLAN §3.1), so the app can only use build-time copies | `/api/vnas/artccs/:id` proxies it with a 1 h cache and stale-if-error |
-| Every open tab polls the multi-MB VATSIM feed itself | `FeedHub` polls once per `FEED_POLL_MS` (same cadence/backoff as the worker) and fans out, gzipped, with ETag/304 |
+| Every open tab polls the multi-MB VATSIM feed itself | `FeedHub` polls once, timed to each VATSIM update like the worker (`src/data/pollSchedule.ts`), and fans out, gzipped, with ETag/304 |
 | No shared place for future server-side work (sector data, conflict probe, flow plans) | Services + routers pattern below |
 
 ## Layout

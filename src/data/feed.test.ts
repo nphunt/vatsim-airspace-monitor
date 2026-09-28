@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { FEED_BACKOFF_MAX_MS, FEED_POLL_MS, FEED_PRIMARY_RETRY_MS } from "../config";
+import {
+  FEED_BACKOFF_MAX_MS,
+  FEED_EARLY_RETRY_MS,
+  FEED_POLL_MS,
+  FEED_PRIMARY_RETRY_MS,
+  FEED_PUBLISH_MS,
+} from "../config";
 import { ServerOffsetEstimator } from "../core/clock";
 import { FeedPoller, backoffDelay, type FeedStatus } from "./feed";
 import type { FeedSnapshot } from "./types";
+
+/** Feed doc published `s` seconds after 17:00:00Z, the harness's start time. */
+const at = (s: number) => new Date(Date.UTC(2026, 8, 27, 17, 0, s)).toISOString();
 
 function feedDoc(ts: string) {
   return { general: { update_timestamp: ts }, pilots: [], controllers: [] };
@@ -53,11 +62,12 @@ function harness(replies: Reply[], fallbackUrl?: string) {
     return t.ms;
   }
 
-  return { poller, timers, requests, urls, snapshots, statuses, estimator, settle, next };
+  const elapsed = () => local - Date.UTC(2026, 8, 27, 17, 0, 0);
+  return { poller, timers, requests, urls, elapsed, snapshots, statuses, estimator, settle, next };
 }
 
 describe("backoffDelay", () => {
-  it("polls every 10 s, doubling after each failure up to 60 s", () => {
+  it("starts at 10 s and doubles after each failure up to 60 s", () => {
     expect(FEED_POLL_MS).toBe(10_000);
     expect([0, 1, 2, 3, 10].map(backoffDelay)).toEqual([10_000, 20_000, 40_000, 60_000, 60_000]);
     expect(FEED_BACKOFF_MAX_MS).toBe(60_000);
@@ -65,7 +75,7 @@ describe("backoffDelay", () => {
 });
 
 describe("FeedPoller", () => {
-  it("polls immediately, then every 10 s, with cache: no-cache", async () => {
+  it("polls immediately, then when the next update is due, with cache: no-cache", async () => {
     const h = harness([
       { ok: true, body: feedDoc("2026-09-27T17:00:00Z") },
       { ok: true, body: feedDoc("2026-09-27T17:00:15Z") },
@@ -73,8 +83,9 @@ describe("FeedPoller", () => {
     h.poller.start();
     await h.settle();
     expect(h.snapshots).toHaveLength(1);
-    expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
-    expect(await h.next()).toBe(FEED_POLL_MS);
+    // Received the moment it was published, so the next one is due in 15 s.
+    expect(h.timers[0]!.ms).toBe(FEED_PUBLISH_MS);
+    expect(await h.next()).toBe(FEED_PUBLISH_MS);
     expect(h.snapshots).toHaveLength(2);
     expect(h.requests.every((r) => r.cache === "no-cache")).toBe(true);
   });
@@ -92,7 +103,8 @@ describe("FeedPoller", () => {
     expect(h.snapshots).toHaveLength(1);
     expect(h.poller.status().consecutiveFailures).toBe(0);
     expect(h.poller.status().polls.map((p) => p.result)).toEqual(["new", "dup", "dup"]);
-    expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
+    // Duplicates mean the poll came early: try again shortly.
+    expect(h.timers[0]!.ms).toBe(FEED_EARLY_RETRY_MS);
   });
 
   it("backs off 20, 40, then 60 s on failures and resets on success", async () => {
@@ -113,7 +125,8 @@ describe("FeedPoller", () => {
     expect(h.timers[0]!.ms).toBe(60_000);
     await h.next();
     expect(h.poller.status().consecutiveFailures).toBe(0);
-    expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
+    // Back on the publish schedule: 17:01:00 arrived at 17:02:00, so 17:01:15 by 17:02:15.
+    expect(h.timers[0]!.ms).toBe(FEED_PUBLISH_MS);
   });
 
   it("without a fallback, reports the URL it polled", async () => {
@@ -129,27 +142,25 @@ describe("FeedPoller", () => {
     const h = harness(
       [
         { throws: "backend down" }, // primary
-        { ok: true, body: feedDoc("2026-09-27T17:00:00Z") }, // fallback, same poll
-        { ok: true, body: feedDoc("2026-09-27T17:00:10Z") }, // fallback only
-        ...Array.from({ length: 5 }, (_, i) => ({
+        ...Array.from({ length: 10 }, (_, i) => ({
           ok: true as const,
-          body: feedDoc(`2026-09-27T17:00:${20 + i}Z`),
+          body: feedDoc(at(i * 15)), // each poll lands on a fresh update
         })),
       ],
       DIRECT,
     );
     h.poller.start();
     await h.settle();
-    // The failure didn't count: the fallback delivered, so the next poll is on time.
+    // The failure didn't count: the fallback delivered, so the next poll is on schedule.
     expect(h.snapshots).toHaveLength(1);
     expect(h.poller.status()).toMatchObject({ consecutiveFailures: 0, activeUrl: DIRECT });
-    expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
+    expect(h.timers[0]!.ms).toBe(FEED_PUBLISH_MS);
     await h.next();
     expect(h.urls).toEqual([PRIMARY, DIRECT, DIRECT]);
     // Past the retry window the primary is used again.
-    const polls = FEED_PRIMARY_RETRY_MS / FEED_POLL_MS;
-    for (let i = 1; i < polls; i++) await h.next();
+    while (h.urls.at(-1) !== PRIMARY && h.urls.length < 10) await h.next();
     expect(h.urls.at(-1)).toBe(PRIMARY);
+    expect(h.elapsed()).toBeGreaterThanOrEqual(FEED_PRIMARY_RETRY_MS);
     expect(h.poller.status().activeUrl).toBe(PRIMARY);
   });
 

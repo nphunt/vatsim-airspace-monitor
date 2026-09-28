@@ -25,5 +25,5 @@ Changes on `development` that are not on `main` yet. At release, move these into
 
 ### Feed
 
-- The VATSIM feed is polled every **10 s** instead of 15 s. VATSIM still publishes about every 15 s, so data is no newer than before, but each update shows up sooner: about 5 s after VATSIM publishes it on average, instead of 7.5 s. Failures back off 10 → 20 → 40 → 60 s.
+- Feed polls are **timed to VATSIM's 15 s updates** instead of a fixed interval. The app learns when each update reaches VATSIM's CDN and polls just after; a poll that comes too early retries 2 s later. Updates now arrive **steadily every ~15 s**. The short-lived 10 s polling picked them up unevenly (two quick ones, then a ~21 s gap), which looked slower. It also uses fewer requests: about 1.3 per update, instead of 1.5 at 10 s. Before the first update, or if updates stop, it polls every 10 s; failures back off 20 → 40 → 60 s.
 - **Optional backend** (`server/`, Express): polls the feed once for every client and serves it at `/api/feed`. A build with `VITE_API_BASE` (and the dev server, by default) polls the backend instead of VATSIM, and falls back to VATSIM directly for 60 s whenever the backend fails. The Pages build doesn't set it, so the live site is unchanged. See [server/README.md](server/README.md).

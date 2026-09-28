@@ -8,7 +8,7 @@ const CHECK_MS = 30_000;
 
 /**
  * Idle stop (PUBLISHING_PLAN §4): after IDLE_STOP_MIN without any input on this page, stop
- * polling VATSIM (each open tab pulls ~2.4 MB every 10 s) and show a resume banner.
+ * polling VATSIM (each open tab pulls ~2.4 MB about every 15 s) and show a resume banner.
  * Visibility is deliberately ignored: the page must keep polling while covered by CRC.
  */
 export function IdleController() {
