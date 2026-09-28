@@ -86,6 +86,17 @@ describe("store", () => {
     expect(useStore.getState().settings.closed).toEqual([]);
   });
 
+  it("closing the selected aircraft deselects it; closing another one doesn't", () => {
+    useStore.getState().selectAircraft(7, 1200);
+    useStore.getState().setClosed(8, true);
+    expect(useStore.getState().selection?.cid).toBe(7);
+    useStore.getState().setClosed(7, true);
+    expect(useStore.getState().selection).toBeNull();
+    expect(useStore.getState().settings.windows.fpr.open).toBe(false);
+    useStore.getState().setClosed(7, false);
+    useStore.getState().setClosed(8, false);
+  });
+
   it("forgets closed aircraft the engine reports gone from the feed", () => {
     useStore.getState().setClosed(7, true);
     useStore.getState().setClosed(8, true);

@@ -14,6 +14,7 @@ Changes on `development` that are not on `main` yet. At release, move these into
 ### Closing aircraft
 
 - **Right-click** an aircraft in OUTBOUND, INBOUND or ALERTS, or its target or datablock on the SCOPE, for a menu with **CLOSE**. A closed aircraft is drawn **dim** in the lists, drops to a **limited datablock** (callsign, altitude, destination) with no exit marker on the scope, and its alerts stay listed but **silent**: they come up acknowledged, never tone or flash, and a HANDOFF doesn't re-sound at XFER. Closing an aircraft with a flashing alert acknowledges it.
+- Closing the aircraft whose flight plan is open also **deselects** it and closes the FLIGHT PLAN window.
 - Right-click it again and choose **OPEN** to undo. Its next alert stage sounds as usual.
 - Closed aircraft are saved with the settings, so they stay closed across reloads, and are forgotten once the pilot disconnects.
 

@@ -117,7 +117,10 @@ interface AppState {
   selectAircraft(cid: number, viewportWidth: number): void;
   /** Deselect (click off an aircraft, or close FLIGHT PLAN): clears it and closes the readout. */
   clearSelection(): void;
-  /** Close (dim, limited datablock, silent alerts) or reopen an aircraft's datablock. */
+  /**
+   * Close (dim, limited datablock, silent alerts) or reopen an aircraft's datablock.
+   * Closing the selected aircraft also deselects it.
+   */
   setClosed(cid: number, closed: boolean): void;
   openMenu(menu: AircraftMenu): void;
   closeMenu(): void;
@@ -316,6 +319,7 @@ export const useStore = create<AppState>()((set, get) => {
     setClosed: (cid, closed) => {
       const rest = get().settings.closed.filter((c) => c !== cid);
       updateSettings({ closed: closed ? [...rest, cid].slice(-CLOSED_MAX) : rest });
+      if (closed && get().selection?.cid === cid) get().clearSelection();
     },
     openMenu: (menu) => set({ menu }),
     closeMenu: () => set({ menu: null }),
