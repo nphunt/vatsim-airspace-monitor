@@ -3,12 +3,12 @@ import type { AlertEntry } from "../core/alerts";
 import type { Prediction, PredictionSet, VerticalTrend } from "../data/types";
 
 /**
- * Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). Red, except the
- * transfer-communications stage of a handoff, which is yellow.
+ * Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). A handoff is
+ * orange, then yellow to transfer communications; other alerts are red.
  */
 export function alertClass(a: AlertEntry | undefined): string | undefined {
   if (!a) return undefined;
-  const color = a.stage === "XFER" ? "xfer" : "alert";
+  const color = a.stage === "XFER" ? "xfer" : a.stage === "HANDOFF" ? "handoff" : "alert";
   if (a.state === "ACTIVE") return `${color}-active`;
   if (a.state === "ACKED") return `${color}-acked`;
   return undefined;

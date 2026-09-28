@@ -8,7 +8,7 @@ export const HORIZON_CHOICES_MIN = [10, 20, 30, 60] as const;
 export const MAX_GS_KT = 750; // prefilter bound only
 export const PATH_STEP_NM = 2;
 export const EXIT_ALERT_S = 120;
-// Exits into a facility with a controller online: HANDOFF (red) this long before the
+// Exits into a facility with a controller online: HANDOFF (orange) this long before the
 // boundary, then TRANSFER COMMUNICATIONS (yellow). Unstaffed exits use EXIT_ALERT_S.
 export const HANDOFF_ALERT_S = 240;
 export const XFER_COMM_S = 60;
@@ -52,6 +52,7 @@ export const NEIGHBOR_STEP_NM = 10; // boundary sampling step
 export const NEIGHBOR_PROBE_NM = 3; // probe distance to each side of the boundary
 export const NEIGHBOR_MIN_SHARED_NM = 10; // shorter shared boundary = sliver/corner, dropped
 export const NEIGHBOR_CHANGE_HIGHLIGHT_S = 120; // a logon/logoff is highlighted this long
+export const AIRPORT_GROUND_NM = 3; // a slow pilot this close to an airport is on its ground
 export const UNICOM_FREQUENCY = "122.800"; // VATSIM UNICOM, for "terminate control"
 
 export const FALLBACK_FEED_URL = "https://data.vatsim.net/v3/vatsim-data.json";

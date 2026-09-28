@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { DOCK_COLUMNS, type DockColumn, type WindowId } from "../../store/settings";
 import { useStore } from "../../store/store";
 import { AboutWindow } from "./AboutWindow";
+import { AirportsList, AirportsTitle } from "./AirportsList";
 import { AirspaceMenu, AirspaceMenuTitle } from "./AirspaceMenu";
 import { AlertsList, AlertsTitle } from "./AlertsList";
 import { EramWindow } from "./EramWindow";
@@ -31,6 +32,7 @@ const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode 
   inbound: { title: () => <InboundTitle />, body: () => <InboundList /> },
   load: { title: () => <LoadTitle />, body: () => <LoadWindow /> },
   neighbors: { title: () => <NeighborsTitle />, body: () => <NeighborsList /> },
+  airports: { title: () => <AirportsTitle />, body: () => <AirportsList /> },
   airspace: { title: () => <AirspaceMenuTitle />, body: () => <AirspaceMenu /> },
   settings: { title: () => "SETTINGS", body: () => <SettingsWindow /> },
   fpr: { title: () => <FlightPlanReadoutTitle />, body: () => <FlightPlanReadout /> },

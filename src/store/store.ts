@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { AudioState, OutputDevice } from "../audio/alertAudio";
 import type { AlertEntry } from "../core/alerts";
 import { parseCid } from "../core/myPosition";
+import type { AirportTraffic } from "../core/airportTraffic";
 import type { NeighborStatus } from "../core/neighbors";
 import type { MyPositionStatus } from "../core/myPosition";
 import type { FeedStatus } from "../data/feed";
@@ -58,6 +59,8 @@ export interface EngineView {
   nav: Omit<NavMessage, "type"> | null;
   /** Facilities around the selected airspace, with handoff targets (NEIGHBORS). */
   neighbors: NeighborStatus[];
+  /** Airports in the selected airspace with ground or inbound traffic (AIRPORTS). */
+  airports: AirportTraffic[];
 }
 
 /** The aircraft shown in the Flight Plan Readout (§7.3). */
@@ -145,6 +148,7 @@ const initialEngine: EngineView = {
   alerts: [],
   nav: null,
   neighbors: [],
+  airports: [],
 };
 
 // The engine port is injected by the worker client, so the store never imports it.
@@ -245,6 +249,9 @@ export const useStore = create<AppState>()((set, get) => {
           break;
         case "neighbors":
           e.neighbors = msg.neighbors;
+          break;
+        case "airports":
+          e.airports = msg.airports;
           break;
         case "error":
           e.errors = [...e.errors, msg.message].slice(-10);

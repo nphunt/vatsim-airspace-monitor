@@ -13,6 +13,7 @@ export const ERAM_COLORS = {
   mapOther: "#3a3a3a",
   alert: "#ff3030",
   caution: "#ffd000",
+  handoff: "#ff8c00",
 } as const;
 
 export type EramColor = keyof typeof ERAM_COLORS;

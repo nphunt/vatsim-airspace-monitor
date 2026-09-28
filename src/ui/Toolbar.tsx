@@ -105,6 +105,7 @@ export function Toolbar() {
         label={neighborsOnline > 0 ? `NBR ${neighborsOnline}` : "NBR"}
         caution={neighborChanged}
       />
+      <WindowButton id="airports" label="APT" />
       <WindowButton id="scope" label="SCOPE" />
       <button
         type="button"

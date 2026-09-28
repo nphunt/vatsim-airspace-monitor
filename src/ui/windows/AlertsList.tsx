@@ -10,7 +10,7 @@ export function AlertsTitle() {
 
 /**
  * ALERTS list (§5.9, §6.2), styled like ERAM's Conflict Alert list, by time:
- * `DAL123 B738 350 ZME→ZKC N 03:52 1732Z HANDOFF KC_12_CTR 127.900` (red) from 4:00,
+ * `DAL123 B738 350 ZME→ZKC N 03:52 1732Z HANDOFF KC_12_CTR 127.900` (orange) from 4:00,
  * then `XFER COMM KC_12_CTR 127.900` (yellow) from 1:00. An exit into an unstaffed
  * facility alerts once, at the configured threshold, with `TERM CTL` (terminate
  * control, frequency change approved).

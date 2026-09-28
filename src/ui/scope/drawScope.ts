@@ -7,9 +7,11 @@ import type { MapFeature, ScopeMap } from "./scopeMap";
 // (brighter, thicker) -> facility labels (dimmed if unstaffed) -> exit markers -> targets
 // -> datablocks. No logic beyond styling; the scene is built in scene.ts.
 
-/** Alert color on the scope: red, or caution yellow for the transfer-communications stage. */
-function alertColor(t: { xfer: boolean }): string {
-  return t.xfer ? ERAM_COLORS.caution : ERAM_COLORS.alert;
+/** Alert color on the scope: orange to hand off, yellow to transfer comms, else red. */
+function alertColor(t: Pick<SceneTarget, "stage">): string {
+  if (t.stage === "HANDOFF") return ERAM_COLORS.handoff;
+  if (t.stage === "XFER") return ERAM_COLORS.caution;
+  return ERAM_COLORS.alert;
 }
 
 export interface DrawOptions {

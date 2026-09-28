@@ -344,5 +344,9 @@ describe("Engine", () => {
     await engine.handle({ type: "select", airspace: null });
     const cleared = messages.filter((m) => m.type === "neighbors").at(-1);
     expect(cleared).toEqual({ type: "neighbors", airspaceKey: null, neighbors: [] });
+    const airports = messages.filter((m) => m.type === "airports");
+    // DAL123 is filed to KMCI (ZKC), so nothing in ZME; clearing the selection empties it.
+    expect(airports.at(-2)).toEqual({ type: "airports", airports: [] });
+    expect(airports.at(-1)).toEqual({ type: "airports", airports: [] });
   });
 });

@@ -24,7 +24,7 @@ import type {
 //   any -(dropped: disconnected, stale, slow)-> removed, silently
 //
 // Exits into a staffed facility (a controller online to hand off to) go in two stages:
-//   HANDOFF at <= 4:00 (red, ACTIVE -> ACKED as above), then XFER at <= 1:00: ACTIVE
+//   HANDOFF at <= 4:00 (orange, ACTIVE -> ACKED as above), then XFER at <= 1:00: ACTIVE
 //   again (tone, yellow flash) until acked, telling the controller to transfer comms.
 // Unstaffed exits and entries have one stage, ALERT, at the configured threshold.
 // If staffing changes mid-alert the stage follows it; a controller logging on turns an
