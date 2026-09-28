@@ -143,6 +143,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
         cid: p.cid,
         callsign: p.callsign,
         aircraftType: p.flightPlan!.aircraftShort || p.flightPlan!.aircraftFaa,
+        arrival: p.flightPlan!.arrival,
         lat: p.lat,
         lon: p.lon,
         altitude: p.altitude,

@@ -189,6 +189,8 @@ export interface ScopeTarget {
   cid: number;
   callsign: string;
   aircraftType: string;
+  /** Filed destination (ICAO), "" if none filed. */
+  arrival: string;
   lat: number;
   lon: number;
   /** ft */

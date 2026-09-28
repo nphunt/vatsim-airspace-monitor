@@ -112,12 +112,14 @@ describe("listColumns (§7.3 narrow rules)", () => {
     ]);
   });
 
-  it("drops DEST before TYPE, never CALLSIGN/TO/DIR/time", () => {
-    expect(listColumns(46, "outbound").columns).not.toContain("dest");
+  it("drops TYPE when narrow, never CALLSIGN/TO/DIR/time/DEST", () => {
+    expect(listColumns(46, "outbound").columns).toContain("dest");
     expect(listColumns(46, "outbound").columns).toContain("type");
     const tiny = listColumns(20, "outbound").columns;
     expect(tiny).not.toContain("type");
-    for (const c of ["callsign", "facility", "dir", "time"] as const) expect(tiny).toContain(c);
+    for (const c of ["callsign", "facility", "dir", "time", "dest"] as const)
+      expect(tiny).toContain(c);
+    expect(listColumns(20, "inbound").columns).toContain("dest");
   });
 
   it("inbound has no DIR column", () => {

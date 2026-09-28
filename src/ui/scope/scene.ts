@@ -60,16 +60,20 @@ export interface SceneInput {
   datablockOffsets?: ReadonlyMap<number, DatablockOffset>;
 }
 
-/** Datablock text (§7.5): full for listed aircraft, callsign + altitude otherwise. */
+/**
+ * Datablock text (§7.5): full for listed aircraft (callsign, altitude, type + GS +
+ * filed destination, crossing), callsign + altitude + destination otherwise.
+ */
 export function datablockLines(
   t: ScopeTarget,
   found: { p: Prediction; kind: ReadoutKind } | null,
   now: number,
 ): { lines: string[]; timeLine: number | null } {
   const alt = formatAlt(t.altitude, t.trend);
-  if (!found) return { lines: [t.callsign, alt], timeLine: null };
+  const dest = t.arrival.trim() ? ` ${t.arrival.trim()}` : "";
+  if (!found) return { lines: [t.callsign, `${alt}${dest}`], timeLine: null };
   const gs = String(Math.round(t.groundspeed)).padStart(3, "0");
-  const lines = [t.callsign, alt, `${t.aircraftType || "----"} ${gs}`];
+  const lines = [t.callsign, alt, `${t.aircraftType || "----"} ${gs}${dest}`];
   const { p, kind } = found;
   if (kind === "outbound" && p.exit) {
     lines.push(`${p.exit.into.label} ${formatCrossing(p.exit.t, now)}`);

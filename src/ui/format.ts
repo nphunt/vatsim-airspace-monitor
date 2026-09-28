@@ -107,8 +107,8 @@ export interface ColumnLayout {
 
 /**
  * Columns that fit `chars` character cells (§7.3 narrow-width rules). GS appears when
- * wide; at <= 480 px (~61 chars) flags go single-letter; DEST is dropped before TYPE;
- * CALLSIGN, TO/FROM, DIR and the time are never dropped.
+ * wide; at <= 480 px (~61 chars) flags go single-letter; TYPE is dropped when narrow;
+ * CALLSIGN, TO/FROM, DIR, the time and DEST are never dropped.
  */
 export function listColumns(
   chars: number,
@@ -121,8 +121,8 @@ export function listColumns(
   if (chars >= 44) columns.push("type");
   columns.push("alt", "facility");
   if (kind === "outbound") columns.push("dir");
-  columns.push("time");
-  if (chars >= 50) columns.push("dest");
+  // DEST (filed destination) is never dropped.
+  columns.push("time", "dest");
   if (chars >= 76) columns.push("gs");
   columns.push("flg");
   return { columns, compactFlags };
