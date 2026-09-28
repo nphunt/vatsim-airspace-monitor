@@ -35,13 +35,13 @@ export interface FeedPollerOptions {
   clearTimer?: (handle: unknown) => void;
 }
 
-/** 15 s normally; after failures 30 s, then 60 s max (§10 M2). */
+/** FEED_POLL_MS (10 s) normally; doubling after each failure, 60 s max (§10 M2). */
 export function backoffDelay(consecutiveFailures: number): number {
   return Math.min(FEED_POLL_MS * 2 ** consecutiveFailures, FEED_BACKOFF_MAX_MS);
 }
 
 /**
- * Polls the VATSIM feed (§3.1): never faster than every 15 s, `cache: "no-cache"` so the
+ * Polls the VATSIM feed (§3.1): every FEED_POLL_MS (10 s), `cache: "no-cache"` so the
  * browser revalidates instead of reusing its own copy, and duplicate snapshots (unchanged
  * update_timestamp) are dropped without counting as a failure. Every response, duplicate
  * or not, feeds the server-offset estimator.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FEED_BACKOFF_MAX_MS, FEED_POLL_MS } from "../config";
 import { ServerOffsetEstimator } from "../core/clock";
 import { FeedPoller, backoffDelay, type FeedStatus } from "./feed";
 import type { FeedSnapshot } from "./types";
@@ -53,13 +54,15 @@ function harness(replies: Reply[]) {
 }
 
 describe("backoffDelay", () => {
-  it("goes 15 -> 30 -> 60 and stays at 60", () => {
-    expect([0, 1, 2, 3, 10].map(backoffDelay)).toEqual([15_000, 30_000, 60_000, 60_000, 60_000]);
+  it("polls every 10 s, doubling after each failure up to 60 s", () => {
+    expect(FEED_POLL_MS).toBe(10_000);
+    expect([0, 1, 2, 3, 10].map(backoffDelay)).toEqual([10_000, 20_000, 40_000, 60_000, 60_000]);
+    expect(FEED_BACKOFF_MAX_MS).toBe(60_000);
   });
 });
 
 describe("FeedPoller", () => {
-  it("polls immediately, then every 15 s, with cache: no-cache", async () => {
+  it("polls immediately, then every 10 s, with cache: no-cache", async () => {
     const h = harness([
       { ok: true, body: feedDoc("2026-09-27T17:00:00Z") },
       { ok: true, body: feedDoc("2026-09-27T17:00:15Z") },
@@ -67,8 +70,8 @@ describe("FeedPoller", () => {
     h.poller.start();
     await h.settle();
     expect(h.snapshots).toHaveLength(1);
-    expect(h.timers[0]!.ms).toBe(15_000);
-    expect(await h.next()).toBe(15_000);
+    expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
+    expect(await h.next()).toBe(FEED_POLL_MS);
     expect(h.snapshots).toHaveLength(2);
     expect(h.requests.every((r) => r.cache === "no-cache")).toBe(true);
   });
@@ -86,10 +89,10 @@ describe("FeedPoller", () => {
     expect(h.snapshots).toHaveLength(1);
     expect(h.poller.status().consecutiveFailures).toBe(0);
     expect(h.poller.status().polls.map((p) => p.result)).toEqual(["new", "dup", "dup"]);
-    expect(h.timers[0]!.ms).toBe(15_000);
+    expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
   });
 
-  it("backs off 30 then 60 s on failures and resets on success", async () => {
+  it("backs off 20, 40, then 60 s on failures and resets on success", async () => {
     const h = harness([
       { ok: false, status: 503 },
       { throws: "network down" },
@@ -98,16 +101,16 @@ describe("FeedPoller", () => {
     ]);
     h.poller.start();
     await h.settle();
-    expect(h.timers[0]!.ms).toBe(30_000);
+    expect(h.timers[0]!.ms).toBe(20_000);
     expect(h.poller.status().lastError).toBe("HTTP 503");
-    expect(await h.next()).toBe(30_000);
-    expect(h.timers[0]!.ms).toBe(60_000);
-    expect(await h.next()).toBe(60_000);
+    expect(await h.next()).toBe(20_000);
+    expect(h.timers[0]!.ms).toBe(40_000);
+    expect(await h.next()).toBe(40_000);
     expect(h.poller.status().consecutiveFailures).toBe(3);
     expect(h.timers[0]!.ms).toBe(60_000);
     await h.next();
     expect(h.poller.status().consecutiveFailures).toBe(0);
-    expect(h.timers[0]!.ms).toBe(15_000);
+    expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
   });
 
   it("feeds every response, duplicate or not, to the offset estimator", async () => {

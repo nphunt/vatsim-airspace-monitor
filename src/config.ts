@@ -1,6 +1,8 @@
 // All tunables in one place (IMPLEMENTATION_PLAN §8). Units are in the names.
 
-export const FEED_POLL_MS = 15_000;
+// VATSIM publishes about every 15 s; polling every 10 s picks each update up sooner (on
+// average ~5 s after it appears instead of ~7.5 s). Unchanged snapshots are dropped.
+export const FEED_POLL_MS = 10_000;
 export const STALE_PILOT_S = 60;
 export const MIN_GS_KT = 40;
 export const HORIZON_MIN = 30; // user-selectable, see HORIZON_CHOICES_MIN
@@ -62,7 +64,7 @@ export const UNICOM_FREQUENCY = "122.800"; // VATSIM UNICOM, for "terminate cont
 export const FALLBACK_FEED_URL = "https://data.vatsim.net/v3/vatsim-data.json";
 
 // Feed polling (§3.1, M2).
-export const FEED_BACKOFF_MAX_MS = 60_000; // failures back off 15 -> 30 -> 60 s
+export const FEED_BACKOFF_MAX_MS = 60_000; // failures back off 10 -> 20 -> 40 -> 60 s
 export const FEED_FETCH_TIMEOUT_MS = 12_000;
 export const POLL_LOG_SIZE = 60; // recent polls kept for the §9.3 throttling check
 export const DATA_STALE_S = 60; // toolbar DATA turns alert color beyond this age (§7.2)
