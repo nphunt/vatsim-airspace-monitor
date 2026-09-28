@@ -21,6 +21,9 @@ concurrency:
 
 jobs:
   refresh:
+    # The weekly schedule is off until the repository variable DATA_REFRESH_ENABLED is
+    # "true" (and DATA_PR_TOKEN exists); a manual run always goes ahead.
+    if: github.event_name == 'workflow_dispatch' || vars.DATA_REFRESH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
