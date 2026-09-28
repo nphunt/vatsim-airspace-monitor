@@ -66,6 +66,9 @@ export const FALLBACK_FEED_URL = "https://data.vatsim.net/v3/vatsim-data.json";
 // Feed polling (§3.1, M2).
 export const FEED_BACKOFF_MAX_MS = 60_000; // failures back off 10 -> 20 -> 40 -> 60 s
 export const FEED_FETCH_TIMEOUT_MS = 12_000;
+// With a backend (VITE_API_BASE), a failed /api/feed poll falls back to VATSIM directly
+// and the backend is tried again after this long.
+export const FEED_PRIMARY_RETRY_MS = 60_000;
 export const POLL_LOG_SIZE = 60; // recent polls kept for the §9.3 throttling check
 export const DATA_STALE_S = 60; // toolbar DATA turns alert color beyond this age (§7.2)
 

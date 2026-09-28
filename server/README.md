@@ -59,7 +59,7 @@ npm run dev           # Vite proxies /api/* to the server, so it is same-origin 
 Production-style, serving the built app and the API from one origin:
 
 ```bash
-npm run build
+VITE_API_BASE=/api/ npm run build
 VAM_STATIC_DIR=dist HOST=0.0.0.0 PORT=8080 npm run server
 ```
 
@@ -76,10 +76,28 @@ VAM_STATIC_DIR=dist HOST=0.0.0.0 PORT=8080 npm run server
 Tests: `server/**/*.test.ts` run with the rest of `npm test`; `tsconfig.server.json` is
 part of `npm run typecheck`.
 
-## Not wired up yet
+## How the app uses it
 
-The frontend still polls VATSIM directly: the worker's `safeFeedUrl` only accepts
-`https://data.vatsim.net/`. Pointing it at `/api/feed` (e.g. a build-time
-`VITE_API_BASE`) is the next step. The same goes for runtime vNAS data (SECTOR_PLAN
-assumes build-time bundling and no runtime vNAS dependency, and that is still true).
-Hosting is also open: GitHub Pages can't run this, so it needs a Node host.
+The app reads the backend's address at build time from `VITE_API_BASE`
+(`src/data/paths.ts` `apiBaseUrl`), and the worker polls `<base>feed`:
+
+| Build | `VITE_API_BASE` | Feed source |
+|---|---|---|
+| `npm run dev` | unset -> `/api/` (Vite proxy) | backend, VATSIM if it isn't running |
+| Pages (`npm run build` in CI) | unset | VATSIM directly, as before |
+| Served by this server | `/api/` | backend |
+| Pages + a backend elsewhere | `https://host/api/` | backend (set `VAM_CORS_ORIGINS` to the Pages origin) |
+
+`VITE_API_BASE=` (empty) turns the backend off in dev too.
+
+When `/api/feed` fails (server down, 503 before its first poll), the same poll fetches
+VATSIM directly and the backend is retried after `FEED_PRIMARY_RETRY_MS` (60 s), so a
+missing backend never costs data. `__vam.status().feedUrl` in the console shows which
+source the latest snapshot came from. The ABOUT privacy line names the backend host when
+it is on another origin.
+
+## Not done yet
+
+Runtime vNAS data: `/api/vnas` exists, but the app doesn't call it (SECTOR_PLAN assumes
+build-time bundling and no runtime vNAS dependency). Hosting is also open: GitHub Pages
+can't run this, so it needs a Node host.

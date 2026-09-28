@@ -12,6 +12,7 @@ const feed: FeedStatus = {
   lastError: null,
   nextPollAt: null,
   polls: [],
+  activeUrl: null,
 };
 
 let sent: ToEngine[] = [];

@@ -1,4 +1,10 @@
-import { FEED_BACKOFF_MAX_MS, FEED_FETCH_TIMEOUT_MS, FEED_POLL_MS, POLL_LOG_SIZE } from "../config";
+import {
+  FEED_BACKOFF_MAX_MS,
+  FEED_FETCH_TIMEOUT_MS,
+  FEED_POLL_MS,
+  FEED_PRIMARY_RETRY_MS,
+  POLL_LOG_SIZE,
+} from "../config";
 import type { ServerOffsetEstimator } from "../core/clock";
 import { feedUpdateTimestamp, normalizeFeed } from "../core/feedParse";
 import type { FeedSnapshot } from "./types";
@@ -22,10 +28,17 @@ export interface FeedStatus {
   nextPollAt: number | null;
   /** Most recent polls, oldest first (§9.3 throttling check). */
   polls: PollRecord[];
+  /** URL the latest snapshot came from (backend or VATSIM), or null before the first. */
+  activeUrl: string | null;
 }
 
 export interface FeedPollerOptions {
   url: string;
+  /**
+   * Used when `url` fails (the backend is down or not running): that poll retries here at
+   * once, and `url` is skipped for FEED_PRIMARY_RETRY_MS.
+   */
+  fallbackUrl?: string;
   estimator: ServerOffsetEstimator;
   onSnapshot: (snapshot: FeedSnapshot) => void;
   onPoll?: (status: FeedStatus) => void;
@@ -61,6 +74,9 @@ export class FeedPoller {
   private lastError: string | null = null;
   private nextPollAt: number | null = null;
   private polls: PollRecord[] = [];
+  private activeUrl: string | null = null;
+  /** Local ms before which `url` is skipped in favor of `fallbackUrl`. */
+  private primaryRetryAt = 0;
   private readonly opts: FeedPollerOptions;
 
   constructor(opts: FeedPollerOptions) {
@@ -93,7 +109,31 @@ export class FeedPoller {
       lastError: this.lastError,
       nextPollAt: this.nextPollAt,
       polls: [...this.polls],
+      activeUrl: this.activeUrl,
     };
+  }
+
+  private async fetchFeed(url: string) {
+    const res = await this.fetchImpl(url, {
+      cache: "no-cache",
+      signal: AbortSignal.timeout(FEED_FETCH_TIMEOUT_MS),
+    });
+    const receivedAt = this.localNow();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json: unknown = await res.json();
+    return { url, json, ts: feedUpdateTimestamp(json), receivedAt };
+  }
+
+  private async fetchWithFallback() {
+    const { url, fallbackUrl } = this.opts;
+    if (!fallbackUrl) return this.fetchFeed(url);
+    if (this.localNow() < this.primaryRetryAt) return this.fetchFeed(fallbackUrl);
+    try {
+      return await this.fetchFeed(url);
+    } catch {
+      this.primaryRetryAt = this.localNow() + FEED_PRIMARY_RETRY_MS;
+      return this.fetchFeed(fallbackUrl);
+    }
   }
 
   private async poll(): Promise<void> {
@@ -103,14 +143,8 @@ export class FeedPoller {
     const started = this.localNow();
     let result: PollResult;
     try {
-      const res = await this.fetchImpl(this.opts.url, {
-        cache: "no-cache",
-        signal: AbortSignal.timeout(FEED_FETCH_TIMEOUT_MS),
-      });
-      const receivedAt = this.localNow();
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: unknown = await res.json();
-      const ts = feedUpdateTimestamp(json);
+      const { url, json, ts, receivedAt } = await this.fetchWithFallback();
+      this.activeUrl = url;
       this.opts.estimator.addSample(ts, receivedAt);
       // An older CDN copy after a newer one is also not new.
       if (this.lastTs !== null && ts <= this.lastTs) {

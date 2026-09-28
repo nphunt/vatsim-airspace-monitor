@@ -182,7 +182,10 @@ export class Engine {
     } catch (e) {
       this.error(`meta.json failed to load: ${String(e)}`);
     }
-    const feedUrl = safeFeedUrl(meta.feedUrl);
+    const directUrl = safeFeedUrl(meta.feedUrl);
+    // Prefer the backend's shared copy; VATSIM directly is the fallback (server/README.md).
+    const backendUrl = msg.apiBaseUrl ? new URL("feed", msg.apiBaseUrl).href : null;
+    const feedUrl = backendUrl ?? directUrl;
 
     // Load boundary data before feeding snapshots, so the first one is fully processed.
     try {
@@ -232,6 +235,7 @@ export class Engine {
     // Poll even if boundaries failed: the DATA indicator is still useful.
     this.poller = new FeedPoller({
       url: feedUrl,
+      fallbackUrl: backendUrl ? directUrl : undefined,
       estimator: this.estimator,
       fetchImpl: this.fetchImpl,
       localNow: this.localNow,

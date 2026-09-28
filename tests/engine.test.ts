@@ -191,6 +191,55 @@ describe("Engine", () => {
     );
   });
 
+  it("polls the backend's /api/feed when given an API base, with VATSIM as fallback", async () => {
+    const messages: FromEngine[] = [];
+    const requested: string[] = [];
+    const direct = fakeFetch(requested);
+    let backendUp = true;
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "https://vam.example.com/api/feed") {
+        requested.push(String(input));
+        return backendUp ? Response.json(feedDoc) : new Response("down", { status: 503 });
+      }
+      return direct(input, init);
+    }) as typeof fetch;
+    const init = {
+      type: "init" as const,
+      dataBaseUrl: BASE,
+      apiBaseUrl: "https://vam.example.com/api/",
+      config: DEFAULT_CONFIG,
+    };
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl,
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    await engine.handle(init);
+    await waitFor(() => messages.some((m) => m.type === "poll"));
+    const ready = messages.find((m) => m.type === "ready");
+    expect(ready?.type === "ready" && ready.feedUrl).toBe("https://vam.example.com/api/feed");
+    const poll = messages.find((m) => m.type === "poll");
+    expect(poll?.type === "poll" && poll.feed.activeUrl).toBe("https://vam.example.com/api/feed");
+    expect(requested.some((u) => u.includes("data.vatsim.net"))).toBe(false);
+    engine.stop();
+
+    // Backend down: the same poll gets VATSIM directly.
+    backendUp = false;
+    messages.length = 0;
+    engine = new Engine((m) => messages.push(m), {
+      fetchImpl,
+      setInterval: () => 0,
+      clearInterval: () => {},
+    });
+    await engine.handle(init);
+    await waitFor(() => messages.some((m) => m.type === "poll"));
+    const fallback = messages.find((m) => m.type === "poll");
+    expect(fallback?.type === "poll" && fallback.feed).toMatchObject({
+      activeUrl: "https://data.vatsim.net/v3/vatsim-data.json",
+      consecutiveFailures: 0,
+    });
+  });
+
   it("alerts an aircraft about to exit silently on load/select, and ack makes it ACKED", async () => {
     // Just south of the ZME/ZKC line at 90W, northbound: exit well inside 2:00.
     const nearLine = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FEED_BACKOFF_MAX_MS, FEED_POLL_MS } from "../config";
+import { FEED_BACKOFF_MAX_MS, FEED_POLL_MS, FEED_PRIMARY_RETRY_MS } from "../config";
 import { ServerOffsetEstimator } from "../core/clock";
 import { FeedPoller, backoffDelay, type FeedStatus } from "./feed";
 import type { FeedSnapshot } from "./types";
@@ -11,16 +11,18 @@ function feedDoc(ts: string) {
 type Reply = { ok: true; body: unknown } | { ok: false; status: number } | { throws: string };
 
 /** A poller wired to a scripted fetch and a manual timer queue. */
-function harness(replies: Reply[]) {
+function harness(replies: Reply[], fallbackUrl?: string) {
   let local = Date.UTC(2026, 8, 27, 17, 0, 0);
   const timers: { fn: () => void; ms: number }[] = [];
   const requests: RequestInit[] = [];
+  const urls: string[] = [];
   const snapshots: FeedSnapshot[] = [];
   const statuses: FeedStatus[] = [];
   const estimator = new ServerOffsetEstimator();
 
-  const fetchImpl = (async (_url: string, init: RequestInit) => {
+  const fetchImpl = (async (url: string, init: RequestInit) => {
     requests.push(init);
+    urls.push(url);
     const r = replies.shift();
     if (!r) throw new Error("no scripted reply");
     if ("throws" in r) throw new Error(r.throws);
@@ -30,6 +32,7 @@ function harness(replies: Reply[]) {
 
   const poller = new FeedPoller({
     url: "https://data.vatsim.net/v3/vatsim-data.json",
+    fallbackUrl,
     estimator,
     fetchImpl,
     localNow: () => local,
@@ -50,7 +53,7 @@ function harness(replies: Reply[]) {
     return t.ms;
   }
 
-  return { poller, timers, requests, snapshots, statuses, estimator, settle, next };
+  return { poller, timers, requests, urls, snapshots, statuses, estimator, settle, next };
 }
 
 describe("backoffDelay", () => {
@@ -111,6 +114,50 @@ describe("FeedPoller", () => {
     await h.next();
     expect(h.poller.status().consecutiveFailures).toBe(0);
     expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
+  });
+
+  it("without a fallback, reports the URL it polled", async () => {
+    const h = harness([{ ok: true, body: feedDoc("2026-09-27T17:00:00Z") }]);
+    h.poller.start();
+    await h.settle();
+    expect(h.poller.status().activeUrl).toBe("https://data.vatsim.net/v3/vatsim-data.json");
+  });
+
+  it("falls back at once when the primary fails, and retries the primary later", async () => {
+    const PRIMARY = "https://data.vatsim.net/v3/vatsim-data.json";
+    const DIRECT = "https://direct.test/feed.json";
+    const h = harness(
+      [
+        { throws: "backend down" }, // primary
+        { ok: true, body: feedDoc("2026-09-27T17:00:00Z") }, // fallback, same poll
+        { ok: true, body: feedDoc("2026-09-27T17:00:10Z") }, // fallback only
+        ...Array.from({ length: 5 }, (_, i) => ({
+          ok: true as const,
+          body: feedDoc(`2026-09-27T17:00:${20 + i}Z`),
+        })),
+      ],
+      DIRECT,
+    );
+    h.poller.start();
+    await h.settle();
+    // The failure didn't count: the fallback delivered, so the next poll is on time.
+    expect(h.snapshots).toHaveLength(1);
+    expect(h.poller.status()).toMatchObject({ consecutiveFailures: 0, activeUrl: DIRECT });
+    expect(h.timers[0]!.ms).toBe(FEED_POLL_MS);
+    await h.next();
+    expect(h.urls).toEqual([PRIMARY, DIRECT, DIRECT]);
+    // Past the retry window the primary is used again.
+    const polls = FEED_PRIMARY_RETRY_MS / FEED_POLL_MS;
+    for (let i = 1; i < polls; i++) await h.next();
+    expect(h.urls.at(-1)).toBe(PRIMARY);
+    expect(h.poller.status().activeUrl).toBe(PRIMARY);
+  });
+
+  it("counts a failure only when the fallback fails too", async () => {
+    const h = harness([{ ok: false, status: 502 }, { throws: "offline" }], "https://direct.test/");
+    h.poller.start();
+    await h.settle();
+    expect(h.poller.status()).toMatchObject({ consecutiveFailures: 1, lastError: "offline" });
   });
 
   it("feeds every response, duplicate or not, to the offset estimator", async () => {
