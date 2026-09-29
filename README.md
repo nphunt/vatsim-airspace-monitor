@@ -2,9 +2,8 @@
 
 ERAM-styled companion window for VATUSA controllers: who is about to leave your ARTCC, where to, and when; who is coming in; and how busy it will get.
 
-**Open it:** <https://nphunt.github.io/vatsim-airspace-monitor/>
-
 Airspace Monitor is an independent, community-made tool. It is not affiliated with, endorsed by, or operated by VATSIM, VATUSA, or any ARTCC. For flight simulation use only. Not for real-world navigation or air traffic control.
+For flight simulation on the VATSIM network only. Not for real-world navigation or air traffic control. Not affiliated with or endorsed by VATSIM or VATUSA.
 
 ## For controllers
 
