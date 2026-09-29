@@ -74,6 +74,21 @@ describe("bundled TRACONs", () => {
   });
 });
 
+describe("TRACON owners", () => {
+  it("uses vNAS's parent, so HSV is ZME's although KHSV lies inside ZTL", () => {
+    const [lat, lon] = airports.KHSV!;
+    expect(r.facilityAt(lat, lon).label).toBe("ZTL");
+    expect(tracons.byId.get("HSV")!.artcc).toBe("ZME");
+    expect(tracons.byId.get("M03")!.artcc).toBe("ZME");
+    expect(tracons.byId.get("A80")!.artcc).toBe("ZTL");
+  });
+
+  it("falls back to the ARTCC around the label point", () => {
+    // Pensacola isn't in the vNAS tree, so its owner comes from the geometry.
+    expect(tracons.byId.get("PNS")!.artcc).toMatch(/^Z[A-Z]{2}$/);
+  });
+});
+
 describe("buildTraconStaffing", () => {
   const staffing = (cs: VatsimController[]) => buildTraconStaffing(cs, tracons);
 
@@ -111,6 +126,28 @@ describe("approach handoff (computePredictions)", () => {
     expect(run([inbound], []).outbound[0]!.tracon).toBeUndefined();
     expect(run([inbound], [ctrl("MEM_TWR", 4)]).outbound[0]!.tracon).toBeUndefined();
     expect(run([inbound], [ctrl("MEM_APP", 5)], false).outbound[0]!.tracon).toBeUndefined();
+  });
+
+  it("does nothing for another center's approach, and for ZTL's own when ZME is selected", () => {
+    // Same flight, selected airspace ZTL: M03 belongs to ZME, so ZTL has nothing to hand off.
+    const snapshot: FeedSnapshot = {
+      updateTimestamp: NOW,
+      pilots: [inbound],
+      controllers: [ctrl("MEM_APP", 5)],
+    };
+    const tracks = new TrackStore();
+    tracks.update(snapshot);
+    const set = computePredictions({
+      snapshot,
+      selected: selectAirspace(r.getAirspace("KZTL")!),
+      registry: r,
+      airports,
+      tracons,
+      tracks,
+      now: NOW,
+      horizonMin: 30,
+    });
+    expect([...set.outbound, ...set.resident].filter((p) => p.tracon)).toEqual([]);
   });
 
   it("does nothing once the aircraft is already inside the TRACON", () => {

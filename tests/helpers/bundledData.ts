@@ -5,7 +5,7 @@ import {
   type AirspaceRegistry,
   type BoundaryCollection,
 } from "../../src/data/airspaces";
-import { buildTracons, type TraconCollection } from "../../src/data/tracons";
+import { buildTracons, withOwners, type TraconCollection } from "../../src/data/tracons";
 import { buildTraconSet, type TraconSet } from "../../src/core/tracons";
 import type { FirRecord } from "../../src/data/types";
 
@@ -30,6 +30,8 @@ let cachedTracons: TraconSet | undefined;
 
 /** The TRACON set built from the committed public/data bundle. */
 export function bundledTracons(): TraconSet {
-  cachedTracons ??= buildTraconSet(buildTracons(readData<TraconCollection>("tracons.geojson")));
+  cachedTracons ??= buildTraconSet(
+    withOwners(buildTracons(readData<TraconCollection>("tracons.geojson")), bundledAirspaces()),
+  );
   return cachedTracons;
 }

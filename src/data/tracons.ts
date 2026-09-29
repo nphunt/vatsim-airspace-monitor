@@ -1,4 +1,5 @@
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import type { FacilityIndex } from "../core/facilityLookup";
 import { dataUrl } from "./paths";
 import { ringBbox, unionBbox } from "./airspaces";
 import type { Tracon } from "./types";
@@ -9,6 +10,8 @@ export interface TraconProperties {
   prefixes: string[];
   labelLat: number;
   labelLon: number;
+  /** vNAS parent ARTCC id; missing for the ones vNAS doesn't list. */
+  artcc?: string;
 }
 
 export type TraconCollection = FeatureCollection<Polygon | MultiPolygon, TraconProperties>;
@@ -26,10 +29,26 @@ export function buildTracons(collection: TraconCollection): Tracon[] {
       prefixes: p.prefixes.map((x) => x.toUpperCase()),
       labelLat: p.labelLat,
       labelLon: p.labelLon,
+      artcc: p.artcc ?? "",
       polygons: coords.map((c): Polygon => ({ type: "Polygon", coordinates: c })),
       bboxes,
       bbox: unionBbox(bboxes),
     };
+  });
+}
+
+/**
+ * Fills in the owner of TRACONs vNAS doesn't list: the ARTCC around the label point. Border
+ * cases are why vNAS wins where it has an answer.
+ */
+export function withOwners(
+  tracons: readonly Tracon[],
+  index: Pick<FacilityIndex, "facilityAt">,
+): Tracon[] {
+  return tracons.map((t) => {
+    if (t.artcc) return t;
+    const f = index.facilityAt(t.labelLat, t.labelLon);
+    return { ...t, artcc: f.tier === "unknown" ? "" : f.label };
   });
 }
 

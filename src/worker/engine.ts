@@ -28,7 +28,7 @@ import type { NavData, Procedure } from "../core/route";
 import { RouteModeTracker } from "../core/routeMode";
 import { TrackStore } from "../core/track";
 import { loadAirspaces, type AirspaceRegistry } from "../data/airspaces";
-import { loadTracons } from "../data/tracons";
+import { loadTracons, withOwners } from "../data/tracons";
 import { buildTraconSet, buildTraconStaffing, type TraconSet } from "../core/tracons";
 import { FeedPoller, type FeedStatus } from "../data/feed";
 import { dataUrl } from "../data/paths";
@@ -198,7 +198,7 @@ export class Engine {
         ),
         loadTracons({ base, fetchImpl: this.fetchImpl }),
       ]);
-      this.tracons = buildTraconSet(tracons);
+      this.tracons = buildTraconSet(withOwners(tracons, this.airspaces));
     } catch (e) {
       this.error(`boundary data failed to load: ${String(e)}`);
     }

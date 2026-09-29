@@ -22,6 +22,10 @@ const RELEASE_API =
 // departure count: TWR is a tower's own airspace, CTR an en route center.
 const APPROACH_SUFFIXES = new Set(["APP", "DEP", "H_APP", "W_APP"]);
 const MIN_TRACONS = 100;
+// vNAS knows which ARTCC each approach control belongs to (HSV is ZME's, though Huntsville
+// sits inside ZTL's lateral boundary), so the owner comes from there, not from geometry.
+const VNAS_ARTCCS_URL = "https://data-api.vnas.vatsim.net/api/artccs";
+const TRACON_TYPES = new Set(["Tracon", "AtctTracon", "AtctRapcon"]);
 
 function fail(msg) {
   console.error(`update-tracons: ${msg}`);
@@ -31,6 +35,28 @@ function fail(msg) {
 const round4 = (n) => Math.round(n * 1e4) / 1e4;
 const roundCoords = (c) =>
   typeof c[0] === "number" ? [round4(c[0]), round4(c[1])] : c.map(roundCoords);
+
+/** TRACON id -> ARTCC id, from the vNAS facility tree. Empty (with a warning) if unreachable. */
+async function fetchOwners() {
+  const owners = new Map();
+  try {
+    const res = await fetch(VNAS_ARTCCS_URL);
+    if (!res.ok) throw new Error(`-> ${res.status}`);
+    for (const artcc of await res.json()) {
+      const walk = (facilities) => {
+        for (const c of facilities ?? []) {
+          if (!TRACON_TYPES.has(c.type)) continue;
+          if (!owners.has(c.id)) owners.set(c.id, artcc.id);
+          walk(c.childFacilities);
+        }
+      };
+      walk(artcc.facility?.childFacilities);
+    }
+  } catch (e) {
+    console.warn(`update-tracons: vNAS ARTCC list unavailable (${e.message}); no owners written`);
+  }
+  return owners;
+}
 
 async function main() {
   const headers = { "User-Agent": "vatsim-airspace-monitor-update-tracons" };
@@ -45,6 +71,7 @@ async function main() {
   if (!src.ok) fail(`GET ${asset.browser_download_url} -> ${src.status}`);
   const boundaries = await src.json();
 
+  const owners = await fetchOwners();
   const byId = new Map();
   for (const f of boundaries.features ?? []) {
     const p = f.properties ?? {};
@@ -103,6 +130,7 @@ async function main() {
         prefixes: [...t.prefixes].sort(),
         labelLat: t.labelLat,
         labelLon: t.labelLon,
+        ...(owners.has(t.id) ? { artcc: owners.get(t.id) } : {}),
       },
       geometry: { type: "MultiPolygon", coordinates: t.polygons },
     }));

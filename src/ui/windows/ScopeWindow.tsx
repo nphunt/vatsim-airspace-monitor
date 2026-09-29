@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AirspaceRegistry } from "../../data/airspaces";
 import { SCOPE_VECTOR_CHOICES } from "../../store/settings";
 import { useStore } from "../../store/store";
+import { withOwners } from "../../data/tracons";
 import type { Tracon } from "../../data/types";
 import { loadScopeAirspaces, loadScopeTracons } from "../scope/mapData";
 import { ScopeController, resetDatablocks } from "../scope/ScopeController";
@@ -45,10 +46,15 @@ export function ScopeWindow() {
     };
   }, []);
 
+  const ownedTracons = useMemo(
+    () => (registry ? withOwners(tracons, registry) : []),
+    [registry, tracons],
+  );
+
   const map = useMemo(() => {
     const a = registry && airspaceKey ? registry.getAirspace(airspaceKey) : undefined;
-    return registry && a ? buildScopeMap(a, registry.all, tracons) : null;
-  }, [registry, airspaceKey, tracons]);
+    return registry && a ? buildScopeMap(a, registry.all, ownedTracons) : null;
+  }, [registry, airspaceKey, ownedTracons]);
 
   // The controller lives as long as the canvas; props are pushed into it below.
   useEffect(() => {

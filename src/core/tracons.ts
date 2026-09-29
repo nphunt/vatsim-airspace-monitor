@@ -103,6 +103,8 @@ export function buildTraconStaffing(
  * cross into it: the first ENTER along `path`, before `beforeNm` (the exit from the
  * selected airspace, past which the neighboring center owns the aircraft). None when the
  * aircraft is already inside the TRACON, or no TRACON around the airport is staffed.
+ * Only TRACONs of `owner` (the selected ARTCC's label) count: another center's approach
+ * is that center's handoff.
  */
 export function findTraconHandoff(
   path: PredictedPath,
@@ -110,11 +112,13 @@ export function findTraconHandoff(
   set: TraconSet,
   staffing: TraconStaffing,
   centerLon: number,
+  owner: string,
   report: { lastUpdated: number; groundspeed: number },
   beforeNm = Infinity,
 ): PredictedTracon | undefined {
   if (!airport || staffing.size === 0) return undefined;
   for (const t of set.containing(airport[0], airport[1])) {
+    if (t.artcc !== owner) continue;
     const online = staffing.get(t.key);
     if (!online?.length) continue;
     const prepared = set.prepared(t, centerLon);

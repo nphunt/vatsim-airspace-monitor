@@ -157,6 +157,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
           input.tracons,
           traconStaffing,
           prepared.centerLon,
+          airspace.label,
           p,
           beforeNm,
         )

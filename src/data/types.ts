@@ -58,6 +58,11 @@ export interface Tracon {
   prefixes: string[];
   labelLat: number;
   labelLon: number;
+  /**
+   * Label ("ZME") of the ARTCC it belongs to: vNAS's parent facility, else the ARTCC around
+   * its label point. HSV is ZME's although it sits inside ZTL's boundary. "" if unknown.
+   */
+  artcc: string;
   polygons: Polygon[];
   bboxes: BBox[];
   bbox: BBox;

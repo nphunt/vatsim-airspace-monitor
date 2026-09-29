@@ -89,7 +89,9 @@ export function buildScopeMap(
     projection,
     selected: projectFeature(projection, selected),
     others,
+    // Only the selected ARTCC's own approach controls.
     tracons: tracons
+      .filter((t) => t.artcc === selected.label)
       .map((t) => projectFeature(projection, t))
       .filter((f) => bboxDistance(f.bbox) <= MAP_RADIUS_NM),
   };
