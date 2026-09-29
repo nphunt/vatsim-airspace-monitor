@@ -10,10 +10,19 @@ function Ext({ href, children }: { href: string; children: string }) {
   );
 }
 
+/** Host of a backend feed on another origin (VITE_API_BASE), for the privacy line. */
+function otherFeedHost(feedUrl: string | undefined): string | null {
+  if (!feedUrl) return null;
+  const url = new URL(feedUrl);
+  if (url.origin === window.location.origin || url.hostname === "data.vatsim.net") return null;
+  return url.host.toUpperCase();
+}
+
 /** ABOUT (§10 M9, PUBLISHING_PLAN §5.2): versions, accuracy, known gaps, attribution. */
 export function AboutWindow() {
   const ready = useStore((s) => s.engine.ready);
   const nav = useStore((s) => s.engine.nav);
+  const feedHost = otherFeedHost(ready?.feedUrl);
 
   return (
     <div className="eram-about">
@@ -73,7 +82,8 @@ export function AboutWindow() {
       <h3>PRIVACY</h3>
       <p>
         SETTINGS, INCLUDING YOUR CID, ARE SAVED IN THIS BROWSER ONLY. THE PAGE TALKS TO NOTHING BUT
-        THIS SITE AND DATA.VATSIM.NET. <Ext href="/privacy">READ THE PRIVACY POLICY</Ext>.
+        THIS SITE{feedHost ? `, ${feedHost}` : ""} AND DATA.VATSIM.NET.{" "}
+        <Ext href="/privacy">READ THE PRIVACY POLICY</Ext>.
       </p>
 
       <p>

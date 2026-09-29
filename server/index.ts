@@ -1,26 +1,30 @@
-// Starts the server: `npm run server` (reads .env). See server/README.md.
-
-import { AccessStore } from "./access.ts";
+#!/usr/bin/env node
+// Backend entry point:  npm run server   (see server/README.md)
 import { createApp } from "./app.ts";
 import { loadConfig } from "./config.ts";
+import { FeedHub } from "./services/feedHub.ts";
+import { VnasService } from "./services/vnas.ts";
 
-let config;
-try {
-  config = loadConfig();
-} catch (e) {
-  console.error((e as Error).message);
-  console.error("Copy .env.example to .env and fill it in (see server/README.md).");
-  process.exit(1);
-}
-
-const store = new AccessStore(config.dataDir);
-await store.load();
-
-createApp(config, store).listen(config.port, config.host, () => {
-  console.log(`Airspace Monitor server on http://${config.host}:${config.port}`);
-  console.log(`  public URL:     ${config.publicUrl.origin}`);
-  console.log(`  VATSIM Connect: ${config.vatsimAuthBase}`);
-  console.log(`  redirect URI:   ${new URL("/auth/callback", config.publicUrl)}`);
-  console.log(`  site:           ${config.siteDir}`);
-  console.log(`  superadmins:    ${config.superadmins.join(", ")}`);
+const config = loadConfig();
+const feed = new FeedHub({ url: config.feedUrl, userAgent: config.userAgent });
+const vnas = new VnasService({
+  baseUrl: config.vnasBaseUrl,
+  userAgent: config.userAgent,
+  cacheMs: config.vnasCacheMs,
 });
+
+const app = createApp({ config, feed, vnas });
+feed.start();
+
+const server = app.listen(config.port, config.host, () => {
+  console.log(`vam server on http://${config.host}:${config.port}`);
+});
+
+function shutdown(signal: string) {
+  console.log(`${signal}: shutting down`);
+  feed.stop();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5_000).unref();
+}
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));

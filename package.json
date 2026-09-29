@@ -12,6 +12,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "server": "node --env-file-if-exists=.env server/index.ts",
+    "server:dev": "node --env-file-if-exists=.env --watch server/index.ts",
     "build:sites": "node scripts/build-sites.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -83,6 +83,7 @@ npm test          # Vitest
 npm run lint      # ESLint + Prettier check
 npm run build     # type-check and production build to dist/
 npm run bench     # prediction performance budget (< 500 ms per recompute) on the replay fixture
+npm run server    # optional Express backend on :3001 (feed fan-out, vNAS proxy), see server/README.md
 ```
 
 Publish checks, the same ones CI runs:
@@ -149,7 +150,7 @@ Snapshots go to `tests/fixtures/recordings/<UTC stamp>/` (never `public/`, which
 
 ### Background polling check
 
-The feed poller and clock run in a Web Worker so they keep going when the page is covered by CRC. To check, cover the page for 10+ minutes, then open DevTools on it and run `__vam.pollLog()`: polls should be about 10 s apart throughout.
+The feed poller and clock run in a Web Worker so they keep going when the page is covered by CRC. To check, cover the page for 10+ minutes, then open DevTools on it and run `__vam.pollLog()`: polls should be about 15 s apart throughout (an occasional extra poll 2 s after one marked `dup` is normal).
 
 ## Maintaining the hosted site
 

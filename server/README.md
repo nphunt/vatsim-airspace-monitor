@@ -1,59 +1,109 @@
-# Server
+# Backend (Express)
 
-An Express server that hosts the site in place of GitHub Pages behind **VATSIM Connect** sign-in. Every page needs it: opening any page signed out goes straight to VATSIM and comes back to that page once you sign in.
+Optional Node server for the monitor. The static Pages build still works without it; the
+server adds what a browser alone cannot do well.
 
-- **`/`** is the live site, built from `main`. Any signed-in VATSIM account can open it.
-- **`/dev/`** is the development site, built from `development`. It opens only for CIDs on its list, or for admins. Anyone else gets `ACCESS DENIED: CID … ASK AN ADMIN FOR ACCESS`. The server refuses every file under `/dev/` (HTML, JavaScript, data) without access, not just the page.
-- **`/admin/`** edits both lists. Only admins can open it.
-- **Admins** can open every page. `1935951` is a built-in admin, and `SUPERADMIN_CIDS` adds more. Neither kind can be removed on the admin page.
+> **Sign-in is not wired in.** `access.ts`, `session.ts`, `vatsim.ts`, `pages.ts`,
+> `ratelimit.ts`, `admin/` and `static/` are the VATSIM Connect sign-in and CID-gating
+> pieces from the earlier server design. This server (`app.ts`, `config.ts`, `index.ts`)
+> does not use them yet, so nothing here requires sign-in. `.env.example`,
+> `deploy/Caddyfile` and `scripts/build-sites.mjs` still describe that earlier design.
 
-**Suspended VATSIM accounts can't sign in.** The server asks VATSIM for the `vatsim_details` scope and refuses a CID whose rating is `SUS`, or whose rating VATSIM doesn't send, since then it can't tell the account isn't suspended. Every refused or failed sign-in gets a page saying why (cancelled, expired, rejected, VATSIM unreachable, a problem with the site's VATSIM settings, suspended), with TRY AGAIN and SIGN IN AS A DIFFERENT CID where they make sense, and a `sign-in refused: <reason>` line in the server log. The check runs at sign-in, so an account suspended later keeps access until its session ends (`SESSION_TTL_S`).
+## Why a backend
 
-Sessions are HMAC-signed `HttpOnly` cookies that last 7 days. Access is checked on every request, so removing a CID takes effect on that person's next click or reload. The lists are kept in `data/access.json`.
+| Problem | Server answer |
+|---|---|
+| vNAS API sends no CORS header (SECTOR_PLAN §3.1), so the app can only use build-time copies | `/api/vnas/artccs/:id` proxies it with a 1 h cache and stale-if-error |
+| Every open tab polls the multi-MB VATSIM feed itself | `FeedHub` polls once, timed to each VATSIM update like the worker (`src/data/pollSchedule.ts`), and fans out, gzipped, with ETag/304 |
+| No shared place for future server-side work (sector data, conflict probe, flow plans) | Services + routers pattern below |
 
-## One-time setup
+## Layout
 
-1. **Register a VATSIM Connect client.** For testing, use the sandbox at <https://auth-dev.vatsim.net>. Its accounts are CIDs `10000001` to `10000011`, and each password is the CID. Set the client's **redirect URL** to `<PUBLIC_URL>/auth/callback`. Register one for each address you use, for example:
-   - `http://localhost:3000/auth/callback`
-   - `https://amuck-yesterday-cilantro.ngrok-free.dev/auth/callback`
-
-   Note the client ID and secret.
-2. **Configure.** `npm run server` reads `.env`, which is git-ignored. Start from [`.env.example`](../.env.example): set `VATSIM_CLIENT_ID`, `VATSIM_CLIENT_SECRET`, `SESSION_SECRET` and `PUBLIC_URL`. The server won't start until everything it needs is set, and it tells you what's missing.
-3. **Build the sites:** `npm run build:sites`. It builds `main` into `site/live` and `development` into `site/dev`, each in its own git worktree under `.sites-build/`, so your checkout isn't touched. It builds the **committed** tip of each local branch, so commit before rebuilding. `LIVE_REF` / `DEV_REF` pick another ref, for example `DEV_REF=origin/development`. `npm run build:sites -- dev` builds just one site. A failed build leaves the served copy alone.
-4. **Run:** `npm run server`. On startup it prints the redirect URI it will send to VATSIM, which must match the one you registered exactly.
-5. Sign in on `/admin/` as a superadmin and add CIDs.
-
-## Through ngrok
-
-```bash
-ngrok http --url=amuck-yesterday-cilantro.ngrok-free.dev 127.0.0.1:3000
+```
+server/
+├─ index.ts            entry: config -> services -> app -> listen; SIGINT/SIGTERM shutdown
+├─ app.ts              createApp(deps): builds the Express app without listening (tests use fakes)
+├─ config.ts           env -> ServerConfig (validated once at startup)
+├─ http/
+│  ├─ errors.ts        HttpError, JSON 404, final error handler
+│  └─ cors.ts          allowlist CORS for the GET API
+├─ services/           no Express imports; plain classes, injectable fetch/clock
+│  ├─ upstream.ts      outbound fetch: timeout, User-Agent, UpstreamError
+│  ├─ ttlCache.ts      keyed TTL cache, single-flight loads, stale-if-error, LRU cap
+│  ├─ feedHub.ts       VATSIM feed poller + latest document (raw bytes, gzip, ETag)
+│  └─ vnas.ts          vNAS ARTCC documents via TtlCache
+└─ routes/             thin: parse/validate input, call a service, set headers
+   ├─ health.ts        GET /api/health        200 once a feed snapshot is held, else 503
+   ├─ feed.ts          GET /api/feed          latest v3 document, unchanged
+   │                   GET /api/feed/status   poll state
+   └─ vnas.ts          GET /api/vnas/artccs/:id   ZME | KZME
 ```
 
-Set `PUBLIC_URL=https://amuck-yesterday-cilantro.ngrok-free.dev` and register `…/auth/callback` with VATSIM. Sign-in only works on `PUBLIC_URL`, because cookies belong to one host name. A sign-in started on `http://localhost:3000` moves over to `PUBLIC_URL` by itself. When `PUBLIC_URL` is `https://`, cookies are marked `Secure`.
+Rules for adding to it:
 
-## Moving to a VPS
+- **Routes stay thin; logic goes in `services/`.** Services don't import Express, so they
+  can be unit-tested and reused by `scripts/`.
+- **Every service is created in `index.ts` and passed into `createApp`.** No module-level
+  singletons, so tests build an app around fake `fetchImpl`/`now`.
+- **Errors:** throw `HttpError(status, message)` from routes; anything else becomes a
+  logged 500 with a generic body. Express 5 forwards async rejections, so no wrappers.
+- **Upstream calls go through `fetchUpstream`** (timeout + User-Agent); map `UpstreamError`
+  to 502/404 in the route.
+- **Shared code:** the server runs on Node's type stripping (`node server/index.ts`, no
+  build step), so imports use `.ts` extensions. It can import `src/` modules that have
+  no extensionless imports (today `src/config.ts`, `src/core/time.ts`). Keep erasable TS
+  only (no enums or parameter properties).
 
-- Put Caddy in front of port 3000 with [`deploy/Caddyfile`](../deploy/Caddyfile) (edit the domain; it handles HTTPS certificates and passes the client address through), and set `PUBLIC_URL` to the public `https://` origin. With nginx instead, pass `Host` and `X-Forwarded-For` through: the sign-in compares `Host` to `PUBLIC_URL`, and the rate limit reads the forwarded address.
-- The server listens on `127.0.0.1` only (`HOST` in `.env`), so open just ports 80 and 443 on the firewall.
-- Switch to production VATSIM Connect: register a client at <https://auth.vatsim.net> and remove `VATSIM_AUTH_BASE` (it defaults to production), or set it to `https://auth.vatsim.net`. Remove the sandbox CID from `SUPERADMIN_CIDS`.
-- Keep the server running with a process manager (systemd, pm2). Back up `data/access.json`.
-- Rebuild after pulling: `git fetch && npm run build:sites` with `LIVE_REF=origin/main DEV_REF=origin/development`, or pull the local branches first. No server restart is needed: it serves whatever is in `site/`.
+## Running
 
-## Routes
+```bash
+npm run server        # http://127.0.0.1:3001
+npm run server:dev    # restarts on change
+npm run dev           # Vite proxies /api/* to the server, so it is same-origin in dev
+```
 
-| Route | |
-| --- | --- |
-| `GET /auth/login?return=<path>` | Starts VATSIM Connect sign-in and comes back to `<path>` (paths on this site only). `&switch=1` makes VATSIM ask for a CID and password even if it remembers you (`prompt=login`), and so does the first sign-in after signing out |
-| `GET /auth/callback` | VATSIM Connect redirect target |
-| `POST /auth/logout?return=<path>` | Signs out |
-| `GET /api/me` | `{ cid, name, pages: { dev, admin }, superadmin }`, or 401 |
-| `GET /api/access` | The lists (admins only) |
-| `PUT /api/access` | Replaces them (admins only). Takes `{ pages, baseVersion }` and returns 409 if another admin saved first |
-| `GET /healthz` | `ok` |
+Production-style, serving the built app and the API from one origin:
 
-## Limits
+```bash
+VITE_API_BASE=/api/ npm run build
+VAM_STATIC_DIR=dist HOST=0.0.0.0 PORT=8080 npm run server
+```
 
-- One process: the version check on saves relies on it. Don't run several copies against the same `data/`.
-- The development build's JavaScript is in the public repo anyway. The gate keeps people from *using* `/dev/`, so nothing secret belongs in it.
-- Sign-in routes allow 20 requests per address per minute (`server/ratelimit.ts`), counted per process. Behind a proxy on the same machine the address comes from `X-Forwarded-For`; a proxy on another machine isn't trusted.
-- Every response carries a Content-Security-Policy (`server/app.ts`) that allows scripts, styles and fonts from this site and network requests only to this site and `data.vatsim.net`. A new external host needs adding there.
+| Variable | Default | |
+|---|---|---|
+| `HOST` / `PORT` | `127.0.0.1` / `3001` | |
+| `VAM_STATIC_DIR` | unset | serve this directory at `/` |
+| `VAM_CORS_ORIGINS` | unset | comma-separated, e.g. `https://nphunt.github.io` |
+| `VAM_FEED_URL` | VATSIM v3 feed | must be on `https://data.vatsim.net/` |
+| `VAM_VNAS_BASE_URL` | `https://data-api.vnas.vatsim.net` | |
+| `VAM_VNAS_CACHE_MS` | `3600000` | |
+| `VAM_USER_AGENT` | app name + repo URL | sent to upstreams |
+
+Tests: `server/**/*.test.ts` run with the rest of `npm test`; `tsconfig.server.json` is
+part of `npm run typecheck`.
+
+## How the app uses it
+
+The app reads the backend's address at build time from `VITE_API_BASE`
+(`src/data/paths.ts` `apiBaseUrl`), and the worker polls `<base>feed`:
+
+| Build | `VITE_API_BASE` | Feed source |
+|---|---|---|
+| `npm run dev` | unset -> `/api/` (Vite proxy) | backend, VATSIM if it isn't running |
+| Pages (`npm run build` in CI) | unset | VATSIM directly, as before |
+| Served by this server | `/api/` | backend |
+| Pages + a backend elsewhere | `https://host/api/` | backend (set `VAM_CORS_ORIGINS` to the Pages origin) |
+
+`VITE_API_BASE=` (empty) turns the backend off in dev too.
+
+When `/api/feed` fails (server down, 503 before its first poll), the same poll fetches
+VATSIM directly and the backend is retried after `FEED_PRIMARY_RETRY_MS` (60 s), so a
+missing backend never costs data. `__vam.status().feedUrl` in the console shows which
+source the latest snapshot came from. The ABOUT privacy line names the backend host when
+it is on another origin.
+
+## Not done yet
+
+Runtime vNAS data: `/api/vnas` exists, but the app doesn't call it (SECTOR_PLAN assumes
+build-time bundling and no runtime vNAS dependency). Hosting is also open: GitHub Pages
+can't run this, so it needs a Node host.
