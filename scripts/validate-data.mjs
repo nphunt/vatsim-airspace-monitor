@@ -13,6 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const EXPECTED_VATUSA_FEATURES = 37;
 export const EXPECTED_SELECTABLE = 22;
+export const MIN_TRACONS = 100;
 export const NAV_BUDGET_BYTES = 5 * 1024 * 1024; // IMPLEMENTATION_PLAN §3.3
 export const DATA_BUDGET_BYTES = 12 * 1024 * 1024; // PUBLISHING_PLAN §3.1
 
@@ -21,6 +22,7 @@ const FILES = [
   "firs.json",
   "boundaries.us.geojson",
   "airports.json",
+  "tracons.geojson",
   "nav/meta.json",
   "nav/points.json",
   "nav/airways.json",
@@ -105,6 +107,24 @@ export function validateData(dir) {
     }
   }
 
+  const tracons = json["tracons.geojson"];
+  if (tracons?.features) {
+    if (tracons.features.length < MIN_TRACONS)
+      problems.push(
+        `tracons.geojson: ${tracons.features.length} TRACONs, expected >= ${MIN_TRACONS}`,
+      );
+    for (const f of tracons.features) {
+      const p = f.properties ?? {};
+      if (
+        !p.id ||
+        !p.prefixes?.length ||
+        !Number.isFinite(p.labelLat) ||
+        !Number.isFinite(p.labelLon)
+      )
+        problems.push(`tracons.geojson: ${p.id ?? "?"} is missing id, prefixes or label point`);
+    }
+  }
+
   const nav = json["nav/meta.json"];
   if (nav) {
     for (const k of ["cycle", "expires"]) {
@@ -123,11 +143,12 @@ export function validateData(dir) {
     const bytes = all.reduce((n, p) => n + fs.statSync(p).size, 0);
     if (bytes > DATA_BUDGET_BYTES)
       problems.push(`data: ${bytes} bytes, over the ${DATA_BUDGET_BYTES} budget`);
-    // No person data ships: no CIDs anywhere, and "name" only as facility names in firs.json.
+    // No person data ships: no CIDs anywhere, and "name" only as facility names in firs.json and tracons.geojson.
     for (const [f, v] of Object.entries(json)) {
       const keys = collectKeys(v);
       if (keys.has("cid")) problems.push(`${f}: contains "cid" keys`);
-      if (keys.has("name") && f !== "firs.json") problems.push(`${f}: contains "name" keys`);
+      if (keys.has("name") && f !== "firs.json" && f !== "tracons.geojson")
+        problems.push(`${f}: contains "name" keys`);
     }
   }
   return problems;

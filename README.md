@@ -1,7 +1,8 @@
-# VATSIM Airspace Monitor
+# Airspace Monitor
 
 ERAM-styled companion window for VATUSA controllers: who is about to leave your ARTCC, where to, and when; who is coming in; and how busy it will get.
 
+Airspace Monitor is an independent, community-made tool. It is not affiliated with, endorsed by, or operated by VATSIM, VATUSA, or any ARTCC. For flight simulation use only. Not for real-world navigation or air traffic control.
 For flight simulation on the VATSIM network only. Not for real-world navigation or air traffic control. Not affiliated with or endorsed by VATSIM or VATUSA.
 
 ## For controllers
@@ -31,6 +32,7 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 
 - **OUTBOUND**: aircraft inside your airspace predicted to leave within the horizon, soonest first. `TO` is the airspace it will enter (dimmed if nobody is staffing it), `DIR` the direction it leaves, `ETX` the time to exit as a countdown and the Zulu time it crosses (`01:52 1732Z`), `DEST` its filed destination. The strip above the list counts exits per neighbor; click one to filter.
 - **ALERTS**, when the airspace it exits into **has a controller online**: the aircraft flashes **orange** 4:00 before the boundary, `HANDOFF KC_12_CTR 127.900`: hand the tag off. At 1:00 it flashes **yellow**, `XFER COMM KC_12_CTR 127.900`: transfer communications. Each stage plays one short tone and is acknowledged separately. Click a row, or press `A` for all, to acknowledge.
+- **ALERTS**, for an aircraft **filed to an airport inside a staffed TRACON**: the same two stages, into the approach controller, at the point where it will cross into the TRACON (`ZME→M03 APP`, `HANDOFF MEM_APP 119.100`). Approach counts as staffed while an `_APP` or `_DEP` controller with a matching callsign prefix is online. Nobody on, no alert. Only the selected ARTCC's own TRACONs count (by vNAS's parent facility, so HSV is ZME's). Only the crossing into the TRACON is predicted, so an aircraft already inside it doesn't alert.
 - **ALERTS**, when **nobody is online** there: the aircraft flashes **red** 2:00 before it exits (change this in SETTINGS → `ALERT AT`), `TERM CTL`: terminate radar service and approve the frequency change (UNICOM 122.800).
 - **INBOUND**: aircraft predicted to enter, with `ETE` (countdown and Zulu time) and where they come from. With `SETTINGS` → `ALSO ALERT … BEFORE ENTRY` on, an aircraft about to enter flashes here and in ALERTS, like an exit.
 - `FLG` column: `RTE` (following its filed route) or `DR` (dead reckoning on its current track; less reliable before turns), `ARR` landing inside, `TRN` turning, `CLP` only clipping a corner (never alerts), `V` VFR.
@@ -42,7 +44,7 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 ### 5. LOAD and SCOPE (optional)
 
 - **LOAD** forecasts how many aircraft will be in your airspace: `TACT` in 5-minute bins for the next hour, `STRAT` in 15-minute bins for two hours. A bar turns red at your threshold (set it in the window header, default 20). Click a bar to list the aircraft in it.
-- **SCOPE** is a simple map of your airspace with targets, datablocks (with each aircraft's filed destination) and predicted exit points; airports with traffic show as small hollow squares with their code. Drag to pan, scroll to zoom. **Drag a datablock** to move it off its neighbors (the leader line follows it); double-click it to put it back, or `DB RESET` to reset them all. Moved datablocks keep their place when you pan and zoom. CRC stays the real scope; this is for a quick look.
+- **SCOPE** is a simple map of your airspace with targets, datablocks (with each aircraft's filed destination) and predicted exit points; TRACON (approach) boundaries of the selected ARTCC as dashed lines, brighter and labeled when staffed (`TRACON` button to hide them); airports with traffic show as small hollow squares with their code. Drag to pan, scroll to zoom. **Drag a datablock** to move it off its neighbors (the leader line follows it); double-click it to put it back, or `DB RESET` to reset them all. Moved datablocks keep their place when you pan and zoom. CRC stays the real scope; this is for a quick look.
 - **Right-click** an aircraft (an OUTBOUND, INBOUND or ALERTS row, or its target or datablock on the SCOPE) and choose **CLOSE** once you're done with it: it goes dim in the lists, drops to a limited datablock on the scope, and its alerts stay listed but silent (no tone, no flashing). Right-click it again and choose **OPEN** to undo. Closed aircraft are remembered across reloads until the pilot disconnects.
 
 ### Toolbar
@@ -63,7 +65,7 @@ Each window can be minimized (`-`), undocked to float (`↗`) and closed (`X`). 
 ### Good to know
 
 - Predictions come from positions VATSIM publishes about every 15 s. Aircraft following their route are predicted well; dead reckoning is roughly ±15–30 s on a straight leg and poor right before a turn. Each row says which it is using.
-- Boundaries are VATSpy's lateral boundaries, not FAA sectors, with no altitude strata.
+- Boundaries are VATSpy's lateral boundaries, not FAA sectors, with no altitude strata. TRACON boundaries are the [SimAware TRACON project](https://github.com/vatsimnetwork/simaware-tracon-project)'s, also lateral only.
 - Altitudes are shown the way ATC sees them: at and above FL180 the pressure altitude (flight level), below it the altitude on the local altimeter setting, so they match VATSIM Radar rather than the feed's raw true altitude.
 - LOAD does not count aircraft still on the ground, so later bins under-count departures from airports inside your airspace.
 - `SETTINGS` also has an altitude floor/ceiling (for example, only FL240 and above). It filters the lists, alerts, LOAD and SCOPE, never the predictions themselves.
@@ -99,17 +101,22 @@ To replay a recording instead of live data, run `npm run dev` and open `http://l
 
 A build with `GITHUB_ACTIONS=true` uses the GitHub Pages base path `/<repo-name>/`.
 
+### Server (VATSIM sign-in)
+
+`npm run server` runs an Express server that hosts everything behind VATSIM Connect sign-in: the live site at `/` (any VATSIM account) and the development site at `/dev/` (allowed CIDs only), with an admin page at `/admin/` for the access lists. `npm run build:sites` builds `main` and `development` for it. Setup, ngrok and VPS notes are in [server/README.md](server/README.md).
+
 ### Data
 
 `public/data/` is generated and committed. Refresh it with:
 
 ```bash
 npm run update-data   # latest VATSpy release -> boundaries, FIRs, airports, meta
+npm run update-tracons # latest SimAware TRACON release -> tracons.geojson
 npm run update-nav    # current FAA NASR cycle -> nav/points, airways, procedures, meta
 npm run validate-data
 ```
 
-Both scripts fail rather than writing if a release breaks an assumption (feature counts, the US sub-area classification table, callsign prefixes, NASR file layout). Boundary data: [VATSpy Data Project](https://github.com/vatsimnetwork/vatspy-data-project). Nav data: [FAA NASR](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) (public domain).
+These scripts fail rather than writing if a release breaks an assumption (feature counts, the US sub-area classification table, callsign prefixes, NASR file layout). Boundary data: [VATSpy Data Project](https://github.com/vatsimnetwork/vatspy-data-project). Nav data: [FAA NASR](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) (public domain).
 
 Route-based prediction uses FAA NASR nav data in `public/data/nav/` (fixes, navaids, airports, airways, SIDs and STARs). NASR runs on a 28-day cycle, so **refresh it every 28 days**:
 
@@ -146,35 +153,31 @@ The feed poller and clock run in a Web Worker so they keep going when the page i
 
 ## Maintaining the hosted site
 
-The site has two copies:
+The site is served by the Express server (see [server/README.md](server/README.md)) behind VATSIM Connect sign-in. It has two copies:
 
-- **Live:** <https://nphunt.github.io/vatsim-airspace-monitor/>, built from `main`.
-- **Development:** <https://nphunt.github.io/vatsim-airspace-monitor/dev/>, built from `development`, for testing before a release. It shows a `DEVELOPMENT BUILD … SOME THINGS MAY BREAK` notice and keeps its own settings (`vam-dev:v1:settings`), so testing there never changes anyone's live layout.
+- **Live:** `/`, built from `main`.
+- **Development:** `/dev/`, built from `development` and open only to listed CIDs, for testing before a release. It shows a `DEVELOPMENT BUILD … SOME THINGS MAY BREAK` notice and keeps its own settings (`vam-dev:v1:settings`), so testing there never changes anyone's live layout.
 
-See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Workflows in `.github/workflows/`:
+GitHub Pages is no longer used: the old `deploy.yml` and `build-site.yml` workflows are removed, so turn off Settings → Pages if it is still on. Workflows in `.github/workflows/`:
 
 | Workflow | When | Does |
 | --- | --- | --- |
-| `ci.yml` | PRs, pushes to non-main branches | lint, test, validate data, build under `/<repo>/`, publish checks, smoke test |
-| `deploy.yml` | push to `main` or `development`, or manually | builds both branches (via `build-site.yml`, each with the full checks), publishes `main` at the root and `development` at `/dev/`, then checks both URLs. A `development` build that fails its checks never blocks `main`: a `main` push then publishes without `/dev/`, and a `development` push publishes nothing |
-| `refresh-data.yml` | Mondays 06:00 UTC (once `DATA_REFRESH_ENABLED` is set), or manually | `update-data` + `update-nav` + `validate-data`; opens a `Data refresh: VATSpy <tag>, AIRAC <cycle>` PR when `public/data` changed |
+| `ci.yml` | PRs, pushes to non-main branches | lint, test, validate data, build, publish checks, smoke test |
+| `refresh-data.yml` | Mondays 06:00 UTC (once `DATA_REFRESH_ENABLED` is set), or manually | `update-data` + `update-tracons` + `update-nav` + `validate-data`; opens a `Data refresh: VATSpy <tag>, AIRAC <cycle>` PR when `public/data` changed |
 
-**One-time repo setup (owner):**
+**Repo setup (owner):**
 
-- [ ] Repo public (Pages on a private repo needs a paid plan).
-- [ ] Settings → Pages → Source: **GitHub Actions**; Enforce HTTPS on.
 - [ ] Branch protection on `main`: require a PR and the `ci` check.
 - [ ] Settings → Actions → General: allow GitHub Actions to create and approve pull requests.
 - [ ] Secret `DATA_PR_TOKEN`: fine-grained PAT or GitHub App token for this repo only, contents + pull-requests write. (PRs opened with the default token don't run `ci`.)
-- [ ] Environment `github-pages`: deployments from `main` and `development` only (pushes to either publish the site).
 - [ ] Add the repository variable `DATA_REFRESH_ENABLED` = `true` to turn on the weekly schedule (a manual run works without it).
 - [ ] Run `refresh-data` once by hand (Actions → refresh-data → Run workflow) and check `ci` runs on its PR.
 
-**Testing a change:** push to `development`; about two minutes later it is at `/dev/`.
+**Testing a change:** commit to `development`, then run `npm run build:sites -- dev` on the server.
 
-**Releasing:** merge `development` into `main`; `deploy` publishes it. The ABOUT line (`BUILD <sha> · VATSPY <tag> · AIRAC <cycle>`) identifies the deploy.
+**Releasing:** merge `development` into `main`, then run `npm run build:sites -- live`. The ABOUT line (`BUILD <sha> · VATSPY <tag> · AIRAC <cycle>`) identifies the build.
 
-**Rolling back:** revert the bad commit on `main`. (`deploy` always builds the tip of each branch, so re-running it on an old commit does not roll back.)
+**Rolling back:** revert the bad commit on `main` and rebuild the live site.
 
 **Data PRs:** merge them by hand; a boundary change can move exit-into results. GitHub disables scheduled workflows after 60 days without repo activity, so don't let them pile up.
 

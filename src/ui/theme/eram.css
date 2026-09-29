@@ -127,6 +127,22 @@ input[aria-invalid="true"] {
   border-color: var(--eram-toolbar-btn);
 }
 
+a.eram-tb-btn {
+  text-decoration: none;
+}
+
+/* VATSIM sign-in (AccountButtons), pushed to the right end of the toolbar. */
+.eram-tb-account {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.eram-tb-account form {
+  display: contents;
+}
+
 .eram-tb-readout {
   color: var(--eram-toolbar-text);
   padding: 2px 6px;

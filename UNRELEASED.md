@@ -2,6 +2,15 @@
 
 Changes on `development` that are not on `main` yet. At release, move these into a new version section of [CHANGELOG.md](CHANGELOG.md) and empty this file back to its headings.
 
+### Server and VATSIM sign-in
+
+- New **Express server** (`server/`, `npm run server`) to host the site in place of GitHub Pages: every page needs **VATSIM Connect** sign-in, and opening one signed out goes straight to VATSIM and back. The live site at `/` opens for any VATSIM account; the development site at `/dev/` opens only for CIDs on its list (anyone else gets `ACCESS DENIED: CID … ASK AN ADMIN FOR ACCESS`). The server refuses every file without access, not just the page.
+- **Admin page** at `/admin/` (admins only) edits the CID lists for `/dev/` and the admin page. CID 1935951 is a built-in admin; `SUPERADMIN_CIDS` adds more.
+- At the right end of the toolbar (when the server hosts the page), the toolbar shows your CID, a **`DEV`** button if your CID may open the development site (**`LIVE`** on `/dev/` to go back), **`ADMIN`** for admins, **`SWITCH`** to sign in as a different CID, and `SIGN OUT`. VATSIM Connect remembers who signed in there, so SWITCH, the access-denied page's `SIGN IN AS A DIFFERENT CID`, and the first sign-in after `SIGN OUT` make it ask for a CID and password again.
+- **Suspended VATSIM accounts are refused** at sign-in: `ACCOUNT SUSPENDED: CID … IS SUSPENDED ON VATSIM`. So is an account VATSIM sends no rating for, since it can't be checked. The server now asks for the `vatsim_details` scope, and sessions from before this change are signed out once so everyone gets checked.
+- A **sign-in failed** page says why a sign-in didn't go through (cancelled, expired, rejected by VATSIM, VATSIM unreachable, a problem with the site's VATSIM settings, suspended, status unknown), with TRY AGAIN and SIGN IN AS A DIFFERENT CID.
+- `npm run build:sites` builds `main` and `development` in git worktrees into `site/live` and `site/dev` for the server. Setup: [server/README.md](server/README.md).
+
 ### Arrivals
 
 - An aircraft inside the selected airspace that is **filed to land at an airport inside it** (`ARR`) no longer shows an exit countdown. OUTBOUND shows the airport in `TO`, leaves `DIR` blank, and shows the **ETA** as Zulu time (`1742Z`); hover it for the countdown (`ETA IN 12:34`).
@@ -10,6 +19,12 @@ Changes on `development` that are not on `main` yet. At release, move these into
 - Arrivals **never alert**: no exit, HANDOFF or XFER alert, and one already showing clears when the aircraft becomes an arrival. This replaces the old rule that only muted a dead-reckoning exit alert when the airport came first.
 - The SCOPE datablock shows `ETA 1742Z` in place of the exit time, and the flight plan readout shows `LANDING KMEM ETA 1742Z (12:34)`.
 - The AIRPORTS window's `NEXT` column still uses its own straight-line ETA without the 5 minutes, so it can differ from OUTBOUND.
+
+### TRACONs
+
+- The **SCOPE** draws the **TRACON (approach control) boundaries of the selected airspace** as dashed lines. A TRACON belongs to the ARTCC vNAS lists it under (HSV is ZME's although it lies inside ZTL's boundary), else to the ARTCC around its label point; other centers' TRACONs are neither drawn nor alerted. A staffed one is brighter and labeled with its FAA id (`M03`, `A80`); unstaffed ones are labeled once zoomed in. The **`TRACON`** button hides them. Boundaries come from the SimAware TRACON project (`npm run update-tracons`, part of the weekly refresh).
+- An aircraft **filed to an airport inside a staffed TRACON** now gets the HANDOFF (4:00) and XFER COMM (1:00) alerts into the approach controller, at the point where it will cross into the TRACON: `ZME→M03 APP`, `HANDOFF MEM_APP 119.100`. A TRACON counts as staffed while an `_APP` or `_DEP` controller (APP preferred) with a matching callsign prefix is online; with nobody on there is no alert. This applies to `ARR` aircraft too, so the "arrivals never alert" rule above no longer holds for them when their approach is staffed. The crossing must come before the aircraft's exit from the airspace, and an aircraft already inside the TRACON doesn't alert.
+- `.gitignore` now anchors `data`, `site` and `.sites-build` to the repository root, so it no longer ignores `public/data/`.
 
 ### Closing aircraft
 

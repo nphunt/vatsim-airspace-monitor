@@ -26,13 +26,16 @@ import type {
 // Exits into a staffed facility (a controller online to hand off to) go in two stages:
 //   HANDOFF at <= 4:00 (orange, ACTIVE -> ACKED as above), then XFER at <= 1:00: ACTIVE
 //   again (tone, yellow flash) until acked, telling the controller to transfer comms.
+// A TRACON alert is always staffed (no controller, no alert) and follows the same two
+// stages into the approach controller, for an aircraft filed to an airport inside it.
 // Unstaffed exits and entries have one stage, ALERT, at the configured threshold.
 // If staffing changes mid-alert the stage follows it; a controller logging on turns an
 // ALERT into a new (ACTIVE) HANDOFF.
 // An aircraft whose datablock is closed (right-click CLOSE) still alerts, but silently:
 // its alerts come up ACKED, never re-activate, and closing one ACTIVE acknowledges it.
 
-export type AlertKind = "exit" | "entry";
+/** `tracon`: a handoff to the staffed approach control the aircraft is landing in. */
+export type AlertKind = "exit" | "entry" | "tracon";
 export type AlertState = "ACTIVE" | "ACKED" | "EXITED";
 /** ALERT: single-stage (unstaffed exit, entry). HANDOFF/XFER: staffed exit stages. */
 export type AlertStage = "ALERT" | "HANDOFF" | "XFER";
@@ -51,7 +54,7 @@ export interface AlertEntry {
   /** Predicted exit (or entry) time, ms UTC. */
   t: number;
   dir?: Compass8;
-  /** Exit: facility it exits into. Entry: facility it comes from. */
+  /** Exit: facility it exits into. Entry: facility it comes from. TRACON: the approach. */
   other: FacilityStatus;
   activatedAt: number;
   lastToneAt: number;
@@ -183,7 +186,7 @@ export class AlertMachine {
       const key = `${kind}:${p.cid}`;
       seen.add(key);
       const remainingS = (t - now) / 1000;
-      const handoff = kind === "exit" && other.controller !== undefined;
+      const handoff = kind !== "entry" && other.controller !== undefined;
       if (handoff) thresholdS = c.handoffAlertS;
       const stage: AlertStage = !handoff ? "ALERT" : remainingS <= c.xferCommS ? "XFER" : "HANDOFF";
       const e = this.entries.get(key);
@@ -251,6 +254,9 @@ export class AlertMachine {
       // Arrivals (§5.6) carry an ETA, not an exit, and never exit-alert.
       if (!x) continue;
       consider("exit", p, x.t, x.into, x.clip, c.exitAlertS, x.dir);
+    }
+    for (const p of set.outbound) {
+      if (p.tracon) consider("tracon", p, p.tracon.t, p.tracon.into, false, c.handoffAlertS);
     }
     if (c.entryAlerts) {
       for (const p of set.inbound) {

@@ -29,6 +29,8 @@ export interface DrawOptions {
   /** BRIGHT (§7.1), 0..1: boundaries and labels; targets and datablocks. Alerts stay full. */
   mapBright: number;
   datablockBright: number;
+  /** Draw the TRACON (approach control) boundaries. */
+  showTracons: boolean;
   /** Airports with ground or inbound traffic, at their real positions. */
   airports: readonly SceneAirport[];
 }
@@ -101,6 +103,19 @@ export function drawScope(
     ctx.strokeStyle = o.alertInto.has(f.key) ? ERAM_COLORS.datablockDim : ERAM_COLORS.mapOther;
     strokeFeature(ctx, f, view, w, h);
   }
+  // TRACONs: dashed and finer than the centers around them; a staffed one is brighter.
+  const traconsShown = o.showTracons ? map.tracons.filter((f) => onScreen(f, view, w, h)) : [];
+  ctx.setLineDash([3, 3]);
+  for (const f of traconsShown) {
+    const staffed = o.staffed.has(f.key);
+    ctx.strokeStyle = o.alertInto.has(f.key)
+      ? ERAM_COLORS.handoff
+      : staffed
+        ? ERAM_COLORS.mapOwn
+        : ERAM_COLORS.mapOther;
+    strokeFeature(ctx, f, view, w, h);
+  }
+  ctx.setLineDash([]);
   ctx.strokeStyle = ERAM_COLORS.mapOwn;
   ctx.lineWidth = 2;
   strokeFeature(ctx, map.selected, view, w, h);
@@ -118,6 +133,17 @@ export function drawScope(
       : o.staffed.has(f.key)
         ? ERAM_COLORS.text
         : ERAM_COLORS.mapOther;
+    ctx.fillText(f.label, x, y);
+  }
+
+  // TRACON labels: always for a staffed one, else once it is big enough to hold its label.
+  for (const f of traconsShown) {
+    const staffed = o.staffed.has(f.key);
+    const widthPx = (f.bbox[2] - f.bbox[0]) * view.pxPerNm;
+    if (!staffed && widthPx < f.label.length * o.charPx * 3) continue;
+    const [x, y] = toScreen(view, w, h, f.labelX, f.labelY);
+    if (x < -40 || x > w + 40 || y < -20 || y > h + 20) continue;
+    ctx.fillStyle = staffed ? ERAM_COLORS.text : ERAM_COLORS.mapOther;
     ctx.fillText(f.label, x, y);
   }
 

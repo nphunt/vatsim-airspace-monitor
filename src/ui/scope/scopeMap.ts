@@ -1,4 +1,4 @@
-import type { Airspace, Tier } from "../../data/types";
+import type { Airspace, Tier, Tracon } from "../../data/types";
 import { makeProjection, project, type Projection } from "./projection";
 
 // SCOPE map layer (§7.5): every bundled boundary projected once per selected airspace
@@ -11,7 +11,7 @@ export interface MapFeature {
   key: string;
   label: string;
   name: string;
-  tier: Tier;
+  tier: Tier | "tracon";
   /** Projected rings, flat [x0, y0, x1, y1, ...] in nm. */
   rings: Float32Array[];
   /** [minX, minY, maxX, maxY] over all rings, nm. */
@@ -27,9 +27,11 @@ export interface ScopeMap {
   selected: MapFeature;
   /** Everything else within MAP_RADIUS_NM, excluding split sub-areas (§3.2). */
   others: MapFeature[];
+  /** Approach control boundaries within MAP_RADIUS_NM. */
+  tracons: MapFeature[];
 }
 
-function projectFeature(pr: Projection, a: Airspace): MapFeature {
+function projectFeature(pr: Projection, a: Airspace | Tracon): MapFeature {
   const rings: Float32Array[] = [];
   let minX = Infinity;
   let minY = Infinity;
@@ -55,7 +57,7 @@ function projectFeature(pr: Projection, a: Airspace): MapFeature {
     key: a.key,
     label: a.label,
     name: a.name,
-    tier: a.tier,
+    tier: "tier" in a ? a.tier : "tracon",
     rings,
     bbox: [minX, minY, maxX, maxY],
     labelX,
@@ -70,7 +72,11 @@ function bboxDistance([minX, minY, maxX, maxY]: MapFeature["bbox"]): number {
   return Math.hypot(dx, dy);
 }
 
-export function buildScopeMap(selected: Airspace, all: readonly Airspace[]): ScopeMap {
+export function buildScopeMap(
+  selected: Airspace,
+  all: readonly Airspace[],
+  tracons: readonly Tracon[] = [],
+): ScopeMap {
   const projection = makeProjection(selected.labelLat, selected.labelLon);
   const others: MapFeature[] = [];
   for (const a of all) {
@@ -83,5 +89,10 @@ export function buildScopeMap(selected: Airspace, all: readonly Airspace[]): Sco
     projection,
     selected: projectFeature(projection, selected),
     others,
+    // Only the selected ARTCC's own approach controls.
+    tracons: tracons
+      .filter((t) => t.artcc === selected.label)
+      .map((t) => projectFeature(projection, t))
+      .filter((f) => bboxDistance(f.bbox) <= MAP_RADIUS_NM),
   };
 }

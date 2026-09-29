@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Airspace Monitor">
+  <rect width="64" height="64" fill="#000000"/>
+  <!-- A sector boundary... -->
+  <polygon points="8,24 26,8 46,12 50,34 34,50 12,42" fill="none" stroke="#00a0a0" stroke-width="3" stroke-linejoin="miter"/>
+  <!-- ...and an aircraft track crossing it. -->
+  <line x1="18" y1="26" x2="46" y2="45" stroke="#d0d0d0" stroke-width="2" stroke-dasharray="4 3"/>
+  <rect x="44" y="43" width="9" height="9" fill="#ffd000"/>
+</svg>

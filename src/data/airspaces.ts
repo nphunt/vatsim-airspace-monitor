@@ -13,7 +13,7 @@ export interface AirspaceRegistry extends FacilityIndex {
   all: readonly Airspace[];
 }
 
-function ringBbox(ring: number[][]): BBox {
+export function ringBbox(ring: number[][]): BBox {
   let minLon = Infinity;
   let minLat = Infinity;
   let maxLon = -Infinity;
@@ -27,7 +27,7 @@ function ringBbox(ring: number[][]): BBox {
   return [minLon, minLat, maxLon, maxLat];
 }
 
-function unionBbox(boxes: BBox[]): BBox {
+export function unionBbox(boxes: BBox[]): BBox {
   return [
     Math.min(...boxes.map((b) => b[0])),
     Math.min(...boxes.map((b) => b[1])),

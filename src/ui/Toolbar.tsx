@@ -4,6 +4,7 @@ import { BRIGHT_CHOICES_PCT, FONT_SIZE_CHOICES_PX, HORIZON_CHOICES_MIN } from ".
 import { parseCid } from "../core/myPosition";
 import type { WindowId } from "../store/settings";
 import { engineNow, useStore } from "../store/store";
+import { AccountButtons } from "./AccountButtons";
 import { formatUtcClock, recentlyChanged } from "./format";
 import { useLocalNow } from "./hooks";
 import { dataIndicator, isEngineStalled, isNavExpired } from "./status";
@@ -192,6 +193,7 @@ export function Toolbar() {
           NAV DATA EXPIRED
         </span>
       )}
+      <AccountButtons />
     </nav>
   );
 }

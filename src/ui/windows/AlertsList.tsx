@@ -14,7 +14,8 @@ export function AlertsTitle() {
  * `DAL123 B738 350 ZME→ZKC N 03:52 1732Z HANDOFF KC_12_CTR 127.900` (orange) from 4:00,
  * then `XFER COMM KC_12_CTR 127.900` (yellow) from 1:00. An exit into an unstaffed
  * facility alerts once, at the configured threshold, with `TERM CTL` (terminate
- * control, frequency change approved).
+ * control, frequency change approved). An aircraft filed to an airport inside a staffed
+ * TRACON gets the same two stages into the approach controller: `ZME→M03 APP 03:52 ...`.
  * Click a row, or focus it and press Enter, to acknowledge. A closed aircraft (right-click
  * CLOSE) stays listed, dim and silent.
  */
@@ -40,7 +41,8 @@ export function AlertsList() {
         <tbody>
           {alerts.map((a) => {
             const alt = String(Math.max(0, Math.round(a.altitude / 100))).padStart(3, "0");
-            const route = a.kind === "exit" ? `${own}→${a.other.label}` : `${a.other.label}→${own}`;
+            const route =
+              a.kind === "entry" ? `${a.other.label}→${own}` : `${own}→${a.other.label}`;
             const onAck = () => a.state === "ACTIVE" && ack(a.cid);
             return (
               <tr
@@ -60,7 +62,9 @@ export function AlertsList() {
                 ) : (
                   <>
                     <td className={a.other.staffed ? undefined : "dim-cell"}>{route}</td>
-                    <td>{a.kind === "exit" ? (a.dir ?? "") : "ENT"}</td>
+                    <td>
+                      {a.kind === "entry" ? "ENT" : a.kind === "tracon" ? "APP" : (a.dir ?? "")}
+                    </td>
                     <td>{formatCrossing(a.t, now)}</td>
                     <td className="col-flg">{alertAction(a)}</td>
                   </>

@@ -1,4 +1,4 @@
-# Weekly data refresh (PUBLISHING_PLAN §3.3): VATSpy boundaries + FAA NASR nav data.
+# Weekly data refresh (PUBLISHING_PLAN §3.3): VATSpy boundaries, SimAware TRACON boundaries + FAA NASR nav data.
 # Opens a PR when anything under public/data changed; the owner merges it by hand.
 #
 # Needs the DATA_PR_TOKEN secret (fine-grained PAT or GitHub App token, this repo only,
@@ -37,6 +37,9 @@ jobs:
       - run: npm run update-data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub API rate limit only
+      - run: npm run update-tracons
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm run update-nav
       - run: npm run validate-data
       - run: npm test
@@ -59,5 +62,5 @@ jobs:
             - VATSpy release: `${{ steps.meta.outputs.vatspy }}`
             - FAA NASR cycle: `${{ steps.meta.outputs.airac }}`
 
-            `update-data`, `update-nav` and `validate-data` passed. A boundary change can
+            `update-data`, `update-tracons`, `update-nav` and `validate-data` passed. A boundary change can
             move exit-into results, so glance at the diff before merging.

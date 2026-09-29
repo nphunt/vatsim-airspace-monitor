@@ -20,6 +20,12 @@
         "--strictPort"
       ],
       "port": 4173
+    },
+    {
+      "name": "server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "server"],
+      "port": 3000
     }
   ]
 }

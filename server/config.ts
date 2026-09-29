@@ -1,5 +1,6 @@
 // Server settings, read once from the environment at startup. Units are in the names.
 import { FALLBACK_FEED_URL } from "../src/config.ts";
+import { loadAuthConfig, type AuthConfig } from "./authConfig.ts";
 
 export interface ServerConfig {
   host: string;
@@ -11,6 +12,8 @@ export interface ServerConfig {
   feedUrl: string;
   vnasBaseUrl: string;
   vnasCacheMs: number;
+  /** VATSIM Connect sign-in; null = no sign-in, everything open. */
+  auth: AuthConfig | null;
   /** Sent to upstreams so VATSIM/vNAS can identify the traffic. */
   userAgent: string;
 }
@@ -37,14 +40,16 @@ export function loadConfig(env: Env = process.env): ServerConfig {
   // Same rule as the worker's safeFeedUrl: only ever poll VATSIM's own data host.
   if (!feedUrl.startsWith("https://data.vatsim.net/"))
     throw new Error("VAM_FEED_URL must be on https://data.vatsim.net/");
+  const port = int(env, "PORT", 3001);
   return {
     host: env.HOST || "127.0.0.1",
-    port: int(env, "PORT", 3001),
+    port,
     corsOrigins: list(env.VAM_CORS_ORIGINS),
     staticDir: env.VAM_STATIC_DIR || null,
     feedUrl,
     vnasBaseUrl: env.VAM_VNAS_BASE_URL || "https://data-api.vnas.vatsim.net",
     vnasCacheMs: int(env, "VAM_VNAS_CACHE_MS", 60 * 60_000),
+    auth: loadAuthConfig(env, port),
     userAgent:
       env.VAM_USER_AGENT ||
       "vatsim-airspace-monitor (+https://github.com/nphunt/vatsim-airspace-monitor)",
