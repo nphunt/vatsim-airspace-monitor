@@ -190,3 +190,31 @@ code {
   align-items: center;
   gap: 12px;
 }
+
+/* ---- Branding, footer and privacy policy ---- */
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.12em;
+}
+
+.fine {
+  font-size: 11px;
+  margin-bottom: 0;
+}
+
+.doc {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px;
+  text-transform: none;
+}
+
+.doc h3 {
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--eram-caution);
+  margin: 16px 0 4px;
+}

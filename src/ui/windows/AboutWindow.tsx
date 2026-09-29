@@ -22,8 +22,9 @@ export function AboutWindow() {
       {nav?.error && <p className="caution">NAV DATA NOT LOADED: ROUTES USE DEAD RECKONING</p>}
 
       <p className="alert">
-        FOR FLIGHT SIMULATION ON THE VATSIM NETWORK ONLY. NOT FOR REAL-WORLD NAVIGATION OR AIR
-        TRAFFIC CONTROL.
+        AIRSPACE MONITOR IS AN INDEPENDENT, COMMUNITY-MADE TOOL. IT IS NOT AFFILIATED WITH, ENDORSED
+        BY, OR OPERATED BY VATSIM, VATUSA, OR ANY ARTCC. FOR FLIGHT SIMULATION USE ONLY. NOT FOR
+        REAL-WORLD NAVIGATION OR AIR TRAFFIC CONTROL.
       </p>
 
       <h3>ACCURACY</h3>
@@ -49,8 +50,8 @@ export function AboutWindow() {
       <h3>DATA AND ATTRIBUTION</h3>
       <ul>
         <li>
-          LIVE TRAFFIC: <Ext href="https://vatsim.dev/api/data-api/">VATSIM DATA FEED</Ext>. NOT
-          AFFILIATED WITH OR ENDORSED BY VATSIM OR VATUSA. PILOT NAMES ARE NEVER SHOWN OR STORED.
+          LIVE TRAFFIC: <Ext href="https://vatsim.dev/api/data-api/">VATSIM DATA FEED</Ext>. PILOT
+          NAMES ARE NEVER SHOWN OR STORED.
         </li>
         <li>
           BOUNDARIES AND CALLSIGN PREFIXES:{" "}
@@ -72,7 +73,7 @@ export function AboutWindow() {
       <h3>PRIVACY</h3>
       <p>
         SETTINGS, INCLUDING YOUR CID, ARE SAVED IN THIS BROWSER ONLY. THE PAGE TALKS TO NOTHING BUT
-        THIS SITE AND DATA.VATSIM.NET.
+        THIS SITE AND DATA.VATSIM.NET. <Ext href="/privacy">READ THE PRIVACY POLICY</Ext>.
       </p>
 
       <p>

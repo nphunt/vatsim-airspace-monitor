@@ -17,7 +17,7 @@ const store = new AccessStore(config.dataDir);
 await store.load();
 
 createApp(config, store).listen(config.port, () => {
-  console.log(`VATSIM Airspace Monitor server on http://localhost:${config.port}`);
+  console.log(`Airspace Monitor server on http://localhost:${config.port}`);
   console.log(`  public URL:     ${config.publicUrl.origin}`);
   console.log(`  VATSIM Connect: ${config.vatsimAuthBase}`);
   console.log(`  redirect URI:   ${new URL("/auth/callback", config.publicUrl)}`);

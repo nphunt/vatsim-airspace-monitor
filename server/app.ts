@@ -3,6 +3,7 @@
  * straight to VATSIM and back. Any signed-in CID gets the live build at /; the development
  * build at /dev/ and the admin page only open for CIDs on their lists.
  *
+ *   GET  /privacy                  -> the privacy policy (no sign-in needed)
  *   GET  /auth/login?return=<path> -> VATSIM Connect; comes back to <path> signed in
  *                                     (&switch=1: VATSIM asks for a CID and password
  *                                     again, to sign in as someone else)
@@ -33,7 +34,7 @@ import {
   type StoredAccess,
 } from "./access.ts";
 import type { Config } from "./config.ts";
-import { deniedPage, noBuildPage, signInFailedPage } from "./pages.ts";
+import { deniedPage, noBuildPage, privacyPage, signInFailedPage } from "./pages.ts";
 import {
   SESSION_COOKIE,
   SESSION_VERSION,
@@ -112,6 +113,12 @@ export function createApp(config: Config, store: AccessStore) {
 
   app.get("/healthz", (_req, res) => {
     res.type("text/plain").send("ok");
+  });
+
+  // Public: people read it before signing in.
+  app.get("/privacy", (_req, res) => {
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.type("html").send(privacyPage());
   });
 
   // ---- Sign-in ----
