@@ -55,6 +55,7 @@ export function deniedPage(page: AccessPage, cid: number, returnTo: string): str
     `        <h2>${esc(PAGE_TITLES[page])}</h2>
         <p class="alert" role="alert">ACCESS DENIED: CID ${cid} DOES NOT HAVE ACCESS TO THE ${esc(PAGE_TITLES[page])}. ASK AN ADMIN FOR ACCESS.</p>
         <p class="dim">GIVE THE ADMIN YOUR CID: ${cid}</p>
+        <p><a class="button" href="/auth/login?switch=1&amp;return=${encodeURIComponent(returnTo)}">SIGN IN AS A DIFFERENT CID</a></p>
         ${signOutForm(returnTo)}`,
   );
 }

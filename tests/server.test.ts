@@ -269,4 +269,24 @@ describe("server", () => {
     expect(res.headers.get("location")).toBe("/dev/");
     expect(res.headers.get("set-cookie")).toMatch(/vam_session=;.*Max-Age=0/);
   });
+
+  it("asks VATSIM for a CID again on SWITCH and after signing out, not otherwise", async () => {
+    const prompt = async (p: string, cookie = "") => {
+      const res = await get(p, cookie);
+      return {
+        prompt: new URL(res.headers.get("location")!).searchParams.get("prompt"),
+        cookies: res.headers.getSetCookie(),
+      };
+    };
+    expect((await prompt("/auth/login?return=/")).prompt).toBeNull();
+    expect((await prompt("/auth/login?switch=1&return=/dev/")).prompt).toBe("login");
+
+    const out = await fetch(`${site.url}/auth/logout`, { method: "POST", redirect: "manual" });
+    const flag = out.headers.getSetCookie().find((c) => c.startsWith("vam_signed_out="));
+    expect(flag).toMatch(/Path=\/auth/);
+    const next = await prompt("/auth/login?return=/", flag!.split(";")[0]);
+    expect(next.prompt).toBe("login");
+    // Used up: the flag is cleared so later sign-ins go back to normal.
+    expect(next.cookies.some((c) => /^vam_signed_out=;.*Max-Age=0/.test(c))).toBe(true);
+  });
 });

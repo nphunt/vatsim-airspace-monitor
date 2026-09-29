@@ -16,13 +16,18 @@ export interface VatsimClient {
 
 const TIMEOUT_MS = 10_000;
 
-export function authorizeUrl(c: VatsimClient, state: string): string {
+/**
+ * `forceLogin` sends prompt=login: VATSIM Connect asks for a CID and password even when
+ * it still remembers someone, which is how to sign in as a different CID.
+ */
+export function authorizeUrl(c: VatsimClient, state: string, forceLogin = false): string {
   const u = new URL(`${c.authBase}/oauth/authorize`);
   u.searchParams.set("response_type", "code");
   u.searchParams.set("client_id", c.clientId);
   u.searchParams.set("redirect_uri", c.redirectUri);
   u.searchParams.set("scope", "full_name");
   u.searchParams.set("state", state);
+  if (forceLogin) u.searchParams.set("prompt", "login");
   return u.toString();
 }
 

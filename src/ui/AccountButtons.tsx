@@ -51,6 +51,13 @@ export function AccountButtons() {
           ADMIN
         </a>
       )}
+      <a
+        className="eram-tb-btn"
+        href={`/auth/login?switch=1&return=${here()}`}
+        title="Sign in with a different VATSIM CID"
+      >
+        SWITCH
+      </a>
       <form method="post" action={`/auth/logout?return=${dev ? "%2F" : here()}`}>
         <button type="submit" className="eram-tb-btn">
           SIGN OUT

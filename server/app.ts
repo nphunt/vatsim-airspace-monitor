@@ -3,6 +3,8 @@
  * build at /dev/ (only for CIDs on its list), and runs VATSIM Connect sign-in:
  *
  *   GET  /auth/login?return=<path> -> VATSIM Connect; comes back to <path> signed in
+ *                                     (&switch=1: VATSIM asks for a CID and password
+ *                                     again, to sign in as someone else)
  *   GET  /auth/callback            -> VATSIM Connect redirect target
  *   POST /auth/logout?return=<path>
  *   GET  /api/me                   -> { cid, name, pages: { dev, admin }, superadmin }
@@ -33,6 +35,7 @@ import type { Config } from "./config.ts";
 import { deniedPage, errorPage, noBuildPage, signInPage } from "./pages.ts";
 import {
   SESSION_COOKIE,
+  SIGNED_OUT_COOKIE,
   STATE_COOKIE,
   clearCookie,
   readCookie,
@@ -114,13 +117,18 @@ export function createApp(config: Config, store: AccessStore) {
       { n: nonce, r: ret, exp: Math.floor(Date.now() / 1000) + STATE_TTL_S },
       config.sessionSecret,
     );
+    // VATSIM Connect remembers who signed in there, so without prompt=login it would hand
+    // back the same CID. Ask again on SWITCH, and on the first sign-in after SIGN OUT.
+    const forceLogin =
+      req.query.switch === "1" || readCookie(req.headers.cookie, SIGNED_OUT_COOKIE) === "1";
     res.setHeader("Cache-Control", "no-store");
     // The nonce cookie ties the callback to the browser that started the sign-in.
     res.setHeader(
       "Set-Cookie",
       setCookie(STATE_COOKIE, nonce, { path: "/auth/callback", maxAgeS: STATE_TTL_S, secure }),
     );
-    res.redirect(302, authorizeUrl(vatsim, state));
+    if (forceLogin) res.append("Set-Cookie", clearCookie(SIGNED_OUT_COOKIE, "/auth", secure));
+    res.redirect(302, authorizeUrl(vatsim, state, forceLogin));
   });
 
   app.get("/auth/callback", async (req, res) => {
@@ -163,6 +171,10 @@ export function createApp(config: Config, store: AccessStore) {
 
   app.post("/auth/logout", (req, res) => {
     res.setHeader("Set-Cookie", clearCookie(SESSION_COOKIE, "/", secure));
+    res.append(
+      "Set-Cookie",
+      setCookie(SIGNED_OUT_COOKIE, "1", { path: "/auth", maxAgeS: 30 * 24 * 3600, secure }),
+    );
     res.redirect(303, safeReturn(req.query.return));
   });
 

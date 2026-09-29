@@ -36,6 +36,8 @@ export interface Session {
 
 export const SESSION_COOKIE = "vam_session";
 export const STATE_COOKIE = "vam_oauth_state";
+/** Set by sign-out: the next sign-in asks VATSIM for a CID and password again. */
+export const SIGNED_OUT_COOKIE = "vam_signed_out";
 
 export interface CookieOptions {
   path: string;

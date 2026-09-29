@@ -40,7 +40,7 @@ Set `PUBLIC_URL=https://amuck-yesterday-cilantro.ngrok-free.dev` and register `â
 
 | Route | |
 | --- | --- |
-| `GET /auth/login?return=<path>` | Starts VATSIM Connect sign-in and comes back to `<path>` (paths on this site only) |
+| `GET /auth/login?return=<path>` | Starts VATSIM Connect sign-in and comes back to `<path>` (paths on this site only). `&switch=1` makes VATSIM ask for a CID and password even if it remembers you (`prompt=login`), and so does the first sign-in after signing out |
 | `GET /auth/callback` | VATSIM Connect redirect target |
 | `POST /auth/logout?return=<path>` | Signs out |
 | `GET /api/me` | `{ cid, name, pages: { dev, admin }, superadmin }`, or 401 |

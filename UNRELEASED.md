@@ -6,7 +6,7 @@ Changes on `development` that are not on `main` yet. At release, move these into
 
 - New **Express server** (`server/`, `npm run server`) to host the site in place of GitHub Pages: the live site at `/` stays open to everyone; the development site at `/dev/` needs **VATSIM Connect** sign-in and opens only for CIDs on its list (anyone else gets `ACCESS DENIED: CID … ASK AN ADMIN FOR ACCESS`). The server refuses every `/dev/` file without access, not just the page.
 - **Admin page** at `/admin/` (admins only) edits the CID lists for `/dev/` and the admin page. CID 1935951 is a built-in admin; `SUPERADMIN_CIDS` adds more.
-- **`SIGN IN`** at the right end of the toolbar (when the server hosts the page). Signed in, it shows your CID, a **`DEV`** button if your CID may open the development site (**`LIVE`** on `/dev/` to go back), **`ADMIN`** for admins, and `SIGN OUT`.
+- **`SIGN IN`** at the right end of the toolbar (when the server hosts the page). Signed in, it shows your CID, a **`DEV`** button if your CID may open the development site (**`LIVE`** on `/dev/` to go back), **`ADMIN`** for admins, **`SWITCH`** to sign in as a different CID, and `SIGN OUT`. VATSIM Connect remembers who signed in there, so SWITCH, the access-denied page's `SIGN IN AS A DIFFERENT CID`, and the first sign-in after `SIGN OUT` make it ask for a CID and password again.
 - `npm run build:sites` builds `main` and `development` in git worktrees into `site/live` and `site/dev` for the server. Setup: [server/README.md](server/README.md).
 
 ### Arrivals
