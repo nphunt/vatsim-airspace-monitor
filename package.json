@@ -21,6 +21,7 @@
     "update-data": "node scripts/update-data.mjs",
     "record": "node scripts/record.mjs",
     "bench": "vitest run tests/pipeline.perf.test.ts --mode bench --silent=false",
+    "update-tracons": "node scripts/update-tracons.mjs",
     "update-nav": "node scripts/update-nav.mjs",
     "validate-data": "node scripts/validate-data.mjs",
     "check-dist": "node scripts/check-dist.mjs",

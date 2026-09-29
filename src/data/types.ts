@@ -45,13 +45,31 @@ export interface Airspace extends FirRecord {
   group?: AirspaceGroup;
 }
 
+/** One TRACON (approach control) from public/data/tracons.geojson, prefixes rolled together. */
+export interface Tracon {
+  /** `TRACON:${id}`; never collides with an ARTCC feature key. */
+  key: string;
+  /** FAA identifier: "A80", "M03". Also the display label. */
+  id: string;
+  label: string;
+  /** Uppercase: "ATLANTA APPROACH". */
+  name: string;
+  /** Callsign prefixes of its approach positions ("ATL", "MEM"), uppercase. */
+  prefixes: string[];
+  labelLat: number;
+  labelLon: number;
+  polygons: Polygon[];
+  bboxes: BBox[];
+  bbox: BBox;
+}
+
 /** Result of a point lookup. Staffing is added in M3 once the feed exists. */
 export interface Facility {
   key: string;
   id: string;
   label: string;
   name: string;
-  tier: Tier | "unknown";
+  tier: Tier | "tracon" | "unknown";
 }
 
 export interface OnlineController {
@@ -157,6 +175,19 @@ export interface PredictedArrival {
   distNm: number;
 }
 
+/**
+ * Where an aircraft filed to an airport inside a staffed TRACON will cross into it, ahead
+ * of its exit (or landing) in the selected airspace: the approach handoff point.
+ */
+export interface PredictedTracon {
+  t: number;
+  distNm: number;
+  lat: number;
+  lon: number;
+  /** The TRACON, staffed by definition: `controller` is who to hand off to. */
+  into: FacilityStatus;
+}
+
 /** One aircraft relative to the selected airspace. Lists show a subset of these fields. */
 export interface Prediction {
   cid: number;
@@ -189,6 +220,8 @@ export interface Prediction {
   eta?: PredictedArrival;
   exit?: PredictedExit;
   entry?: PredictedEntry;
+  /** Handoff to a staffed approach control the aircraft is landing in (alerts only). */
+  tracon?: PredictedTracon;
 }
 
 /**

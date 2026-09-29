@@ -11,6 +11,6 @@ coverage
 
 # Express server (server/README.md): secrets, access lists, site builds
 .env
-data
-site
-.sites-build
+/data
+/site
+/.sites-build

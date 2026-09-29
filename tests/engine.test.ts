@@ -88,8 +88,8 @@ describe("Engine", () => {
 
     // Data files resolve under the Pages sub-path with the cache-busting build id.
     const dataRequests = requested.filter((u) => u.includes("/data/"));
-    // meta, firs, boundaries, airports, then nav points, airways, procedures, meta.
-    expect(dataRequests.length).toBe(8);
+    // meta, firs, boundaries, airports, tracons, then nav points, airways, procedures, meta.
+    expect(dataRequests.length).toBe(9);
     expect(dataRequests.filter((u) => u.includes("/data/nav/"))).toHaveLength(4);
     const nav = messages.find((m) => m.type === "nav");
     expect(nav).toMatchObject({ error: null, cycle: expect.any(String) });

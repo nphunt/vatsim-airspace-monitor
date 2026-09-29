@@ -43,6 +43,7 @@ type Drag =
 export interface ScopeOptions {
   vectorMin: number;
   showRoutes: boolean;
+  showTracons: boolean;
   /** BRIGHT (§7.1), 0..1. */
   mapBright: number;
   datablockBright: number;
@@ -59,6 +60,7 @@ export class ScopeController {
   private opts: ScopeOptions = {
     vectorMin: 2,
     showRoutes: false,
+    showTracons: true,
     mapBright: 1,
     datablockBright: 1,
   };
@@ -197,7 +199,7 @@ export class ScopeController {
     }
     const alertInto = new Set(
       s.engine.alerts
-        .filter((a) => a.kind === "exit" && a.state === "ACTIVE")
+        .filter((a) => a.kind !== "entry" && a.state === "ACTIVE")
         .map((a) => a.other.key),
     );
     const dpr = window.devicePixelRatio || 1;
@@ -208,6 +210,7 @@ export class ScopeController {
       ...this.metrics,
       staffed: s.engine.staffed,
       alertInto,
+      showTracons: this.opts.showTracons,
       flashOn: Math.floor(Date.now() / 500) % 2 === 0,
       mapBright: this.opts.mapBright,
       datablockBright: this.opts.datablockBright,

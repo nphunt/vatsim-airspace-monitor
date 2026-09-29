@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AirspaceRegistry } from "../../data/airspaces";
 import { SCOPE_VECTOR_CHOICES } from "../../store/settings";
 import { useStore } from "../../store/store";
-import { loadScopeAirspaces } from "../scope/mapData";
+import type { Tracon } from "../../data/types";
+import { loadScopeAirspaces, loadScopeTracons } from "../scope/mapData";
 import { ScopeController, resetDatablocks } from "../scope/ScopeController";
 import { buildScopeMap } from "../scope/scopeMap";
 
@@ -23,7 +24,9 @@ export function ScopeWindow() {
   const controller = useRef<ScopeController | null>(null);
   const [registry, setRegistry] = useState<AirspaceRegistry | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [tracons, setTracons] = useState<Tracon[]>([]);
   const [showRoutes, setShowRoutes] = useState(false);
+  const [showTracons, setShowTracons] = useState(true);
   const airspaceKey = useStore((s) => s.engine.predictions?.airspaceKey ?? null);
   const vectorMin = useStore((s) => s.settings.scopeVector);
   const setScopeVector = useStore((s) => s.setScopeVector);
@@ -36,6 +39,7 @@ export function ScopeWindow() {
       (r) => live && setRegistry(r),
       (e: unknown) => live && setLoadError(String(e)),
     );
+    void loadScopeTracons().then((t) => live && setTracons(t));
     return () => {
       live = false;
     };
@@ -43,8 +47,8 @@ export function ScopeWindow() {
 
   const map = useMemo(() => {
     const a = registry && airspaceKey ? registry.getAirspace(airspaceKey) : undefined;
-    return registry && a ? buildScopeMap(a, registry.all) : null;
-  }, [registry, airspaceKey]);
+    return registry && a ? buildScopeMap(a, registry.all, tracons) : null;
+  }, [registry, airspaceKey, tracons]);
 
   // The controller lives as long as the canvas; props are pushed into it below.
   useEffect(() => {
@@ -57,8 +61,15 @@ export function ScopeWindow() {
   }, []);
   useEffect(() => controller.current?.setMap(map), [map]);
   useEffect(
-    () => controller.current?.setOptions({ vectorMin, showRoutes, mapBright, datablockBright }),
-    [vectorMin, showRoutes, mapBright, datablockBright],
+    () =>
+      controller.current?.setOptions({
+        vectorMin,
+        showRoutes,
+        showTracons,
+        mapBright,
+        datablockBright,
+      }),
+    [vectorMin, showRoutes, showTracons, mapBright, datablockBright],
   );
 
   const i = (SCOPE_VECTOR_CHOICES as readonly number[]).indexOf(vectorMin);
@@ -81,6 +92,14 @@ export function ScopeWindow() {
           onClick={() => setShowRoutes(!showRoutes)}
         >
           ROUTES
+        </button>
+        <button
+          type="button"
+          aria-pressed={showTracons}
+          title="Draw the TRACON (approach control) boundaries; a staffed one is brighter and labeled"
+          onClick={() => setShowTracons(!showTracons)}
+        >
+          TRACON
         </button>
         <button
           type="button"

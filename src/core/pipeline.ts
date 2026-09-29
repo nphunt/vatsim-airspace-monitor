@@ -17,6 +17,7 @@ import {
   type FacilityIndex,
   type Staffing,
 } from "./facilityLookup";
+import { buildTraconStaffing, findTraconHandoff, type TraconSet } from "./tracons";
 import { compass8, distanceNm, normalizeLonAround } from "./geo";
 import {
   buildLoad,
@@ -107,6 +108,8 @@ export interface PipelineInput {
   selected: SelectedAirspace;
   registry: Registry;
   airports: AirportIndex;
+  /** TRACON boundaries for approach handoffs; none = no handoff alerts into approach. */
+  tracons?: TraconSet | null;
   tracks: TrackStore;
   /** Clock time (server-corrected, or replay). */
   now: number;
@@ -137,6 +140,27 @@ export function computePredictions(input: PipelineInput): PredictionSet {
   const staffing: Staffing = buildStaffing(snapshot.controllers, registry, (k) =>
     registry.getAirspace(k),
   );
+
+  const traconStaffing = input.tracons
+    ? buildTraconStaffing(snapshot.controllers, input.tracons)
+    : null;
+  // Handoff into a staffed approach control before the exit (or landing), for alerts.
+  const traconHandoff = (
+    p: VatsimPilot,
+    path: PredictedPath,
+    beforeNm?: number,
+  ): Prediction["tracon"] =>
+    input.tracons && traconStaffing
+      ? findTraconHandoff(
+          path,
+          airports[p.flightPlan!.arrival],
+          input.tracons,
+          traconStaffing,
+          prepared.centerLon,
+          p,
+          beforeNm,
+        )
+      : undefined;
 
   const eligible = eligiblePilots(snapshot.pilots, now);
   const box = prefilterBox(prepared, horizonMin);
@@ -243,6 +267,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
           t: timeAlong(p.lastUpdated, distNm, p.groundspeed) + ARR_APPROACH_PAD_S * 1000,
           distNm,
         };
+        base.tracon = traconHandoff(p, path, distNm);
         outbound.push(base);
         continue;
       }
@@ -260,6 +285,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
         into: resolveExitInto(path, summary.exit.distNm, airspace.key, registry, staffing),
         clip: summary.exit.clip,
       };
+      base.tracon = traconHandoff(p, path, summary.exit.distNm);
       outbound.push(base);
     } else if (summary.entry) {
       const at = pointAt(path, summary.entry.distNm);

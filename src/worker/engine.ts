@@ -28,6 +28,8 @@ import type { NavData, Procedure } from "../core/route";
 import { RouteModeTracker } from "../core/routeMode";
 import { TrackStore } from "../core/track";
 import { loadAirspaces, type AirspaceRegistry } from "../data/airspaces";
+import { loadTracons } from "../data/tracons";
+import { buildTraconSet, buildTraconStaffing, type TraconSet } from "../core/tracons";
 import { FeedPoller, type FeedStatus } from "../data/feed";
 import { dataUrl } from "../data/paths";
 import type { FeedSnapshot, PredictionSet } from "../data/types";
@@ -109,6 +111,8 @@ export class Engine {
   config: EngineConfig = { ...DEFAULT_CONFIG };
   airspaces: AirspaceRegistry | null = null;
   airports: AirportIndex = {};
+  /** Approach control boundaries; empty until loaded, or if they fail to load. */
+  tracons: TraconSet = buildTraconSet([]);
   snapshot: FeedSnapshot | null = null;
   readonly tracks = new TrackStore();
   private selected: SelectedAirspace | null = null;
@@ -186,12 +190,15 @@ export class Engine {
 
     // Load boundary data before feeding snapshots, so the first one is fully processed.
     try {
-      [this.airspaces, this.airports] = await Promise.all([
+      let tracons;
+      [this.airspaces, this.airports, tracons] = await Promise.all([
         loadAirspaces({ base, fetchImpl: this.fetchImpl }),
         this.fetchImpl(dataUrl("airports.json", base)).then(
           (r) => r.json() as Promise<AirportIndex>,
         ),
+        loadTracons({ base, fetchImpl: this.fetchImpl }),
       ]);
+      this.tracons = buildTraconSet(tracons);
     } catch (e) {
       this.error(`boundary data failed to load: ${String(e)}`);
     }
@@ -323,7 +330,10 @@ export class Engine {
     const closedGone = this.config.closedCids.filter((cid) => !live.has(cid));
     this.post({
       type: "status",
-      staffed: [...staffing.keys()],
+      staffed: [
+        ...staffing.keys(),
+        ...buildTraconStaffing(this.snapshot.controllers, this.tracons).keys(),
+      ],
       myPosition: me,
       autoSelected,
       closedGone,
@@ -458,6 +468,7 @@ export class Engine {
         selected: this.selected,
         registry: this.airspaces,
         airports: this.airports,
+        tracons: this.tracons,
         tracks: this.tracks,
         now,
         horizonMin: effectiveHorizonMin(this.config),
