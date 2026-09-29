@@ -2,8 +2,6 @@
 
 ERAM-styled companion window for VATUSA controllers: who is about to leave your ARTCC, where to, and when; who is coming in; and how busy it will get.
 
-**Open it:** <https://nphunt.github.io/vatsim-airspace-monitor/>
-
 For flight simulation on the VATSIM network only. Not for real-world navigation or air traffic control. Not affiliated with or endorsed by VATSIM or VATUSA.
 
 ## For controllers
