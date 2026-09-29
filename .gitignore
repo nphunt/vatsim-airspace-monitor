@@ -8,3 +8,9 @@ coverage
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Express server (server/README.md): secrets, access lists, site builds
+.env
+data
+site
+.sites-build

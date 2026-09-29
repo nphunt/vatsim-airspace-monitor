@@ -100,6 +100,10 @@ To replay a recording instead of live data, run `npm run dev` and open `http://l
 
 A build with `GITHUB_ACTIONS=true` uses the GitHub Pages base path `/<repo-name>/`.
 
+### Server (VATSIM sign-in)
+
+`npm run server` runs an Express server that hosts the live site at `/` (open) and the development site at `/dev/` (VATSIM Connect sign-in, allowed CIDs only), with an admin page at `/admin/` for the access lists. `npm run build:sites` builds `main` and `development` for it. Setup, ngrok and VPS notes are in [server/README.md](server/README.md).
+
 ### Data
 
 `public/data/` is generated and committed. Refresh it with:
