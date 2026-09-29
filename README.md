@@ -151,35 +151,31 @@ The feed poller and clock run in a Web Worker so they keep going when the page i
 
 ## Maintaining the hosted site
 
-The site has two copies:
+The site is served by the Express server (see [server/README.md](server/README.md)) behind VATSIM Connect sign-in. It has two copies:
 
-- **Live:** <https://nphunt.github.io/vatsim-airspace-monitor/>, built from `main`.
-- **Development:** <https://nphunt.github.io/vatsim-airspace-monitor/dev/>, built from `development`, for testing before a release. It shows a `DEVELOPMENT BUILD … SOME THINGS MAY BREAK` notice and keeps its own settings (`vam-dev:v1:settings`), so testing there never changes anyone's live layout.
+- **Live:** `/`, built from `main`.
+- **Development:** `/dev/`, built from `development` and open only to listed CIDs, for testing before a release. It shows a `DEVELOPMENT BUILD … SOME THINGS MAY BREAK` notice and keeps its own settings (`vam-dev:v1:settings`), so testing there never changes anyone's live layout.
 
-See [PUBLISHING_PLAN.md](PUBLISHING_PLAN.md) for the reasoning. Workflows in `.github/workflows/`:
+GitHub Pages is no longer used: the old `deploy.yml` and `build-site.yml` workflows are removed, so turn off Settings → Pages if it is still on. Workflows in `.github/workflows/`:
 
 | Workflow | When | Does |
 | --- | --- | --- |
-| `ci.yml` | PRs, pushes to non-main branches | lint, test, validate data, build under `/<repo>/`, publish checks, smoke test |
-| `deploy.yml` | push to `main` or `development`, or manually | builds both branches (via `build-site.yml`, each with the full checks), publishes `main` at the root and `development` at `/dev/`, then checks both URLs. A `development` build that fails its checks never blocks `main`: a `main` push then publishes without `/dev/`, and a `development` push publishes nothing |
+| `ci.yml` | PRs, pushes to non-main branches | lint, test, validate data, build, publish checks, smoke test |
 | `refresh-data.yml` | Mondays 06:00 UTC (once `DATA_REFRESH_ENABLED` is set), or manually | `update-data` + `update-nav` + `validate-data`; opens a `Data refresh: VATSpy <tag>, AIRAC <cycle>` PR when `public/data` changed |
 
-**One-time repo setup (owner):**
+**Repo setup (owner):**
 
-- [ ] Repo public (Pages on a private repo needs a paid plan).
-- [ ] Settings → Pages → Source: **GitHub Actions**; Enforce HTTPS on.
 - [ ] Branch protection on `main`: require a PR and the `ci` check.
 - [ ] Settings → Actions → General: allow GitHub Actions to create and approve pull requests.
 - [ ] Secret `DATA_PR_TOKEN`: fine-grained PAT or GitHub App token for this repo only, contents + pull-requests write. (PRs opened with the default token don't run `ci`.)
-- [ ] Environment `github-pages`: deployments from `main` and `development` only (pushes to either publish the site).
 - [ ] Add the repository variable `DATA_REFRESH_ENABLED` = `true` to turn on the weekly schedule (a manual run works without it).
 - [ ] Run `refresh-data` once by hand (Actions → refresh-data → Run workflow) and check `ci` runs on its PR.
 
-**Testing a change:** push to `development`; about two minutes later it is at `/dev/`.
+**Testing a change:** commit to `development`, then run `npm run build:sites -- dev` on the server.
 
-**Releasing:** merge `development` into `main`; `deploy` publishes it. The ABOUT line (`BUILD <sha> · VATSPY <tag> · AIRAC <cycle>`) identifies the deploy.
+**Releasing:** merge `development` into `main`, then run `npm run build:sites -- live`. The ABOUT line (`BUILD <sha> · VATSPY <tag> · AIRAC <cycle>`) identifies the build.
 
-**Rolling back:** revert the bad commit on `main`. (`deploy` always builds the tip of each branch, so re-running it on an old commit does not roll back.)
+**Rolling back:** revert the bad commit on `main` and rebuild the live site.
 
 **Data PRs:** merge them by hand; a boundary change can move exit-into results. GitHub disables scheduled workflows after 60 days without repo activity, so don't let them pile up.
 

@@ -5,6 +5,8 @@ import path from "node:path";
 import { BUILT_IN_SUPERADMINS, isCid } from "./access.ts";
 
 export interface Config {
+  /** Interface to listen on. Loopback by default; a reverse proxy faces the internet. */
+  host: string;
   port: number;
   /** Origin people reach the server at, e.g. https://example.ngrok-free.dev. No path. */
   publicUrl: URL;
@@ -45,6 +47,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, root = process.
   if (!Number.isInteger(port) || port <= 0 || port > 65535)
     problems.push(`PORT ${env.PORT} is bad`);
 
+  const host = env.HOST?.trim() || "127.0.0.1";
+
   let publicUrl = new URL(`http://localhost:${port}`);
   if (env.PUBLIC_URL?.trim()) {
     try {
@@ -66,6 +70,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, root = process.
   if (extra.some((n) => !isCid(n))) problems.push(`SUPERADMIN_CIDS has a bad CID`);
 
   const config: Config = {
+    host,
     port,
     publicUrl,
     vatsimAuthBase: (env.VATSIM_AUTH_BASE?.trim() || "https://auth.vatsim.net").replace(/\/+$/, ""),

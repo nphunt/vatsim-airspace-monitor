@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AccessStore, pagesFor, parseUpdate, emptyAccess } from "../server/access.ts";
 import { createApp, safeReturn } from "../server/app.ts";
 import { loadConfig, type Config } from "../server/config.ts";
+import { rateLimit } from "../server/ratelimit.ts";
 import { signToken, verifyToken } from "../server/session.ts";
 
 const SECRET = "x".repeat(40);
@@ -66,6 +67,7 @@ describe("config", () => {
     });
     expect(c.superadmins).toEqual([1935951, 10000010]);
     expect(c.vatsimAuthBase).toBe("https://auth.vatsim.net");
+    expect(c.host).toBe("127.0.0.1");
     expect(() =>
       loadConfig({ VATSIM_CLIENT_ID: "a", VATSIM_CLIENT_SECRET: "b", SESSION_SECRET: "short" }),
     ).toThrow(/32\+/);
@@ -351,5 +353,54 @@ describe("server", () => {
     expect(next.prompt).toBe("login");
     // Used up: the flag is cleared so later sign-ins go back to normal.
     expect(next.cookies.some((c) => /^vam_signed_out=;.*Max-Age=0/.test(c))).toBe(true);
+  });
+
+  it("sends a Content-Security-Policy that only allows this site and the VATSIM feed", async () => {
+    for (const p of ["/privacy", "/healthz", "/api/me"]) {
+      const csp = (await get(p)).headers.get("content-security-policy")!;
+      expect(csp).toContain("default-src 'self'");
+      expect(csp).toContain("connect-src 'self' https://data.vatsim.net");
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(csp).not.toMatch(/script-src[^;]*unsafe/);
+    }
+  });
+
+  it("serves the privacy policy without a sign-in", async () => {
+    const res = await get("/privacy");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Noah Hunt | ZME FE");
+  });
+
+  it("rate-limits sign-in attempts", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 25; i++) statuses.push((await get("/auth/login?return=/")).status);
+    expect(statuses.slice(0, 20).every((s) => s === 302)).toBe(true);
+    expect(statuses.slice(20)).toEqual([429, 429, 429, 429, 429]);
+    // Only the sign-in routes are limited.
+    expect((await get("/healthz")).status).toBe(200);
+  });
+});
+
+describe("rate limiter", () => {
+  it("counts per address and starts over after the window", async () => {
+    let t = 0;
+    const limit = rateLimit({ max: 2, windowMs: 1000, now: () => t });
+    const app = express();
+    app.set("trust proxy", true);
+    app.get("/", limit, (_req, res) => void res.send("ok"));
+    const { server, url } = await listen(app);
+    const hit = (ip: string) => fetch(url, { headers: { "x-forwarded-for": ip } });
+    try {
+      expect((await hit("1.1.1.1")).status).toBe(200);
+      expect((await hit("1.1.1.1")).status).toBe(200);
+      const blocked = await hit("1.1.1.1");
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get("retry-after")).toBe("1");
+      expect((await hit("2.2.2.2")).status).toBe(200);
+      t = 1001;
+      expect((await hit("1.1.1.1")).status).toBe(200);
+    } finally {
+      server.close();
+    }
   });
 });

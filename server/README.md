@@ -26,14 +26,15 @@ Sessions are HMAC-signed `HttpOnly` cookies that last 7 days. Access is checked 
 ## Through ngrok
 
 ```bash
-ngrok http --url=amuck-yesterday-cilantro.ngrok-free.dev 3000
+ngrok http --url=amuck-yesterday-cilantro.ngrok-free.dev 127.0.0.1:3000
 ```
 
 Set `PUBLIC_URL=https://amuck-yesterday-cilantro.ngrok-free.dev` and register `â€¦/auth/callback` with VATSIM. Sign-in only works on `PUBLIC_URL`, because cookies belong to one host name. A sign-in started on `http://localhost:3000` moves over to `PUBLIC_URL` by itself. When `PUBLIC_URL` is `https://`, cookies are marked `Secure`.
 
 ## Moving to a VPS
 
-- Put a reverse proxy (Caddy or nginx) with HTTPS in front of port 3000, and set `PUBLIC_URL` to the public `https://` origin.
+- Put Caddy in front of port 3000 with [`deploy/Caddyfile`](../deploy/Caddyfile) (edit the domain; it handles HTTPS certificates and passes the client address through), and set `PUBLIC_URL` to the public `https://` origin. With nginx instead, pass `Host` and `X-Forwarded-For` through: the sign-in compares `Host` to `PUBLIC_URL`, and the rate limit reads the forwarded address.
+- The server listens on `127.0.0.1` only (`HOST` in `.env`), so open just ports 80 and 443 on the firewall.
 - Switch to production VATSIM Connect: register a client at <https://auth.vatsim.net> and remove `VATSIM_AUTH_BASE` (it defaults to production), or set it to `https://auth.vatsim.net`. Remove the sandbox CID from `SUPERADMIN_CIDS`.
 - Keep the server running with a process manager (systemd, pm2). Back up `data/access.json`.
 - Rebuild after pulling: `git fetch && npm run build:sites` with `LIVE_REF=origin/main DEV_REF=origin/development`, or pull the local branches first. No server restart is needed: it serves whatever is in `site/`.
@@ -54,4 +55,5 @@ Set `PUBLIC_URL=https://amuck-yesterday-cilantro.ngrok-free.dev` and register `â
 
 - One process: the version check on saves relies on it. Don't run several copies against the same `data/`.
 - The development build's JavaScript is in the public repo anyway. The gate keeps people from *using* `/dev/`, so nothing secret belongs in it.
-- The Pages workflows (`deploy.yml`, `build-site.yml`) still run on push until they're removed.
+- Sign-in routes allow 20 requests per address per minute (`server/ratelimit.ts`), counted per process. Behind a proxy on the same machine the address comes from `X-Forwarded-For`; a proxy on another machine isn't trusted.
+- Every response carries a Content-Security-Policy (`server/app.ts`) that allows scripts, styles and fonts from this site and network requests only to this site and `data.vatsim.net`. A new external host needs adding there.

@@ -34,6 +34,7 @@ import {
   type StoredAccess,
 } from "./access.ts";
 import type { Config } from "./config.ts";
+import { rateLimit } from "./ratelimit.ts";
 import { deniedPage, noBuildPage, privacyPage, signInFailedPage } from "./pages.ts";
 import {
   SESSION_COOKIE,
@@ -60,6 +61,28 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FONTS = path.resolve(HERE, "../node_modules/@fontsource/ibm-plex-mono/files");
 const STATE_TTL_S = 600;
 
+/**
+ * Everything is served from this origin; the one outside host is VATSIM's public data feed.
+ * Inline styles stay allowed because the app positions windows with style attributes.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self' https://data.vatsim.net",
+  "worker-src 'self' blob:",
+  "media-src 'self' data: blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+/** Sign-in attempts allowed per address per minute. */
+const AUTH_MAX_PER_MINUTE = 20;
+
 /** A return target is a path on this site only (no open redirect). */
 export function safeReturn(raw: unknown): string {
   if (typeof raw !== "string" || !raw.startsWith("/") || raw.startsWith("//")) return "/";
@@ -75,6 +98,9 @@ function wantsHtml(req: Request): boolean {
 export function createApp(config: Config, store: AccessStore) {
   const app = express();
   app.disable("x-powered-by");
+  // The reverse proxy (Caddy) runs on this machine and sets X-Forwarded-For; trusting only
+  // loopback means a client can't fake its address to dodge the rate limit.
+  app.set("trust proxy", "loopback");
 
   const secure = config.publicUrl.protocol === "https:";
   const vatsim: VatsimClient = {
@@ -108,6 +134,8 @@ export function createApp(config: Config, store: AccessStore) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
     res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Content-Security-Policy", CSP);
+    if (secure) res.setHeader("Strict-Transport-Security", "max-age=31536000");
     next();
   });
 
@@ -123,7 +151,9 @@ export function createApp(config: Config, store: AccessStore) {
 
   // ---- Sign-in ----
 
-  app.get("/auth/login", (req, res) => {
+  const authLimit = rateLimit({ max: AUTH_MAX_PER_MINUTE, windowMs: 60_000 });
+
+  app.get("/auth/login", authLimit, (req, res) => {
     const ret = safeReturn(req.query.return);
     // The state cookie and the session must land on the origin VATSIM sends people back
     // to, so a sign-in started on another host name moves over to PUBLIC_URL first.
@@ -149,7 +179,7 @@ export function createApp(config: Config, store: AccessStore) {
     res.redirect(302, authorizeUrl(vatsim, state, forceLogin));
   });
 
-  app.get("/auth/callback", async (req, res) => {
+  app.get("/auth/callback", authLimit, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Set-Cookie", clearCookie(STATE_COOKIE, "/auth/callback", secure));
     const state = verifyToken<{ n: string; r: string; exp: number }>(
