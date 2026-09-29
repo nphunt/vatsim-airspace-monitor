@@ -171,12 +171,12 @@ export function privacyPage(): string {
     <main class="doc">
       <h1 class="brand"><img src="/_vam/logo.svg" alt="" width="28" height="28" />AIRSPACE MONITOR</h1>
       <h2>Privacy Policy</h2>
-      <p class="dim">DRAFT · Last updated 2026-09-29. Not legal advice; have it reviewed before you rely on it.</p>
+      <p class="dim">Last updated 2026-09-29.</p>
 
       <p>${esc(DISCLAIMER)}</p>
 
       <h3>Who runs this</h3>
-      <p>[OPERATOR NAME / VIRTUAL FACILITY], a volunteer. Questions and requests: open an issue at <a href="${REPO_URL}/issues">${REPO_URL}</a> or contact [CONTACT EMAIL].</p>
+      <p>Noah Hunt | ZME FE, a volunteer. Questions and requests: open an issue at <a href="${REPO_URL}/issues">${REPO_URL}</a> or email <a href="mailto:fe@memphisartcc.com">fe@memphisartcc.com</a>.</p>
 
       <h3>What we receive when you sign in</h3>
       <p>Airspace Monitor asks VATSIM Connect for your <b>full name</b> and <b>VATSIM details</b>. We receive your CID, your name, and your rating and account status. The status is used only to refuse suspended accounts. We do not ask for your email address, and we never see your VATSIM password.</p>
