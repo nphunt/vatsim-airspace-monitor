@@ -33,9 +33,10 @@ import {
   type StoredAccess,
 } from "./access.ts";
 import type { Config } from "./config.ts";
-import { deniedPage, errorPage, noBuildPage } from "./pages.ts";
+import { deniedPage, noBuildPage, signInFailedPage } from "./pages.ts";
 import {
   SESSION_COOKIE,
+  SESSION_VERSION,
   SIGNED_OUT_COOKIE,
   STATE_COOKIE,
   clearCookie,
@@ -45,7 +46,14 @@ import {
   verifyToken,
   type Session,
 } from "./session.ts";
-import { authorizeUrl, fetchUser, type VatsimClient } from "./vatsim.ts";
+import {
+  SignInError,
+  authorizeUrl,
+  checkStanding,
+  fetchUser,
+  type SignInFailure,
+  type VatsimClient,
+} from "./vatsim.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FONTS = path.resolve(HERE, "../node_modules/@fontsource/ibm-plex-mono/files");
@@ -78,7 +86,9 @@ export function createApp(config: Config, store: AccessStore) {
   const session = (req: Request): Session | null => {
     const raw = readCookie(req.headers.cookie, SESSION_COOKIE);
     const s = raw ? verifyToken<Session>(raw, config.sessionSecret) : null;
-    return s && isCid(s.cid) ? s : null;
+    // Older sessions were issued before a check this version relies on (e.g. suspension),
+    // so they count as signed out and go through sign-in again.
+    return s && s.v === SESSION_VERSION && isCid(s.cid) ? s : null;
   };
 
   const me = (s: Session): MeResponse => ({
@@ -139,34 +149,47 @@ export function createApp(config: Config, store: AccessStore) {
       String(req.query.state ?? ""),
       config.sessionSecret,
     );
+    const fail = (reason: SignInFailure, returnTo: string, cid: number | null = null) => {
+      const page = signInFailedPage(reason, returnTo, cid);
+      res.status(page.status).send(page.html);
+    };
     if (!state || readCookie(req.headers.cookie, STATE_COOKIE) !== state.n) {
-      return res
-        .status(400)
-        .send(
-          errorPage("SIGN-IN EXPIRED OR WAS STARTED IN ANOTHER BROWSER. TRY AGAIN.", "/auth/login"),
-        );
+      console.warn("sign-in refused: expired or started in another browser");
+      return fail("expired", "/");
     }
     const ret = safeReturn(state.r);
-    const retry = `/auth/login?return=${encodeURIComponent(ret)}`;
     const code = req.query.code;
     if (typeof code !== "string" || !code) {
-      return res.status(400).send(errorPage("SIGN-IN WAS CANCELLED.", retry));
+      // VATSIM sends error=access_denied when the sign-in is declined on its page.
+      const error = String(req.query.error ?? "");
+      console.warn(`sign-in refused: no code from VATSIM (${error || "no error given"})`);
+      return fail(!error || error === "access_denied" ? "cancelled" : "bad-response", ret);
     }
     try {
       const user = await fetchUser(vatsim, code);
+      checkStanding(user);
       const token = signToken(
-        { cid: user.cid, name: user.name, exp: Math.floor(Date.now() / 1000) + config.sessionTtlS },
+        {
+          v: SESSION_VERSION,
+          cid: user.cid,
+          name: user.name,
+          exp: Math.floor(Date.now() / 1000) + config.sessionTtlS,
+        },
         config.sessionSecret,
       );
       res.append(
         "Set-Cookie",
         setCookie(SESSION_COOKIE, token, { path: "/", maxAgeS: config.sessionTtlS, secure }),
       );
-      console.log(`sign-in: CID ${user.cid}`);
+      console.log(`sign-in: CID ${user.cid} (${user.rating?.short || user.rating?.id})`);
       res.redirect(302, ret);
     } catch (e) {
-      console.error("VATSIM Connect sign-in failed:", e);
-      res.status(502).send(errorPage("VATSIM SIGN-IN FAILED. TRY AGAIN.", retry));
+      if (e instanceof SignInError) {
+        console.warn(`sign-in refused: ${e.reason}: ${e.message}`);
+        return fail(e.reason, ret, e.cid);
+      }
+      console.error("sign-in failed unexpectedly:", e);
+      fail("bad-response", ret);
     }
   });
 

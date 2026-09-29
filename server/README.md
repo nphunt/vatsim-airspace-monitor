@@ -7,6 +7,8 @@ An Express server that hosts the site in place of GitHub Pages behind **VATSIM C
 - **`/admin/`** edits both lists. Only admins can open it.
 - **Admins** can open every page. `1935951` is a built-in admin, and `SUPERADMIN_CIDS` adds more. Neither kind can be removed on the admin page.
 
+**Suspended VATSIM accounts can't sign in.** The server asks VATSIM for the `vatsim_details` scope and refuses a CID whose rating is `SUS`, or whose rating VATSIM doesn't send, since then it can't tell the account isn't suspended. Every refused or failed sign-in gets a page saying why (cancelled, expired, rejected, VATSIM unreachable, a problem with the site's VATSIM settings, suspended), with TRY AGAIN and SIGN IN AS A DIFFERENT CID where they make sense, and a `sign-in refused: <reason>` line in the server log. The check runs at sign-in, so an account suspended later keeps access until its session ends (`SESSION_TTL_S`).
+
 Sessions are HMAC-signed `HttpOnly` cookies that last 7 days. Access is checked on every request, so removing a CID takes effect on that person's next click or reload. The lists are kept in `data/access.json`.
 
 ## One-time setup

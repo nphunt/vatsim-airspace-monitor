@@ -28,7 +28,14 @@ export function verifyToken<T extends { exp: number }>(
   }
 }
 
+/**
+ * Bumped when sign-in starts checking something new, so sessions issued before that
+ * check are refused and everyone signs in again. 2: suspended accounts are refused.
+ */
+export const SESSION_VERSION = 2;
+
 export interface Session {
+  v: number;
   cid: number;
   name: string;
   exp: number;

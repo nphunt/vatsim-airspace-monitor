@@ -83,19 +83,34 @@ function listen(app: express.Express): Promise<{ server: Server; url: string }> 
   });
 }
 
-/** Fake VATSIM Connect: the code is the CID to sign in as ("fail" breaks the token call). */
+/**
+ * Fake VATSIM Connect. The code says who signs in: "<cid>" (rating S1), "<cid>:<rating id>",
+ * or "<cid>:none" (no rating sent). "badclient", "used" and "down" make the token call fail
+ * the way VATSIM would.
+ */
 function fakeVatsim() {
   const app = express();
   app.use(express.urlencoded({ extended: false }));
   app.post("/oauth/token", (req, res) => {
-    if (req.body.client_secret !== "secret" || req.body.code === "fail") {
+    const code = String(req.body.code);
+    if (req.body.client_secret !== "secret" || code === "badclient") {
       return res.status(401).json({ error: "invalid_client" });
     }
-    res.json({ access_token: `tok-${req.body.code}` });
+    if (code === "used") return res.status(400).json({ error: "invalid_grant" });
+    if (code === "down") return res.status(503).send("maintenance");
+    res.json({ access_token: `tok-${code}` });
   });
   app.get("/api/user", (req, res) => {
-    const cid = String(req.headers.authorization).replace("Bearer tok-", "");
-    res.json({ data: { cid, personal: { name_full: `Pilot ${cid}` } } });
+    const [cid, rating = "2"] = String(req.headers.authorization)
+      .replace("Bearer tok-", "")
+      .split(":");
+    res.json({
+      data: {
+        cid,
+        personal: { name_full: `Pilot ${cid}` },
+        ...(rating === "none" ? {} : { vatsim: { rating: { id: Number(rating), short: "X" } } }),
+      },
+    });
   });
   return app;
 }
@@ -152,19 +167,22 @@ describe("server", () => {
   const get = (p: string, cookie = "", accept = "text/html") =>
     fetch(`${site.url}${p}`, { redirect: "manual", headers: { cookie, accept } });
 
-  /** Runs the sign-in as `cid` and returns the session cookie. */
-  async function signIn(cid: number | string, returnTo = "/dev/"): Promise<string> {
+  /** Starts a sign-in and comes back from VATSIM with `query` (e.g. "code=1234567"). */
+  async function callback(query: string, returnTo = "/dev/"): Promise<Response> {
     const login = await get(`/auth/login?return=${encodeURIComponent(returnTo)}`);
     expect(login.status).toBe(302);
     const auth = new URL(login.headers.get("location")!);
     expect(auth.origin).toBe(vatsim.url);
     expect(auth.searchParams.get("redirect_uri")).toBe(`${site.url}/auth/callback`);
     expect(auth.searchParams.get("client_id")).toBe("id");
+    expect(auth.searchParams.get("scope")).toBe("full_name vatsim_details");
     const stateCookie = login.headers.get("set-cookie")!.split(";")[0]!;
-    const cb = await get(
-      `/auth/callback?code=${cid}&state=${auth.searchParams.get("state")}`,
-      stateCookie,
-    );
+    return get(`/auth/callback?${query}&state=${auth.searchParams.get("state")}`, stateCookie);
+  }
+
+  /** Runs the sign-in as `cid` and returns the session cookie. */
+  async function signIn(cid: number | string, returnTo = "/dev/"): Promise<string> {
+    const cb = await callback(`code=${cid}`, returnTo);
     if (cb.status !== 302) return "";
     expect(cb.headers.get("location")).toBe(returnTo);
     const session = cb.headers.getSetCookie().find((c) => c.startsWith("vam_session="));
@@ -253,12 +271,49 @@ describe("server", () => {
     expect((await get("/api/access", user, "application/json")).status).toBe(403);
   });
 
-  it("rejects a callback without the browser's state cookie, and VATSIM failures", async () => {
+  it("shows why a sign-in failed, and signs no one in", async () => {
     const login = await get("/auth/login?return=/dev/");
     const state = new URL(login.headers.get("location")!).searchParams.get("state");
-    expect((await get(`/auth/callback?code=1234567&state=${state}`)).status).toBe(400);
-    expect((await get(`/auth/callback?code=1234567&state=forged`)).status).toBe(400);
-    expect(await signIn("fail")).toBe("");
+    const cases: [Response, number, string][] = [
+      [await get(`/auth/callback?code=1234567&state=${state}`), 400, "SIGN-IN EXPIRED"],
+      [await get(`/auth/callback?code=1234567&state=forged`), 400, "SIGN-IN EXPIRED"],
+      [await callback("error=access_denied"), 400, "SIGN-IN CANCELLED"],
+      [await callback("code=used"), 400, "SIGN-IN REJECTED"],
+      [await callback("code=badclient"), 502, "SIGN-IN UNAVAILABLE"],
+      [await callback("code=down"), 502, "VATSIM UNAVAILABLE"],
+      [await callback("code=abc"), 502, "SIGN-IN FAILED"],
+    ];
+    for (const [res, status, title] of cases) {
+      expect(res.status).toBe(status);
+      const html = await res.text();
+      expect(html).toContain(title);
+      expect(html).toContain("TRY AGAIN");
+      expect(res.headers.getSetCookie().some((c) => c.startsWith("vam_session=ey"))).toBe(false);
+    }
+  });
+
+  it("refuses suspended accounts, and accounts VATSIM sends no rating for", async () => {
+    const sus = await callback("code=1234567:0", "/");
+    expect(sus.status).toBe(403);
+    const html = await sus.text();
+    expect(html).toContain("CID 1234567 IS SUSPENDED");
+    expect(html).not.toContain("TRY AGAIN"); // it would only be refused again
+    expect(html).toContain("SIGN IN AS A DIFFERENT CID");
+    expect(sus.headers.getSetCookie().some((c) => c.startsWith("vam_session=ey"))).toBe(false);
+
+    const unknown = await callback("code=1234567:none", "/");
+    expect(unknown.status).toBe(403);
+    expect(await unknown.text()).toContain("ACCOUNT STATUS UNKNOWN");
+
+    // Inactive (-1) and observers are not suspended.
+    expect(await signIn("1234567:-1", "/")).toMatch(/^vam_session=/);
+    expect(await signIn("1234567:1", "/")).toMatch(/^vam_session=/);
+  });
+
+  it("refuses sessions issued before the suspension check", async () => {
+    const old = signToken({ cid: 1234567, name: "", exp: Date.now() / 1000 + 3600 }, SECRET);
+    expect((await get("/", `vam_session=${old}`)).status).toBe(302);
+    expect((await get("/api/me", `vam_session=${old}`, "application/json")).status).toBe(401);
   });
 
   it("moves a sign-in started on another host name to PUBLIC_URL", async () => {
