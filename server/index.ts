@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Backend entry point:  npm run server   (see server/README.md)
+import { AccessStore } from "./access.ts";
 import { createApp } from "./app.ts";
 import { loadConfig } from "./config.ts";
 import { FeedHub } from "./services/feedHub.ts";
@@ -13,11 +14,26 @@ const vnas = new VnasService({
   cacheMs: config.vnasCacheMs,
 });
 
-const app = createApp({ config, feed, vnas });
+let access: AccessStore | undefined;
+if (config.auth) {
+  access = new AccessStore(config.auth.dataDir);
+  await access.load();
+} else {
+  console.warn("No VATSIM_CLIENT_ID, VATSIM_CLIENT_SECRET or SESSION_SECRET: sign-in is off.");
+}
+
+const app = createApp({ config, feed, vnas, access });
 feed.start();
 
 const server = app.listen(config.port, config.host, () => {
   console.log(`vam server on http://${config.host}:${config.port}`);
+  if (config.auth) {
+    console.log(`  public URL:     ${config.auth.publicUrl.origin}`);
+    console.log(`  VATSIM Connect: ${config.auth.vatsimAuthBase}`);
+    console.log(`  redirect URI:   ${new URL("/auth/callback", config.auth.publicUrl)}`);
+    console.log(`  site:           ${config.auth.siteDir}`);
+    console.log(`  superadmins:    ${config.auth.superadmins.join(", ")}`);
+  }
 });
 
 function shutdown(signal: string) {
