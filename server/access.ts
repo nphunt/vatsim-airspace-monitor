@@ -1,5 +1,5 @@
 // Which pages are access-controlled, the CID lists the admin page edits, and where those
-// lists are kept (a JSON file in DATA_DIR). The live site is open to everyone.
+// lists are kept (a JSON file in DATA_DIR). The live site opens for any signed-in CID.
 
 import fs from "node:fs/promises";
 import path from "node:path";

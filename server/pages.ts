@@ -1,4 +1,5 @@
-// Server-rendered pages: sign-in, access denied, sign-in errors and a missing build.
+// Server-rendered pages: access denied, sign-in errors and a missing build. (Signed-out
+// page loads go straight to VATSIM Connect, so there is no sign-in page.)
 
 import { PAGE_TITLES, type AccessPage } from "./access.ts";
 
@@ -37,16 +38,6 @@ function signOutForm(returnTo: string): string {
   return `<form method="post" action="/auth/logout?return=${encodeURIComponent(returnTo)}">
           <button type="submit">SIGN OUT</button>
         </form>`;
-}
-
-export function signInPage(page: AccessPage, returnTo: string, error?: string): string {
-  return layout(
-    "Sign in",
-    `        <h2>${esc(PAGE_TITLES[page])}</h2>
-        ${error ? `<p class="alert" role="alert">${esc(error)}</p>` : ""}
-        <p>SIGN IN WITH YOUR VATSIM ACCOUNT TO CHECK YOUR ACCESS.</p>
-        <p><a class="button" href="/auth/login?return=${encodeURIComponent(returnTo)}">SIGN IN WITH VATSIM</a></p>`,
-  );
 }
 
 export function deniedPage(page: AccessPage, cid: number, returnTo: string): string {

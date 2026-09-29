@@ -1,8 +1,8 @@
 # Server
 
-An Express server that hosts the site in place of GitHub Pages and adds **VATSIM Connect** sign-in:
+An Express server that hosts the site in place of GitHub Pages behind **VATSIM Connect** sign-in. Every page needs it: opening any page signed out goes straight to VATSIM and comes back to that page once you sign in.
 
-- **`/`** is the live site, built from `main`. It's open to everyone.
+- **`/`** is the live site, built from `main`. Any signed-in VATSIM account can open it.
 - **`/dev/`** is the development site, built from `development`. It opens only for CIDs on its list, or for admins. Anyone else gets `ACCESS DENIED: CID … ASK AN ADMIN FOR ACCESS`. The server refuses every file under `/dev/` (HTML, JavaScript, data) without access, not just the page.
 - **`/admin/`** edits both lists. Only admins can open it.
 - **Admins** can open every page. `1935951` is a built-in admin, and `SUPERADMIN_CIDS` adds more. Neither kind can be removed on the admin page.

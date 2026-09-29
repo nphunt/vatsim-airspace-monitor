@@ -172,20 +172,28 @@ describe("server", () => {
     return session!.split(";")[0]!;
   }
 
-  it("serves the live site to everyone", async () => {
-    const res = await get("/");
-    expect(res.status).toBe(200);
-    expect(await res.text()).toContain("live site");
-    expect((await get("/assets/app-abc123.js")).headers.get("cache-control")).toMatch(/immutable/);
+  it("sends a signed-out page load straight to sign-in, and refuses other files", async () => {
+    for (const p of ["/", "/?replay=x", "/dev/", "/admin/"]) {
+      const page = await get(p);
+      expect(page.status).toBe(302);
+      expect(page.headers.get("location")).toBe(`/auth/login?return=${encodeURIComponent(p)}`);
+    }
+    for (const p of ["/assets/app-abc123.js", "/dev/assets/app-abc123.js", "/dev/index.html"]) {
+      expect((await get(p, "", "*/*")).status).toBe(401);
+    }
+    // What the sign-in and error pages need stays open.
+    expect((await get("/_vam/style.css", "", "text/css")).status).toBe(200);
+    expect((await get("/healthz", "", "*/*")).status).toBe(200);
   });
 
-  it("asks for sign-in on /dev/ and refuses its files", async () => {
-    const page = await get("/dev/");
-    expect(page.status).toBe(401);
-    expect(await page.text()).toContain("SIGN IN WITH VATSIM");
-    expect((await get("/dev/assets/app-abc123.js", "", "*/*")).status).toBe(401);
-    expect((await get("/dev/index.html", "", "*/*")).status).toBe(401);
-    expect((await get("/admin/")).status).toBe(401);
+  it("opens the live site for any signed-in CID", async () => {
+    const anyone = await signIn(7777777, "/");
+    const res = await get("/", anyone);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("live site");
+    const asset = await get("/assets/app-abc123.js", anyone, "*/*");
+    expect(asset.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
+    expect((await get("/dev/", anyone)).status).toBe(403);
   });
 
   it("signs a listed CID in to /dev/, and denies everyone else", async () => {

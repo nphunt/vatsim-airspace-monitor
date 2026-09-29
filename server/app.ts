@@ -1,6 +1,7 @@
 /**
- * The site's server. It serves the live build at / (open to everyone) and the development
- * build at /dev/ (only for CIDs on its list), and runs VATSIM Connect sign-in:
+ * The site's server. Everything needs VATSIM Connect sign-in: a signed-out page load goes
+ * straight to VATSIM and back. Any signed-in CID gets the live build at /; the development
+ * build at /dev/ and the admin page only open for CIDs on their lists.
  *
  *   GET  /auth/login?return=<path> -> VATSIM Connect; comes back to <path> signed in
  *                                     (&switch=1: VATSIM asks for a CID and password
@@ -32,7 +33,7 @@ import {
   type StoredAccess,
 } from "./access.ts";
 import type { Config } from "./config.ts";
-import { deniedPage, errorPage, noBuildPage, signInPage } from "./pages.ts";
+import { deniedPage, errorPage, noBuildPage } from "./pages.ts";
 import {
   SESSION_COOKIE,
   SIGNED_OUT_COOKIE,
@@ -236,16 +237,23 @@ export function createApp(config: Config, store: AccessStore) {
 
   // ---- Pages ----
 
-  /** Lets the request through only for a signed-in CID with access to `page`. */
-  const gate = (page: AccessPage) => (req: Request, res: Response, next: NextFunction) => {
+  /**
+   * Lets the request through only for a signed-in CID with access to `page` ("live": any
+   * signed-in CID). Signed out, a page load goes straight to VATSIM Connect and comes back
+   * here; other requests (scripts, data) just get 401.
+   */
+  const gate = (page: AccessPage | "live") => (req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Cache-Control", "private, no-cache");
     const s = session(req);
     const html = wantsHtml(req);
     if (!s) {
       if (!html) return res.status(401).type("text/plain").send("sign in first");
-      return res.status(401).send(signInPage(page, safeReturn(req.originalUrl)));
+      return res.redirect(
+        302,
+        `/auth/login?return=${encodeURIComponent(safeReturn(req.originalUrl))}`,
+      );
     }
-    if (!me(s).pages[page]) {
+    if (page !== "live" && !me(s).pages[page]) {
       if (!html) return res.status(403).type("text/plain").send("access denied");
       return res.status(403).send(deniedPage(page, s.cid, safeReturn(req.originalUrl)));
     }
@@ -277,7 +285,7 @@ export function createApp(config: Config, store: AccessStore) {
   app.use("/_vam", serve(path.join(HERE, "static"), false));
   app.use("/admin", gate("admin"), serve(path.join(HERE, "admin"), true));
   app.use("/dev", gate("dev"), missing("dev"), serve(path.join(config.siteDir, "dev"), true));
-  app.use(missing("live"), serve(path.join(config.siteDir, "live"), false));
+  app.use(gate("live"), missing("live"), serve(path.join(config.siteDir, "live"), true));
 
   app.use((_req, res) => {
     res.status(404).type("text/plain").send("not found");
