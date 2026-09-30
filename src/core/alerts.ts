@@ -250,16 +250,18 @@ export class AlertMachine {
     };
 
     for (const p of set.outbound) {
+      if (p.noPlan) continue; // no flight plan: shown, never alerted
       const x = p.exit;
       // Arrivals (§5.6) carry an ETA, not an exit, and never exit-alert.
       if (!x) continue;
       consider("exit", p, x.t, x.into, x.clip, c.exitAlertS, x.dir);
     }
     for (const p of set.outbound) {
-      if (p.tracon) consider("tracon", p, p.tracon.t, p.tracon.into, false, c.handoffAlertS);
+      if (p.tracon && !p.noPlan) consider("tracon", p, p.tracon.t, p.tracon.into, false, c.handoffAlertS);
     }
     if (c.entryAlerts) {
       for (const p of set.inbound) {
+        if (p.noPlan) continue;
         const n = p.entry!;
         consider("entry", p, n.t, n.from, n.clip, c.entryAlertS);
       }

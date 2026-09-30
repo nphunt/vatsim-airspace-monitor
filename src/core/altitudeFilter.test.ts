@@ -26,6 +26,7 @@ function pred(cid: number, altitude: number, exitInS: number | null): Prediction
     squawk: "",
     assignedSquawk: "",
     vfr: false,
+    noPlan: false,
     turning: false,
     inside: true,
     arr: false,

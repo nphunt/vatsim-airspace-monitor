@@ -92,7 +92,7 @@ export function Toolbar() {
 
   return (
     <nav className="eram-toolbar" aria-label="Master toolbar">
-      <WindowButton id="airspace" label={`AIRSPACE ${selectedLabel}`} />
+      <span className="eram-toolbar-fixed">{selectedLabel}</span>
       <WindowButton id="outbound" label="OUTBOUND" />
       <WindowButton
         id="alerts"

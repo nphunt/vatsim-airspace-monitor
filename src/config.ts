@@ -5,6 +5,8 @@
 export const FEED_POLL_MS = 10_000;
 export const STALE_PILOT_S = 60;
 export const MIN_GS_KT = 40;
+/** This build only monitors ZME: the airspace is fixed and cannot be switched. */
+export const FIXED_AIRSPACE_KEY = "KZME#dom";
 export const HORIZON_MIN = 30; // user-selectable, see HORIZON_CHOICES_MIN
 export const HORIZON_CHOICES_MIN = [10, 20, 30, 60] as const;
 export const MAX_GS_KT = 750; // prefilter bound only

@@ -166,16 +166,6 @@ export function SettingsWindow() {
         />
         <span className={cid.kind === "invalid" ? "alert" : "dim"}>{status}</span>
       </div>
-      <div className="row">
-        <label>
-          <input
-            type="checkbox"
-            checked={settings.autoSelect}
-            onChange={(e) => st.setAutoSelect(e.target.checked)}
-          />{" "}
-          AUTO-SELECT MY AIRSPACE WHEN I LOG ON
-        </label>
-      </div>
 
       <h3>ALERTS</h3>
       <div className="row">
