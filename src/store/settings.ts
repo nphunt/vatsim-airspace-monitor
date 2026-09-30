@@ -1,3 +1,4 @@
+import { FIXED_AIRSPACE_KEY } from "../config";
 import {
   ALERT_THRESHOLD_CHOICES_S,
   ALT_FILTER_MAX_HFT,
@@ -170,7 +171,7 @@ const win = (w: Partial<WindowState>): WindowState => ({
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: SETTINGS_SCHEMA_VERSION,
-  selectedAirspace: null,
+  selectedAirspace: FIXED_AIRSPACE_KEY,
   horizonMin: HORIZON_MIN,
   myCid: "",
   autoSelect: true,
@@ -281,10 +282,7 @@ export function parseSettings(raw: unknown): Settings {
   const windows = isObj(raw.windows) ? raw.windows : {};
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
-    selectedAirspace:
-      typeof raw.selectedAirspace === "string" && AIRSPACE_KEY_RE.test(raw.selectedAirspace)
-        ? raw.selectedAirspace
-        : null,
+    selectedAirspace: FIXED_AIRSPACE_KEY,
     horizonMin: (HORIZON_CHOICES_MIN as readonly number[]).includes(raw.horizonMin as number)
       ? (raw.horizonMin as number)
       : d.horizonMin,

@@ -55,7 +55,7 @@ describe("settings persistence", () => {
       }),
     });
     const s = loadSettings(store);
-    expect(s.selectedAirspace).toBe("KZNY#dom");
+    expect(s.selectedAirspace).toBe("KZME#dom"); // fixed: a saved choice is ignored
     expect(s.horizonMin).toBe(20);
     expect(s.windows).toEqual(DEFAULT_SETTINGS.windows);
   });
@@ -77,7 +77,7 @@ describe("settings persistence", () => {
       autoSelect: "yes",
       windows: { outbound: { x: "10", w: 5, open: false } },
     });
-    expect(s.selectedAirspace).toBeNull();
+    expect(s.selectedAirspace).toBe("KZME#dom");
     expect(s.horizonMin).toBe(DEFAULT_SETTINGS.horizonMin);
     expect(s.inboundLimit).toBe(25);
     expect(s.autoSelect).toBe(true);

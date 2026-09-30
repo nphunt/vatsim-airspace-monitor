@@ -255,7 +255,6 @@ export const useStore = create<AppState>()((set, get) => {
         case "status":
           e.staffed = new Set(msg.staffed);
           e.myPosition = msg.myPosition;
-          if (msg.autoSelected) updateSettings({ selectedAirspace: msg.autoSelected });
           if (msg.closedGone.length > 0) {
             const gone = new Set(msg.closedGone);
             updateSettings({ closed: get().settings.closed.filter((c) => !gone.has(c)) });
@@ -289,11 +288,8 @@ export const useStore = create<AppState>()((set, get) => {
       set({ engine: e });
     },
 
-    selectAirspace: (key) => {
-      updateSettings({ selectedAirspace: key });
-      set({ exitFilter: null });
-      send({ type: "select", airspace: key });
-    },
+    // The airspace is fixed to ZME; switching is a no-op.
+    selectAirspace: () => {},
     setHorizon: (min) => updateSettings({ horizonMin: min }),
     setMyCid: (raw) => updateSettings({ myCid: raw }),
     setAutoSelect: (on) => updateSettings({ autoSelect: on }),

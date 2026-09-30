@@ -47,12 +47,12 @@ describe("store", () => {
     );
   });
 
-  it("selecting sends to the engine, persists, and clears the exit filter", () => {
+  it("the airspace is fixed to ZME: selecting another does nothing", () => {
     useStore.getState().setExitFilter("ZKC");
-    useStore.getState().selectAirspace("KZME#dom");
-    expect(sent).toEqual([{ type: "select", airspace: "KZME#dom" }]);
+    useStore.getState().selectAirspace("KZNY#dom");
+    expect(sent).toEqual([]);
     expect(useStore.getState().settings.selectedAirspace).toBe("KZME#dom");
-    expect(useStore.getState().exitFilter).toBeNull();
+    expect(useStore.getState().exitFilter).toBe("ZKC");
   });
 
   it("an auto-select from My Position updates the saved selection", () => {

@@ -1,3 +1,4 @@
+import { FIXED_AIRSPACE_KEY } from "../config";
 import {
   EXIT_ALERT_S,
   FALLBACK_FEED_URL,
@@ -218,7 +219,7 @@ export class Engine {
       vatspyTag: meta.vatspy?.tag ?? null,
       feedUrl,
     });
-    if (this.pendingSelect) this.select(this.pendingSelect);
+    this.select(this.pendingSelect ?? FIXED_AIRSPACE_KEY);
     // Nav data is large; load it in the background. Until then everything is DR (§3.3).
     void this.loadNav(base);
 
@@ -325,11 +326,9 @@ export class Engine {
       this.config.myCid === null
         ? null
         : findMyPosition(this.snapshot.controllers, this.config.myCid, registry);
-    const transition = this.myPosition.update(me);
-    const autoSelected =
-      transition && this.config.autoSelect && transition !== this.selected?.airspace.key
-        ? transition
-        : null;
+    this.myPosition.update(me);
+    // Auto-select is off: the airspace is fixed.
+    const autoSelected: string | null = null;
     const live = new Set(this.snapshot.pilots.map((p) => p.cid));
     const closedGone = this.config.closedCids.filter((cid) => !live.has(cid));
     this.post({
@@ -424,7 +423,9 @@ export class Engine {
     }
   }
 
-  private select(idOrKey: string | null): void {
+  private select(requested: string | null): void {
+    // Fixed airspace: whatever is asked for, ZME is what gets selected.
+    const idOrKey = requested === null ? null : FIXED_AIRSPACE_KEY;
     if (idOrKey === null) {
       this.selected = null;
       this.lastSet = null;
