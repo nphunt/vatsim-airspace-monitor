@@ -6,6 +6,7 @@ import type {
   Prediction,
   PredictionSet,
   ScopeTarget,
+  VatsimFlightPlan,
   VatsimPilot,
 } from "../data/types";
 import { containsRaw, prepareAirspace, type PreparedAirspace } from "./airspaceGeom";
@@ -34,6 +35,18 @@ import { deriveTrack, type TrackStore } from "./track";
 /** Route text kept on each prediction for the flight plan readout. */
 export const ROUTE_TEXT_MAX = 400;
 
+/** Stand-in for an aircraft with no filed flight plan: empty fields, so it flies DR. */
+const NO_PLAN: VatsimFlightPlan = {
+  flightRules: "",
+  aircraftFaa: "",
+  aircraftShort: "",
+  departure: "",
+  arrival: "",
+  altitude: "",
+  route: "",
+  assignedTransponder: "",
+};
+
 export type AirportIndex = Readonly<Record<string, readonly [number, number]>>;
 
 export interface Registry extends FacilityIndex {
@@ -42,14 +55,13 @@ export interface Registry extends FacilityIndex {
 
 /**
  * Pilots that can appear in lists, alerts and load (§5.1): moving (>= MIN_GS_KT), not stale
- * against the clock, and with a filed flight plan (IFR, or VFR with a plan).
+ * against the clock. Aircraft without a flight plan are included but never alert.
  */
 export function eligiblePilots(pilots: readonly VatsimPilot[], now: number): VatsimPilot[] {
   return pilots.filter(
     (p) =>
       p.groundspeed >= MIN_GS_KT &&
-      now - p.lastUpdated <= STALE_PILOT_S * 1000 &&
-      p.flightPlan !== null,
+      now - p.lastUpdated <= STALE_PILOT_S * 1000,
   );
 }
 
@@ -153,7 +165,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     input.tracons && traconStaffing
       ? findTraconHandoff(
           path,
-          airports[p.flightPlan!.arrival],
+          p.flightPlan ? airports[p.flightPlan.arrival] : undefined,
           input.tracons,
           traconStaffing,
           prepared.centerLon,
@@ -190,8 +202,8 @@ export function computePredictions(input: PipelineInput): PredictionSet {
       scope.push({
         cid: p.cid,
         callsign: p.callsign,
-        aircraftType: p.flightPlan!.aircraftShort || p.flightPlan!.aircraftFaa,
-        arrival: p.flightPlan!.arrival,
+        aircraftType: p.flightPlan ? p.flightPlan.aircraftShort || p.flightPlan.aircraftFaa : "",
+        arrival: p.flightPlan?.arrival ?? "",
         lat: p.lat,
         lon: p.lon,
         altitude: p.altitude,
@@ -208,7 +220,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     if (summary.inside) insideCids.push(p.cid);
     if (summary.inside === false && !summary.entry) continue;
 
-    const fp = p.flightPlan!;
+    const fp = p.flightPlan ?? NO_PLAN;
     if (input.load) {
       const lenNm = pathLength(path);
       // A path shorter than asked ended at the destination (RTE): the aircraft lands.
@@ -253,6 +265,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
       squawk: p.transponder,
       assignedSquawk: fp.assignedTransponder,
       vfr: fp.flightRules === "V",
+      noPlan: p.flightPlan === null,
       turning: derived.turning,
       inside: summary.inside,
       arr: false,

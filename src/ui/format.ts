@@ -98,6 +98,7 @@ export function flagsOf(p: Prediction, clip: boolean): Flag[] {
   if (p.turning) f.push({ word: "TRN", letter: "T", title: "Turning" });
   if (clip) f.push({ word: "CLP", letter: "C", title: "Corner clip: re-enters shortly" });
   if (p.vfr) f.push({ word: "V", letter: "V", title: "VFR flight plan" });
+  if (p.noPlan) f.push({ word: "NFP", letter: "N", title: "No flight plan filed: no alerts" });
   return f;
 }
 

@@ -80,13 +80,16 @@ describe("computePredictions (ZME)", () => {
     expect(set.inbound[0]!.entry!.exitT).toBeGreaterThan(set.inbound[0]!.entry!.t);
   });
 
-  it("never lists aircraft without a flight plan; VFR with a plan is listed and flagged", () => {
+  it("lists aircraft without a flight plan, flagged noPlan; VFR with a plan is flagged vfr", () => {
     const noFp = pilot({ flightPlan: null });
     const vfr = pilot({ flightPlan: fp({ flightRules: "V" }) });
     const set = run("KZME", snapshot([noFp, vfr]));
-    expect(set.outbound.map((p) => p.cid)).toEqual([vfr.cid]);
-    expect(set.outbound[0]!.vfr).toBe(true);
-    expect(set.stats.eligible).toBe(1);
+    expect(set.outbound.map((p) => p.cid).sort()).toEqual([noFp.cid, vfr.cid].sort());
+    const byCid = (cid: number) => set.outbound.find((p) => p.cid === cid)!;
+    expect(byCid(vfr.cid).vfr).toBe(true);
+    expect(byCid(vfr.cid).noPlan).toBe(false);
+    expect(byCid(noFp.cid).noPlan).toBe(true);
+    expect(set.stats.eligible).toBe(2);
   });
 
   it("drops stale and slow aircraft", () => {

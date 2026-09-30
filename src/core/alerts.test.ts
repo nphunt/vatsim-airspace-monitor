@@ -38,6 +38,7 @@ function outbound(
     squawk: "",
     assignedSquawk: "",
     vfr: false,
+    noPlan: false,
     turning: false,
     inside: true,
     arr: false,
@@ -323,5 +324,13 @@ describe("AlertMachine: exits into a staffed facility (HANDOFF, then XFER)", () 
     m.ack(1);
     m.evaluate(input(set([outbound(1, T0 + 200_000)]), T0 + 150_000)); // 0:50 left
     expect(m.list()[0]).toMatchObject({ state: "ACKED", stage: "ALERT" });
+  });
+});
+
+describe("aircraft without a flight plan", () => {
+  it("never alerts, even inside the exit threshold", () => {
+    const r = m.evaluate(input(set([outbound(1, T0 + 60_000, { noPlan: true })]), T0));
+    expect(r.tone).toBe(false);
+    expect(m.list()).toHaveLength(0);
   });
 });

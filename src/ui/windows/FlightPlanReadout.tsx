@@ -30,6 +30,7 @@ export function FlightPlanReadout() {
         {p.callsign} {p.aircraftType || "----"}
         {p.vfr ? " VFR" : ""}
       </p>
+      {p.noPlan && <p>NO FLIGHT PLAN FILED</p>}
       <p>
         {p.departure || "----"} → {p.arrival || "----"} {filed ? `FILED ${filed}` : ""}
       </p>

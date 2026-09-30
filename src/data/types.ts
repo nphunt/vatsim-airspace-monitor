@@ -217,6 +217,8 @@ export interface Prediction {
   squawk: string;
   assignedSquawk: string;
   vfr: boolean;
+  /** No flight plan filed: listed and shown, but never alerts. */
+  noPlan: boolean;
   turning: boolean;
   inside: boolean;
   /** Landing at an airport inside the selected airspace while inside it (§5.6). */

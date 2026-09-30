@@ -74,6 +74,7 @@ const pred = (over: Partial<Prediction> = {}): Prediction => ({
   squawk: "",
   assignedSquawk: "",
   vfr: false,
+  noPlan: false,
   turning: false,
   inside: true,
   arr: false,
