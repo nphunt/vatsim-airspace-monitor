@@ -1,7 +1,7 @@
 {
   "name": "vatsim-airspace-monitor",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "ERAM-styled VATSIM exit/entry and load monitor for VATUSA controllers",
   "engines": {
@@ -11,6 +11,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "server": "node --env-file-if-exists=.env server/index.ts",
+    "server:dev": "node --env-file-if-exists=.env --watch server/index.ts",
+    "build:sites": "node scripts/build-sites.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
@@ -19,17 +22,23 @@
     "update-data": "node scripts/update-data.mjs",
     "record": "node scripts/record.mjs",
     "bench": "vitest run tests/pipeline.perf.test.ts --mode bench --silent=false",
-    "update-nav": "node scripts/update-nav.mjs"
+    "update-tracons": "node scripts/update-tracons.mjs",
+    "update-nav": "node scripts/update-nav.mjs",
+    "validate-data": "node scripts/validate-data.mjs",
+    "check-dist": "node scripts/check-dist.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@turf/turf": "^7.4.0",
+    "express": "^5.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.20.4",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
@@ -40,6 +49,7 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "fflate": "^0.8.3",
     "globals": "^17.12.0",
+    "playwright-core": "^1.63.0",
     "prettier": "^3.9.9",
     "typescript": "~5.9",
     "typescript-eslint": "^8.70.1",

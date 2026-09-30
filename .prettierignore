@@ -5,3 +5,6 @@ public/data
 tests/fixtures
 # Planning docs are hand-formatted.
 *.md
+site
+.sites-build
+data

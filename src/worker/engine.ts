@@ -1,8 +1,23 @@
-import { FALLBACK_FEED_URL, HORIZON_MIN, UI_TICK_MS } from "../config";
+import { FIXED_AIRSPACE_KEY } from "../config";
+import {
+  EXIT_ALERT_S,
+  FALLBACK_FEED_URL,
+  HORIZON_MIN,
+  LOAD_STRATEGIC_MIN,
+  UI_TICK_MS,
+} from "../config";
 import { AlertMachine, DEFAULT_ALERT_CONFIG, type AlertConfig } from "../core/alerts";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
-import { buildStaffing } from "../core/facilityLookup";
+import { airportTraffic, airportsNear, type AirportPoint } from "../core/airportTraffic";
+import { altitudeFilterFt, filterByAltitude } from "../core/altitudeFilter";
+import { buildStaffing, type Staffing } from "../core/facilityLookup";
 import { MyPositionTracker, findMyPosition } from "../core/myPosition";
+import {
+  findNeighbors,
+  neighborStatuses,
+  type Neighbor,
+  type NeighborStatus,
+} from "../core/neighbors";
 import {
   computePredictions,
   eligiblePilots,
@@ -14,6 +29,8 @@ import type { NavData, Procedure } from "../core/route";
 import { RouteModeTracker } from "../core/routeMode";
 import { TrackStore } from "../core/track";
 import { loadAirspaces, type AirspaceRegistry } from "../data/airspaces";
+import { loadTracons, withOwners } from "../data/tracons";
+import { buildTraconSet, buildTraconStaffing, type TraconSet } from "../core/tracons";
 import { FeedPoller, type FeedStatus } from "../data/feed";
 import { dataUrl } from "../data/paths";
 import type { FeedSnapshot, PredictionSet } from "../data/types";
@@ -45,7 +62,18 @@ export const DEFAULT_CONFIG: EngineConfig = {
   autoSelect: true,
   repeatTone: false,
   entryAlerts: false,
+  loadOpen: false,
+  scopeOpen: false,
+  alertThresholdS: EXIT_ALERT_S,
+  altFloor: null,
+  altCeiling: null,
+  closedCids: [],
 };
+
+/** Prediction horizon: the list horizon, or the load horizon while LOAD is open (§5.2). */
+export function effectiveHorizonMin(c: EngineConfig): number {
+  return c.loadOpen ? Math.max(c.horizonMin, LOAD_STRATEGIC_MIN) : c.horizonMin;
+}
 
 /** Repeat interval when the repeat-tone setting is on (§6.1). */
 const REPEAT_TONE_S = 30;
@@ -55,6 +83,8 @@ function alertConfig(c: EngineConfig): AlertConfig {
     ...DEFAULT_ALERT_CONFIG,
     repeatToneS: c.repeatTone ? REPEAT_TONE_S : null,
     entryAlerts: c.entryAlerts,
+    exitAlertS: c.alertThresholdS,
+    entryAlertS: c.alertThresholdS,
   };
 }
 
@@ -77,10 +107,13 @@ export class Engine {
   private replay: ReplayFeed | null = null;
   private tickHandle: unknown = null;
   private started = false;
+  private paused = false;
 
   config: EngineConfig = { ...DEFAULT_CONFIG };
   airspaces: AirspaceRegistry | null = null;
   airports: AirportIndex = {};
+  /** Approach control boundaries; empty until loaded, or if they fail to load. */
+  tracons: TraconSet = buildTraconSet([]);
   snapshot: FeedSnapshot | null = null;
   readonly tracks = new TrackStore();
   private selected: SelectedAirspace | null = null;
@@ -91,6 +124,11 @@ export class Engine {
   /** Route-following state; null until nav data loads (then predictions start using it). */
   routes: RouteModeTracker | null = null;
   private lastSet: PredictionSet | null = null;
+  /** Facilities around the selected airspace (geometry; rebuilt on switch). */
+  private neighbors: Neighbor[] = [];
+  private neighborStatus: NeighborStatus[] | null = null;
+  /** Airports in and just around the selected airspace (rebuilt on switch). */
+  private airportPoints: AirportPoint[] = [];
   private eligibleCids: ReadonlySet<number> = new Set();
 
   constructor(post: (m: FromEngine) => void, deps: EngineDeps = {}) {
@@ -117,6 +155,9 @@ export class Engine {
         if (msg.cid === null ? this.alerts.ackAll() : this.alerts.ack(msg.cid))
           this.postAlerts(false);
         return Promise.resolve();
+      case "pause":
+        this.setPaused(msg.paused);
+        return Promise.resolve();
       case "replayRate":
         this.replay?.setRate(msg.rate);
         this.tick();
@@ -133,6 +174,7 @@ export class Engine {
     this.started = true;
     this.config = { ...msg.config };
     this.alerts.config = alertConfig(this.config);
+    this.alerts.setClosed(new Set(this.config.closedCids));
     const base = msg.dataBaseUrl;
 
     // Tick first, so the watchdog sees a live worker even while data is loading.
@@ -145,16 +187,22 @@ export class Engine {
     } catch (e) {
       this.error(`meta.json failed to load: ${String(e)}`);
     }
-    const feedUrl = safeFeedUrl(meta.feedUrl);
+    const directUrl = safeFeedUrl(meta.feedUrl);
+    // Prefer the backend's shared copy; VATSIM directly is the fallback (server/README.md).
+    const backendUrl = msg.apiBaseUrl ? new URL("feed", msg.apiBaseUrl).href : null;
+    const feedUrl = backendUrl ?? directUrl;
 
     // Load boundary data before feeding snapshots, so the first one is fully processed.
     try {
-      [this.airspaces, this.airports] = await Promise.all([
+      let tracons;
+      [this.airspaces, this.airports, tracons] = await Promise.all([
         loadAirspaces({ base, fetchImpl: this.fetchImpl }),
         this.fetchImpl(dataUrl("airports.json", base)).then(
           (r) => r.json() as Promise<AirportIndex>,
         ),
+        loadTracons({ base, fetchImpl: this.fetchImpl }),
       ]);
+      this.tracons = buildTraconSet(withOwners(tracons, this.airspaces));
     } catch (e) {
       this.error(`boundary data failed to load: ${String(e)}`);
     }
@@ -171,7 +219,7 @@ export class Engine {
       vatspyTag: meta.vatspy?.tag ?? null,
       feedUrl,
     });
-    if (this.pendingSelect) this.select(this.pendingSelect);
+    this.select(this.pendingSelect ?? FIXED_AIRSPACE_KEY);
     // Nav data is large; load it in the background. Until then everything is DR (§3.3).
     void this.loadNav(base);
 
@@ -195,6 +243,7 @@ export class Engine {
     // Poll even if boundaries failed: the DATA indicator is still useful.
     this.poller = new FeedPoller({
       url: feedUrl,
+      fallbackUrl: backendUrl ? directUrl : undefined,
       estimator: this.estimator,
       fetchImpl: this.fetchImpl,
       localNow: this.localNow,
@@ -277,13 +326,45 @@ export class Engine {
       this.config.myCid === null
         ? null
         : findMyPosition(this.snapshot.controllers, this.config.myCid, registry);
-    const transition = this.myPosition.update(me);
-    const autoSelected =
-      transition && this.config.autoSelect && transition !== this.selected?.airspace.key
-        ? transition
-        : null;
-    this.post({ type: "status", staffed: [...staffing.keys()], myPosition: me, autoSelected });
+    this.myPosition.update(me);
+    // Auto-select is off: the airspace is fixed.
+    const autoSelected: string | null = null;
+    const live = new Set(this.snapshot.pilots.map((p) => p.cid));
+    const closedGone = this.config.closedCids.filter((cid) => !live.has(cid));
+    this.post({
+      type: "status",
+      staffed: [
+        ...staffing.keys(),
+        ...buildTraconStaffing(this.snapshot.controllers, this.tracons).keys(),
+      ],
+      myPosition: me,
+      autoSelected,
+      closedGone,
+    });
+    if (!autoSelected) this.postNeighbors(staffing);
     return autoSelected;
+  }
+
+  /** Neighbor staffing for the latest snapshot (on switch, and per snapshot). */
+  private postNeighbors(staffing?: Staffing): void {
+    if (!this.selected) {
+      this.neighborStatus = null;
+      this.post({ type: "neighbors", airspaceKey: null, neighbors: [] });
+      return;
+    }
+    const registry = this.airspaces;
+    if (!staffing && this.snapshot && registry)
+      staffing = buildStaffing(this.snapshot.controllers, registry, (k) => registry.getAirspace(k));
+    const neighbors = neighborStatuses(
+      this.neighbors,
+      staffing ?? new Map(),
+      this.neighborStatus,
+      this.clock.now(),
+    );
+    // Before the first snapshot everything reads unstaffed; don't let that make the
+    // first real staffing look like a logon.
+    this.neighborStatus = this.snapshot ? neighbors : null;
+    this.post({ type: "neighbors", airspaceKey: this.selected.airspace.key, neighbors });
   }
 
   private postPoll(feed: FeedStatus): void {
@@ -299,9 +380,15 @@ export class Engine {
 
   private setConfig(config: EngineConfig): void {
     const cidChanged = config.myCid !== this.config.myCid;
-    const horizonChanged = config.horizonMin !== this.config.horizonMin;
+    const horizonChanged =
+      effectiveHorizonMin(config) !== effectiveHorizonMin(this.config) ||
+      config.loadOpen !== this.config.loadOpen ||
+      config.scopeOpen !== this.config.scopeOpen ||
+      config.altFloor !== this.config.altFloor ||
+      config.altCeiling !== this.config.altCeiling;
     this.config = { ...config };
     this.alerts.config = alertConfig(this.config);
+    if (this.alerts.setClosed(new Set(config.closedCids))) this.postAlerts(false);
     if (cidChanged) {
       // Re-evaluate at once, so entering a CID while logged on auto-selects immediately.
       this.myPosition.reset();
@@ -314,10 +401,38 @@ export class Engine {
     if (horizonChanged) this.recompute();
   }
 
-  private select(idOrKey: string | null): void {
+  /** Idle stop: live polling only (a dev replay keeps its own controls). */
+  private setPaused(paused: boolean): void {
+    if (paused === this.paused || this.replay) return;
+    this.paused = paused;
+    if (paused) {
+      this.poller?.stop();
+      this.lastSet = null;
+      this.alerts.reset();
+      this.post({ type: "predictions", set: null });
+      this.postAlerts(false);
+    } else {
+      // The old snapshot is up to 4 h stale: drop it; the immediate poll brings a new one.
+      this.snapshot = null;
+      this.tracks.clear();
+      this.routes?.clear();
+      this.alerts.reset();
+      // Staffing changes while paused are not "just now": prime silently like a switch.
+      this.neighborStatus = null;
+      this.poller?.start();
+    }
+  }
+
+  private select(requested: string | null): void {
+    // Fixed airspace: whatever is asked for, ZME is what gets selected.
+    const idOrKey = requested === null ? null : FIXED_AIRSPACE_KEY;
     if (idOrKey === null) {
       this.selected = null;
       this.lastSet = null;
+      this.neighbors = [];
+      this.postNeighbors();
+      this.airportPoints = [];
+      this.post({ type: "airports", airports: [] });
       this.alerts.reset();
       this.post({ type: "predictions", set: null });
       this.postAlerts(false);
@@ -336,6 +451,12 @@ export class Engine {
       return;
     }
     this.selected = selectAirspace(a);
+    const registry = this.airspaces;
+    this.neighbors = findNeighbors(a, registry, (k) => registry.getAirspace(k));
+    // A switch primes silently: no neighbor shows as "just changed" (§4.2).
+    this.neighborStatus = null;
+    this.postNeighbors();
+    this.airportPoints = airportsNear(this.selected.prepared, this.airports);
     // A switch resets alerts and primes silently (§4.2, §6.1).
     this.alerts.reset();
     this.lastSet = null;
@@ -344,7 +465,7 @@ export class Engine {
 
   /** Recomputes from the latest snapshot: per new snapshot, on switch, on horizon change. */
   private recompute(): void {
-    if (!this.selected || !this.snapshot || !this.airspaces) return;
+    if (!this.selected || !this.snapshot || !this.airspaces || this.paused) return;
     try {
       const now = this.clock.now();
       const set = computePredictions({
@@ -352,14 +473,29 @@ export class Engine {
         selected: this.selected,
         registry: this.airspaces,
         airports: this.airports,
+        tracons: this.tracons,
         tracks: this.tracks,
         now,
-        horizonMin: this.config.horizonMin,
+        horizonMin: effectiveHorizonMin(this.config),
         routes: this.routes,
+        load: this.config.loadOpen ? { altitude: altitudeFilterFt(this.config) } : null,
+        scope: this.config.scopeOpen,
       });
-      this.lastSet = set;
+      // The altitude filter applies to display, alerts and load, not prediction (§5.7).
+      // Load gets it above; lists, alerts and scope targets here.
+      const shown = filterByAltitude(set, altitudeFilterFt(this.config));
+      this.lastSet = shown;
       this.eligibleCids = new Set(eligiblePilots(this.snapshot.pilots, now).map((p) => p.cid));
-      this.post({ type: "predictions", set });
+      this.post({ type: "predictions", set: shown });
+      this.post({
+        type: "airports",
+        airports: airportTraffic(
+          this.snapshot.pilots,
+          this.airportPoints,
+          now,
+          this.config.horizonMin,
+        ),
+      });
       this.evaluateAlerts(true);
     } catch (e) {
       this.error(`prediction failed: ${String(e)}`);

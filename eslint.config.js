@@ -6,7 +6,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", "public/data"] },
+  { ignores: ["dist", "coverage", "public/data", "site", ".sites-build", "data"] },
   {
     files: ["**/*.{ts,tsx}"],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
@@ -24,7 +24,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.{js,mjs}", "*.config.{js,ts}"],
+    files: ["scripts/**/*.{js,mjs}", "server/**/*.ts", "*.config.{js,ts}"],
     languageOptions: { globals: globals.node },
   },
   prettier,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dataIndicator, isEngineStalled } from "./status";
+import { dataIndicator, isEngineStalled, isIdle, isNavExpired } from "./status";
 
 describe("isEngineStalled", () => {
   it("is false within 5 s of the last message", () => {
@@ -43,5 +43,25 @@ describe("dataIndicator", () => {
 
   it("never reads fresh while stalled", () => {
     expect(dataIndicator(t, t - 1_000, true).level).toBe("alert");
+  });
+});
+
+describe("isIdle (idle stop)", () => {
+  it("trips at 4 h without input, not before", () => {
+    const h = 3_600_000;
+    expect(isIdle(4 * h - 1, 0)).toBe(false);
+    expect(isIdle(4 * h, 0)).toBe(true);
+  });
+});
+
+describe("isNavExpired", () => {
+  it("flags from the 0901Z changeover on the expiry date", () => {
+    expect(isNavExpired(Date.parse("2026-10-01T09:00:59Z"), "2026-10-01")).toBe(false);
+    expect(isNavExpired(Date.parse("2026-10-01T09:01:00Z"), "2026-10-01")).toBe(true);
+  });
+
+  it("never flags an unknown or malformed date", () => {
+    expect(isNavExpired(Date.parse("2030-01-01T00:00:00Z"), null)).toBe(false);
+    expect(isNavExpired(Date.parse("2030-01-01T00:00:00Z"), "10/01/2026")).toBe(false);
   });
 });

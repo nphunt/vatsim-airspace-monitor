@@ -1,4 +1,5 @@
 import type { Polygon } from "geojson";
+import type { LoadForecast } from "../core/load";
 
 /**
  * Lookup tier of a boundary feature (§3.2, §5.5). `facilityAt` tries domestic, then
@@ -44,13 +45,36 @@ export interface Airspace extends FirRecord {
   group?: AirspaceGroup;
 }
 
+/** One TRACON (approach control) from public/data/tracons.geojson, prefixes rolled together. */
+export interface Tracon {
+  /** `TRACON:${id}`; never collides with an ARTCC feature key. */
+  key: string;
+  /** FAA identifier: "A80", "M03". Also the display label. */
+  id: string;
+  label: string;
+  /** Uppercase: "ATLANTA APPROACH". */
+  name: string;
+  /** Callsign prefixes of its approach positions ("ATL", "MEM"), uppercase. */
+  prefixes: string[];
+  labelLat: number;
+  labelLon: number;
+  /**
+   * Label ("ZME") of the ARTCC it belongs to: vNAS's parent facility, else the ARTCC around
+   * its label point. HSV is ZME's although it sits inside ZTL's boundary. "" if unknown.
+   */
+  artcc: string;
+  polygons: Polygon[];
+  bboxes: BBox[];
+  bbox: BBox;
+}
+
 /** Result of a point lookup. Staffing is added in M3 once the feed exists. */
 export interface Facility {
   key: string;
   id: string;
   label: string;
   name: string;
-  tier: Tier | "unknown";
+  tier: Tier | "tracon" | "unknown";
 }
 
 export interface OnlineController {
@@ -87,7 +111,10 @@ export interface VatsimPilot {
   callsign: string;
   lat: number;
   lon: number;
-  /** ft */
+  /**
+   * ft, as ATC sees it: pressure altitude at/above FL180, true altitude below
+   * (feedParse `atcAltitude`), not the feed's raw true altitude.
+   */
   altitude: number;
   /** kt */
   groundspeed: number;
@@ -145,6 +172,27 @@ export interface PredictedEntry {
   clip: boolean;
 }
 
+/** Arrival at a destination inside the selected airspace (§5.6). */
+export interface PredictedArrival {
+  /** Absolute ms UTC: distance / ground speed + ARR_APPROACH_PAD_S, anchored like exits. */
+  t: number;
+  /** Distance to the airport: along the path to its closest approach, then direct. */
+  distNm: number;
+}
+
+/**
+ * Where an aircraft filed to an airport inside a staffed TRACON will cross into it, ahead
+ * of its exit (or landing) in the selected airspace: the approach handoff point.
+ */
+export interface PredictedTracon {
+  t: number;
+  distNm: number;
+  lat: number;
+  lon: number;
+  /** The TRACON, staffed by definition: `controller` is who to hand off to. */
+  into: FacilityStatus;
+}
+
 /** One aircraft relative to the selected airspace. Lists show a subset of these fields. */
 export interface Prediction {
   cid: number;
@@ -173,14 +221,47 @@ export interface Prediction {
   squawk: string;
   assignedSquawk: string;
   vfr: boolean;
+  /** No flight plan filed: listed and shown, but never alerts. */
+  noPlan: boolean;
   turning: boolean;
   inside: boolean;
   /** Landing at an airport inside the selected airspace while inside it (§5.6). */
   arr: boolean;
-  /** ARR in DR mode with the exit not clearly before the airport: no exit alert (§5.6). */
-  arrSuppressed: boolean;
+  /** ARR aircraft carry an ETA instead of an exit, and never exit-alert (§5.6). */
+  eta?: PredictedArrival;
   exit?: PredictedExit;
   entry?: PredictedEntry;
+  /** Handoff to a staffed approach control the aircraft is landing in (alerts only). */
+  tracon?: PredictedTracon;
+}
+
+/**
+ * One target for the SCOPE window (§7.5): every eligible aircraft in the prefilter area,
+ * whether or not it is listed. Positions are as reported; the scope extrapolates them to
+ * the clock between snapshots (§4.2).
+ */
+export interface ScopeTarget {
+  cid: number;
+  callsign: string;
+  aircraftType: string;
+  /** Filed destination (ICAO), "" if none filed. */
+  arrival: string;
+  lat: number;
+  lon: number;
+  /** ft */
+  altitude: number;
+  trend: VerticalTrend;
+  /** Vertical rate, ft/min (signed, 0 when level). Never displayed; drives altitude projection. */
+  vsFpm: number;
+  /** Filed altitude in ft (null if none/unparseable); projected climbs stop here. */
+  filedAltitudeFt: number | null;
+  groundspeed: number;
+  trackDeg: number;
+  lastUpdated: number;
+  /** Earlier reported positions, oldest first, flat [lat, lon, ...] (§5.3 history). */
+  trail: number[];
+  /** RTE mode: the route ahead reduced to its turn points, flat [lat, lon, ...]; else null. */
+  routeAhead: number[] | null;
 }
 
 export interface PredictionSet {
@@ -190,14 +271,21 @@ export interface PredictionSet {
   /** Feed update_timestamp it was computed from. */
   snapshotTime: number;
   horizonMin: number;
-  /** Inside, predicted to exit within the horizon; by exit time. */
+  /**
+   * Inside, predicted to exit within the horizon, plus every ARR aircraft (with `eta`, no
+   * `exit`, whatever the horizon); by exit time or ETA.
+   */
   outbound: Prediction[];
   /** Outside, predicted to enter within the horizon; by entry time. */
   inbound: Prediction[];
-  /** Inside with no exit within the horizon (occupancy for load, M7). */
+  /** Inside, not ARR, with no exit within the horizon. */
   resident: Prediction[];
   /** CIDs of every eligible aircraft currently inside (alerts: "exited" vs "no exit"). */
   insideCids: number[];
+  /** Load forecast (§5.11); null unless the LOAD window is open. */
+  load: LoadForecast | null;
+  /** SCOPE targets; only computed while the SCOPE window is open (§7.5). */
+  scope: ScopeTarget[] | null;
   stats: { eligible: number; prefiltered: number; ms: number };
 }
 

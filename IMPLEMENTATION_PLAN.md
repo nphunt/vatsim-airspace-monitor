@@ -55,9 +55,9 @@ The user MUST be able to switch airspaces at any time, across the whole United S
 - **Discovery (build time only):** ⚠ `status.vatsim.net/status.json` sends **no CORS header** (verified 2026-09-27 in a browser: `fetch` fails), so it MUST NOT be fetched from the app. `update-data.mjs` reads it in Node and writes `data.v3[0]` to `public/data/meta.json` as `feedUrl`; at runtime use `meta.feedUrl`, falling back to the hard-coded `https://data.vatsim.net/v3/vatsim-data.json`. See PUBLISHING_PLAN §0 B2.
 - **Timestamps** carry 5–7 fractional-second digits (e.g. `…17:34:11.2326506Z`). Parse with `core/parseVatsimTime` (truncate the fraction to 3 digits, `NaN` → skip the sample), never raw `Date.parse`. See PUBLISHING_PLAN §6.5.
 - **Feed:**
-  - Response headers: `access-control-allow-origin: *`, `Cache-Control: public, max-age=15`. → **Poll every 15 s, never faster.** Use `fetch(url, { cache: "no-cache" })` so the browser revalidates instead of serving its own cached copy (otherwise effective updates drop to every 30 s).
+  - Response headers: `access-control-allow-origin: *`, `Cache-Control: public, max-age=15`. → **Poll timed to each update** (`src/data/pollSchedule.ts`, 2026-09-28; was a fixed 15 s, then briefly 10 s). The feed updates about every 15 s; the poller learns how long after `update_timestamp` a snapshot reaches the CDN, polls then, and retries 2 s later if it was early. Fixed 10 s polling beat against the 15 s cycle (new, new, dup: a 21 s gap every third update). Use `fetch(url, { cache: "no-cache" })` so the browser revalidates instead of serving its own cached copy (otherwise effective updates drop to every 30 s).
   - `general.update_timestamp` (ISO string) – skip processing if unchanged from the last poll. A skipped (duplicate) poll does NOT count as a "missed" poll for any aircraft.
-  - `pilots[]` – fields used: `cid, callsign, latitude, longitude, altitude` (ft), `groundspeed` (kt), `heading` (deg, this is *heading* not *track*), `transponder`, `last_updated`, `flight_plan` (may be `null`) with `aircraft_short, aircraft_faa, departure, arrival, altitude, route, flight_rules, assigned_transponder`. **Do not store or display `name`.**
+  - `pilots[]` – fields used: `cid, callsign, latitude, longitude, altitude` (ft, **true** altitude), `qnh_i_hg` (local altimeter setting), `groundspeed` (kt), `heading` (deg, this is *heading* not *track*), `transponder`, `last_updated`, `flight_plan` (may be `null`) with `aircraft_short, aircraft_faa, departure, arrival, altitude, route, flight_rules, assigned_transponder`. **Do not store or display `name`.** The app works in the altitude ATC sees (`atcAltitude` in `feedParse.ts`): at/above FL180 the pressure altitude, `altitude + (29.92 − qnh_i_hg) × 1000`, as VATSIM Radar and a standard-set altimeter show it; below FL180 the true altitude; true altitude when `qnh_i_hg` is missing (older recordings).
   - `controllers[]` – `cid`, `callsign` (e.g. `MEM_22_CTR`), `facility` (6 = CTR), `frequency`. Used for staffing and My Position (§5.12).
   - `prefiles[]` – ignore in v1.
 - **Server time:** the live clock (§4.1) uses server-corrected time so a wrong PC clock doesn't break staleness or countdowns. ⚠ The HTTP `Date` header is **not readable** from JS (verified: no `Access-Control-Expose-Headers`, and `Date` is not CORS-safelisted). Also the CDN serves copies up to ~15 s old (`Age:` header observed at 11). So estimate the offset from `update_timestamp` only: per poll compute `sample = update_timestamp − localReceiveTime`; `serverOffset = max(sample)` over the last 20 polls (the freshest copy has the least CDN age, so the max is the tightest bound). Expected error: a few seconds, acceptable for 60 s staleness and MM:SS countdowns. Note: the `DATA Ns` indicator shows `clock.now() − update_timestamp`.
@@ -262,7 +262,8 @@ if no relevant crossing within horizon → not listed
 - **Antimeridian:** before geometry ops, shift longitudes into a continuous range around the selected airspace's center (e.g. PAZA: map to −250…−110 or 110…250 consistently for the airspace, its neighbors, and pilots). PAZA and PHZH MUST be selectable, and PAZA exits across 180° MUST resolve to the Russian FIR, not `UNK`.
 
 ### 5.6 Arrivals and departures
-- If `flight_plan.arrival` is an airport **inside** the selected airspace and the aircraft is inside: mark `ARR`. In RTE mode the path already ends at the destination, so a straight-line "exit" that the route doesn't make won't appear. In DR mode, still show the predicted exit but **suppress the exit alert** unless `distance(pos, arrivalAirport) > distance(pos, exitPoint) + ARR_SUPPRESS_MARGIN_NM`.
+- If `flight_plan.arrival` is an airport **inside** the selected airspace and the aircraft is inside: mark `ARR`. An ARR aircraft has **no exit** and never exit-alerts; instead it carries an **ETA** to the airport and is always listed in OUTBOUND (whatever the horizon), sorted with the exits. OUTBOUND shows the airport in TO, DIR blank, and the ETA as Zulu time (`1742Z`) with the countdown in the tooltip; the scope datablock shows `ETA 1742Z`.
+- ETA = distance / ground speed + `ARR_APPROACH_PAD_S`, anchored to the position report like exits. Distance runs along the predicted path to its point closest to the airport, then direct: an RTE path that ends at the airport gives the route distance; a path cut short by the horizon, or a DR path, is completed with the straight line.
 - Aircraft that depart inside the airspace appear automatically once `gs ≥ 40`.
 
 ### 5.7 Altitude filter (settings)
@@ -351,15 +352,15 @@ For each aircraft in (or predicted to enter) the selected airspace, compute **oc
 
 ### 6.1 State machine per aircraft (in `alerts.ts`)
 ```
-NONE ──(remaining ≤ EXIT_ALERT_S [120], not CLP, not ARR-suppressed)──► ACTIVE  (tone once, start flash)
+NONE ──(remaining ≤ EXIT_ALERT_S [120], not CLP, not ARR)──► ACTIVE  (tone once, start flash)
 ACTIVE ──(user acknowledges: click row or press key)──► ACKED (steady highlight, no flash, no sound)
 ACTIVE|ACKED ──(aircraft exits: inside becomes false)──► EXITED (show "EXITED ZID" for 30 s) ──► removed
 ACTIVE|ACKED ──(remaining > EXIT_ALERT_S + ALERT_REARM_MARGIN_S, OR no exit predicted within horizon,
-               OR becomes CLP/ARR-suppressed)──► NONE (re-armable)
+               OR becomes CLP/ARR)──► NONE (re-armable)
 ANY ──(aircraft dropped: disconnected, stale, or GS < MIN_GS_KT)──► removed (no sound)
 ```
 - **Hysteresis is required**: the 30 s re-arm margin prevents flapping around 2:00.
-- **Staffing does not change alerting** (owner decision): an exit into an unstaffed neighbor alerts exactly like a staffed one; only the display dims the `TO` facility and omits the controller/frequency.
+- **Staffed exits alert in two stages** (owner decision, 2026-09-28; replaces "staffing does not change alerting"): when the facility an aircraft exits into has a controller online, the alert goes ACTIVE at `HANDOFF_ALERT_S` (240 s) as **HANDOFF** (orange flash: hand the tag off to the next sector, `HANDOFF KC_12_CTR 127.900`), then ACTIVE again with a tone at `XFER_COMM_S` (60 s) as **XFER COMM** (yellow flash, `XFER COMM KC_12_CTR 127.900`), acknowledged separately. An exit into an unstaffed neighbor keeps the single-stage alert above at `EXIT_ALERT_S`, shown with `TERM CTL`, and the display dims the `TO` facility. Entry alerts are never staged. If staffing changes mid-alert the stage follows it: a logon turns an ALERT into a new ACTIVE HANDOFF; a logoff relabels it ALERT (dropped if beyond `EXIT_ALERT_S` + margin).
 - An aircraft alerts **at most once per exit event** (an exit event ends at EXITED or NONE).
 - **Countdown past zero:** if remaining reaches 0 but the next snapshot still shows the aircraft inside, display `00:00` (flashing) — never negative — until the next snapshot resolves it.
 - **Silent priming:** on page load, airspace switch, and replay start, the first evaluation puts qualifying aircraft straight into ACTIVE **without sound** (visual only). Otherwise a switch fires a burst of tones.
@@ -464,12 +465,14 @@ HORIZON_MIN = 30              // user-selectable 10/20/30/60
 MAX_GS_KT = 750               // prefilter bound only
 PATH_STEP_NM = 2
 EXIT_ALERT_S = 120
+HANDOFF_ALERT_S = 240
+XFER_COMM_S = 60
 ALERT_REARM_MARGIN_S = 30
 CLIP_REENTRY_S = 180
 EXITED_DISPLAY_S = 30
 ENTRY_ALERT_ENABLED = false
 ENTRY_ALERT_S = 120
-ARR_SUPPRESS_MARGIN_NM = 20
+ARR_APPROACH_PAD_S = 300
 TURN_THRESHOLD_DEG = 10
 ROUTE_CONFORM_NM = 5
 ROUTE_CONFORM_DEG = 30

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="noindex" />
+    <title>Access Admin · Airspace Monitor</title>
+    <link rel="icon" type="image/svg+xml" href="/_vam/logo.svg" />
+    <link rel="stylesheet" href="/_vam/style.css" />
+    <script type="module" src="/_vam/admin.js"></script>
+  </head>
+  <body>
+    <main class="admin">
+      <header>
+        <h1>ACCESS ADMIN</h1>
+        <span>
+          <span id="who"></span>
+          <a href="/">LIVE SITE</a>
+          <a href="/dev/">DEVELOPMENT SITE</a>
+          <form method="post" action="/auth/logout?return=%2F">
+            <button type="submit">SIGN OUT</button>
+          </form>
+        </span>
+      </header>
+      <p id="info" class="dim">LOADING…</p>
+      <div id="pages"></div>
+      <div class="admin-actions" hidden id="actions">
+        <button type="button" id="save" disabled>SAVE CHANGES</button>
+        <button type="button" id="discard">DISCARD</button>
+        <span id="dirty" class="caution" hidden>UNSAVED CHANGES</span>
+        <span id="status" role="status"></span>
+      </div>
+    </main>
+  </body>
+</html>

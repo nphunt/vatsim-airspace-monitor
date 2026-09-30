@@ -1,6 +1,8 @@
 // Messages between the main thread and the engine worker (§4.3).
+import type { AirportTraffic } from "../core/airportTraffic";
 import type { AlertEntry } from "../core/alerts";
 import type { MyPositionStatus } from "../core/myPosition";
+import type { NeighborStatus } from "../core/neighbors";
 import type { FeedStatus } from "../data/feed";
 import type { PredictionSet } from "../data/types";
 import type { ReplayStatus } from "./replay";
@@ -13,6 +15,8 @@ export interface InitMessage {
    * (PUBLISHING_PLAN §2.3), so the main thread passes this explicitly.
    */
   dataBaseUrl: string;
+  /** Absolute backend API base ending in "/", or absent to poll VATSIM directly. */
+  apiBaseUrl?: string;
   config: EngineConfig;
   /** Dev-only replay (§9.2): absolute URL of the recording and the starting rate. */
   replay?: { baseUrl: string; rate: number };
@@ -28,6 +32,17 @@ export interface EngineConfig {
   repeatTone: boolean;
   /** Entry alerts (§6.1, default off). */
   entryAlerts: boolean;
+  /** LOAD window open: extend paths to the load horizon and compute the forecast (§5.2). */
+  loadOpen: boolean;
+  /** SCOPE window open: collect scope targets with each recompute (§7.5). */
+  scopeOpen: boolean;
+  /** Alert this many seconds before a predicted exit/entry (§6.1, default 120). */
+  alertThresholdS: number;
+  /** Altitude filter (§5.7), hundreds of feet; null = no bound. */
+  altFloor: number | null;
+  altCeiling: number | null;
+  /** CIDs whose datablock is closed: their alerts come up acknowledged, with no tone. */
+  closedCids: number[];
 }
 
 /** Select the airspace (id "KZME", key, or label "ZME"), or null for none. Recomputes immediately (§4.2). */
@@ -52,7 +67,18 @@ export interface AckMessage {
   cid: number | null;
 }
 
-export type ToEngine = InitMessage | SelectMessage | ConfigMessage | ReplayRateMessage | AckMessage;
+/**
+ * Idle stop (PUBLISHING_PLAN §4): stop polling the feed, or resume. While paused the
+ * predictions and alerts are cleared, so nothing counts down on stale data; resuming polls
+ * at once and primes alerts silently, like a page load.
+ */
+export interface PauseMessage {
+  type: "pause";
+  paused: boolean;
+}
+
+export type ToEngine =
+  InitMessage | SelectMessage | ConfigMessage | ReplayRateMessage | AckMessage | PauseMessage;
 
 export interface SelectableAirspace {
   key: string;
@@ -101,6 +127,8 @@ export interface StatusMessage {
   myPosition: MyPositionStatus | null;
   /** Set when My Position just auto-selected this airspace key. */
   autoSelected: string | null;
+  /** Closed CIDs no longer in the feed (disconnected): the main thread forgets them. */
+  closedGone: number[];
 }
 
 export interface ErrorMessage {
@@ -131,6 +159,22 @@ export interface PredictionsMessage {
   set: PredictionSet | null;
 }
 
+/**
+ * Facilities around the selected airspace and who to hand off to (NEIGHBORS window).
+ * Posted on switch and per new snapshot; empty with airspaceKey null when none is selected.
+ */
+export interface NeighborsMessage {
+  type: "neighbors";
+  airspaceKey: string | null;
+  neighbors: NeighborStatus[];
+}
+
+/** Airports inside the selected airspace with ground or inbound traffic (AIRPORTS window). */
+export interface AirportsMessage {
+  type: "airports";
+  airports: AirportTraffic[];
+}
+
 export type FromEngine =
   | ReadyMessage
   | PollMessage
@@ -139,4 +183,6 @@ export type FromEngine =
   | ErrorMessage
   | PredictionsMessage
   | AlertsMessage
-  | NavMessage;
+  | NavMessage
+  | NeighborsMessage
+  | AirportsMessage;

@@ -56,15 +56,21 @@ function run(snapshots: FeedSnapshot[], id: string) {
     const nextT = snapshots[i + 1]?.updateTimestamp ?? now0 + 15_000;
 
     for (let now = now0; now < nextT; now += 1000) {
-      const before = new Map(machine.list().map((e) => [e.key, e.state]));
+      const before = new Map(machine.list().map((e) => [e.key, e]));
       const r = machine.evaluate({ set, eligibleCids: eligible, now });
       evaluations += 1;
       if (r.tone) tones += 1;
       if (evaluations === 1 && r.tone) firstEvaluationTone = true;
       for (const e of machine.list()) {
-        const was = before.get(e.key);
-        if (e.state === "ACTIVE" && (was === undefined || was === "EXITED")) {
-          activations.set(e.key, (activations.get(e.key) ?? 0) + 1);
+        const prev = before.get(e.key);
+        const was = prev?.state;
+        // A staffed exit activates once per stage (HANDOFF, then XFER), each with a tone.
+        const stageKey = `${e.key}:${e.stage}`;
+        if (
+          e.state === "ACTIVE" &&
+          (was === undefined || was === "EXITED" || prev!.stage !== e.stage)
+        ) {
+          activations.set(stageKey, (activations.get(stageKey) ?? 0) + 1);
           totalActivations += 1;
           predictedAtActivation.set(e.key, e.other.label);
         }
@@ -81,7 +87,9 @@ function run(snapshots: FeedSnapshot[], id: string) {
       }
       // An alert that went back to NONE may legitimately re-arm later; forget its count.
       for (const [key] of before) {
-        if (!machine.list().some((e) => e.key === key)) activations.delete(key);
+        if (!machine.list().some((e) => e.key === key)) {
+          for (const k of activations.keys()) if (k.startsWith(`${key}:`)) activations.delete(k);
+        }
       }
     }
   }
@@ -92,7 +100,7 @@ describe.runIf(recording)("alerts on the replay fixture (M5 acceptance)", () => 
   const snapshots = recording ? loadRecording(recording) : [];
   const results = registry.getSelectableAirspaces().map((a) => ({ a, r: run(snapshots, a.id) }));
 
-  it("fires each exit alert exactly once", () => {
+  it("fires each exit alert (each stage of a handoff) exactly once", () => {
     for (const { a, r } of results) {
       for (const [key, n] of r.activations) expect(n, `${a.label} ${key}`).toBe(1);
     }

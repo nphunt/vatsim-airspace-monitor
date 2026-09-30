@@ -1,3 +1,4 @@
+import { apiBaseUrl } from "../data/paths";
 import { engineConfig, setEngineSender, useStore } from "../store/store";
 import type { FromEngine, InitMessage, ToEngine } from "./protocol";
 
@@ -33,6 +34,9 @@ export function startEngine(): () => void {
   post({
     type: "init",
     dataBaseUrl: new URL(import.meta.env.BASE_URL, window.location.href).href,
+    apiBaseUrl:
+      apiBaseUrl(import.meta.env.VITE_API_BASE, window.location.href, import.meta.env.DEV) ??
+      undefined,
     config: engineConfig(settings),
     replay: replayFromUrl(),
   });
@@ -48,6 +52,16 @@ export function startEngine(): () => void {
         ms: p.durationMs,
       })),
     predictions: () => useStore.getState().engine.predictions,
+    // For the CI sub-path smoke test (scripts/smoke.mjs).
+    status: () => {
+      const e = useStore.getState().engine;
+      return {
+        selectable: e.ready?.selectableCount ?? 0,
+        nav: e.nav,
+        errors: e.errors,
+        feedUrl: e.feed?.activeUrl ?? null,
+      };
+    },
   };
 
   return () => {

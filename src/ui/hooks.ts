@@ -43,6 +43,7 @@ export function useElementWidth(ref: RefObject<HTMLElement | null>): number {
 /** Width of one character cell of the list font, px (for column fitting). */
 export function useCharWidth(ref: RefObject<HTMLElement | null>): number {
   const [ch, setCh] = useState(8);
+  const fontSizePx = useStore((s) => s.settings.fontSizePx); // FONT changes the cell width
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -61,6 +62,6 @@ export function useCharWidth(ref: RefObject<HTMLElement | null>): number {
     return () => {
       cancelled = true;
     };
-  }, [ref]);
+  }, [ref, fontSizePx]);
   return ch;
 }

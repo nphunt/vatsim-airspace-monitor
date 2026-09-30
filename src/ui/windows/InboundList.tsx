@@ -1,7 +1,8 @@
 import { useRef } from "react";
 import type { Prediction } from "../../data/types";
 import { useStore } from "../../store/store";
-import { formatCountdown, listColumns } from "../format";
+import { alertClass, formatCrossing, listColumns, rowClass } from "../format";
+import { onAircraftContextMenu, onListBackgroundClick, useClosed } from "../closedAircraft";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
@@ -31,16 +32,23 @@ export function InboundList() {
   const now = useEngineNow();
   const { rows, total } = useInboundRows(now);
   const predictions = useStore((s) => s.engine.predictions);
+  const paused = useStore((s) => s.paused);
   const horizonMin = useStore((s) => s.settings.horizonMin);
   const layout = listColumns(width / ch, "inbound", width);
+  const alerts = useStore((s) => s.engine.alerts);
+  const selectedCid = useStore((s) => s.selection?.cid ?? null);
+  const selectAircraft = useStore((s) => s.selectAircraft);
+  const closed = useClosed();
+  // Entry alerts (§6.1, optional) style the row like exit alerts do in OUTBOUND.
+  const alertByCid = new Map(alerts.filter((a) => a.kind === "entry").map((a) => [a.cid, a]));
 
   return (
-    <div className="eram-list-wrap" ref={ref}>
+    <div className="eram-list-wrap" ref={ref} onClick={onListBackgroundClick}>
       {predictions === null ? (
-        <p className="eram-empty">NO AIRSPACE SELECTED</p>
+        <p className="eram-empty">{paused ? "PAUSED" : "NO AIRSPACE SELECTED"}</p>
       ) : (
         <>
-          <table className="eram-list">
+          <table className="eram-list selectable">
             <thead>
               <tr>
                 {layout.columns.map((c) => (
@@ -54,13 +62,23 @@ export function InboundList() {
               {rows.map((p) => {
                 const entry = p.entry!;
                 return (
-                  <tr key={p.cid} className={entry.clip ? "dim" : undefined}>
+                  <tr
+                    key={p.cid}
+                    className={rowClass(
+                      closed.has(p.cid)
+                        ? "dim"
+                        : (alertClass(alertByCid.get(p.cid)) ?? (entry.clip ? "dim" : undefined)),
+                      p.cid === selectedCid,
+                    )}
+                    onClick={() => selectAircraft(p.cid, window.innerWidth)}
+                    onContextMenu={(e) => onAircraftContextMenu(e, p.cid, p.callsign)}
+                  >
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>
                         {commonCell(c, p, {
                           now,
                           facility: <FacilityCell f={entry.from} />,
-                          time: formatCountdown(entry.t - now),
+                          time: formatCrossing(entry.t, now),
                           clip: entry.clip,
                           compact: layout.compactFlags,
                         })}

@@ -30,7 +30,7 @@ function cellKey(col: number, row: number, cols: number): number {
 }
 
 export function prepareAirspace(
-  airspace: Airspace,
+  airspace: Pick<Airspace, "key" | "polygons" | "labelLon">,
   centerLon = airspace.labelLon,
 ): PreparedAirspace {
   const polygons: Float64Array[][] = airspace.polygons.map((poly: Polygon) =>

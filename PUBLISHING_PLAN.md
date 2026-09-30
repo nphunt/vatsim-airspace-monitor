@@ -20,7 +20,7 @@
 
 - URL: `https://nphunt.github.io/vatsim-airspace-monitor/` (project site; currently 404, so Pages is not yet enabled).
 - Source: GitHub Actions deployment (not a `gh-pages` branch). Settings → Pages → **Build and deployment → Source: GitHub Actions**.
-- `main` is production. Every merge to `main` deploys. No separate staging site in v1; the PR CI build (§3.1) plus `npm run preview` is the pre-merge check.
+- `main` is production. Every merge to `main` deploys. **Staging (added after v1.1):** `development` is published at `/dev/` in the same Pages site (one site per repo): `deploy.yml` builds both branches and publishes them together. The dev build shows a DEVELOPMENT BUILD notice and uses its own `localStorage` key (`vam-dev:v1:settings`), since it shares the origin with the live site.
 - Custom domain: not in v1. **Note:** changing the origin later (custom domain) orphans every user's `localStorage` settings, so decide before announcing the URL to VATUSA.
 
 ---
@@ -96,7 +96,7 @@ All verified on 2026-09-27 from a foreign HTTPS origin unless noted:
 | Own `data/**` on github.io | same-origin | Cache-busted by build id (§2.4). |
 | vNAS data API (deferred) | not verified | Verify from github.io before Phase 2. |
 
-**Bandwidth to VATSIM:** each open tab pulls the ~2.4 MB feed every 15 s (~0.5 GB/day per tab left open). For a VATUSA-wide audience this is the main load on VATSIM's infrastructure. Before announcing: (1) confirm VATSIM's data-feed usage and attribution terms (implementation plan M9); (2) do **not** pause on visibility (the app must keep polling while covered by CRC); instead add an **idle stop**: if there has been no user input for 4 h, pause polling and show `PAUSED — CLICK TO RESUME`. Add this as a setting (default on).
+**Bandwidth to VATSIM:** each open tab pulls the ~2.4 MB feed about once per 15 s update (~0.5 GB/day per tab left open), plus a cheap conditional retry when a poll comes early. For a VATUSA-wide audience this is the main load on VATSIM's infrastructure. Before announcing: (1) confirm VATSIM's data-feed usage and attribution terms (implementation plan M9); (2) do **not** pause on visibility (the app must keep polling while covered by CRC); instead add an **idle stop**: if there has been no user input for 4 h, pause polling and show `PAUSED — CLICK TO RESUME`. Add this as a setting (default on).
 
 ---
 
@@ -172,7 +172,7 @@ myPosition(feed, cidSetting):
 - [ ] The worker loads its data files under `/vatsim-airspace-monitor/data/...?v=<sha>`.
 - [ ] My Position: owner enters their CID, logs on as `MEM_xx_CTR` → auto-selects ZME; toolbar shows `ON MEM_xx_CTR`. Repeat with a friend on a sub-area/relief callsign if possible (`MIA_N…`, `KC_…`, `ANC_…`).
 - [ ] Audio device picker lists devices and `TEST` plays on the chosen headset from the github.io origin.
-- [ ] Cover the published page with CRC for 10 min: polls continue ~15 s (implementation plan §9.3).
+- [ ] Cover the published page with CRC for 10 min: polls continue ~15 s apart (implementation plan §9.3).
 - [ ] About shows build sha, VATSpy tag, AIRAC cycle, VATSIM/VATSpy/FAA attribution, "not for real-world navigation".
 - [ ] `refresh-data.yml` run once via `workflow_dispatch`; it opened a PR (or reported no changes) and CI ran on that PR.
 - [ ] README (non-developer section) links the Pages URL.

@@ -1,4 +1,4 @@
-import { DATA_STALE_S, WORKER_WATCHDOG_S } from "../config";
+import { DATA_STALE_S, IDLE_STOP_MIN, WORKER_WATCHDOG_S } from "../config";
 
 /**
  * Main-thread watchdog (§4.3): the worker ticks every second, so no message for more than
@@ -38,4 +38,22 @@ export function dataIndicator(
     text: `DATA ${ageS}s`,
     level: stalled || ageS > DATA_STALE_S ? "alert" : "normal",
   };
+}
+
+/** NASR cycles change over at 0901Z on the effective date (AIRAC). */
+const AIRAC_CHANGEOVER_UTC = "T09:01:00Z";
+
+/**
+ * Toolbar `NAV DATA EXPIRED` (§3.3, §7.2): the engine clock is past the cycle end
+ * (`expires` is the next cycle's effective date, YYYY-MM-DD). Unknown dates never flag.
+ */
+export function isNavExpired(now: number, expires: string | null): boolean {
+  if (!expires || !/^\d{4}-\d{2}-\d{2}$/.test(expires)) return false;
+  const end = Date.parse(`${expires}${AIRAC_CHANGEOVER_UTC}`);
+  return Number.isFinite(end) && now >= end;
+}
+
+/** Idle stop (PUBLISHING_PLAN §4): no user input for IDLE_STOP_MIN. Local ms. */
+export function isIdle(localNow: number, lastInputAt: number, idleMin = IDLE_STOP_MIN): boolean {
+  return localNow - lastInputAt >= idleMin * 60_000;
 }

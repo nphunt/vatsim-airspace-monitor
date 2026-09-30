@@ -60,6 +60,11 @@ export class TrackStore {
     }
   }
 
+  /** Forget all history (after an idle-stop pause: old fixes would skew derived tracks). */
+  clear(): void {
+    this.tracks.clear();
+  }
+
   get(cid: number): TrackHistory | undefined {
     return this.tracks.get(cid);
   }

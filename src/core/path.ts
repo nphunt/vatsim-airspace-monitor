@@ -1,5 +1,12 @@
 import { PATH_STEP_NM } from "../config";
-import { destination, distanceNm, initialBearing, normalizeLonAround, type LatLon } from "./geo";
+import {
+  angleDiff,
+  destination,
+  distanceNm,
+  initialBearing,
+  normalizeLonAround,
+  type LatLon,
+} from "./geo";
 
 export type PathMode = "RTE" | "DR";
 
@@ -136,4 +143,27 @@ export function courseAt(path: PredictedPath, d: number): number {
   if (path.n < 2) return 0;
   const i = segmentIndex(path, d);
   return initialBearing(path.lat[i]!, path.lon[i]!, path.lat[i + 1]!, path.lon[i + 1]!);
+}
+
+/** Course change (deg) at a vertex above which it is kept as a turn point. */
+const TURN_POINT_DEG = 1;
+
+/**
+ * The path reduced to its start, turn points and end, flat [lat, lon, ...] (SCOPE route
+ * ahead, §7.5). A route path is densified great-circle legs, so between waypoints the
+ * course changes only by fractions of a degree per step.
+ */
+export function turnPoints(path: PredictedPath): number[] {
+  const out = [path.lat[0]!, path.lon[0]!];
+  let prev: number | null = null;
+  for (let i = 0; i + 1 < path.n; i++) {
+    if (path.dist[i + 1]! - path.dist[i]! <= 0) continue;
+    const c = initialBearing(path.lat[i]!, path.lon[i]!, path.lat[i + 1]!, path.lon[i + 1]!);
+    if (prev !== null && Math.abs(angleDiff(c, prev)) > TURN_POINT_DEG) {
+      out.push(path.lat[i]!, path.lon[i]!);
+    }
+    prev = c;
+  }
+  if (path.n > 1) out.push(path.lat[path.n - 1]!, path.lon[path.n - 1]!);
+  return out;
 }

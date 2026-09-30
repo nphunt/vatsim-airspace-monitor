@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { AlertEntry } from "../core/alerts";
 import type { FeedStatus } from "../data/feed";
+import type { Prediction, PredictionSet } from "../data/types";
 import type { ToEngine } from "../worker/protocol";
 import { engineConfig, engineNow, setEngineSender, useStore } from "./store";
 
@@ -10,6 +12,7 @@ const feed: FeedStatus = {
   lastError: null,
   nextPollAt: null,
   polls: [],
+  activeUrl: null,
 };
 
 let sent: ToEngine[] = [];
@@ -44,12 +47,12 @@ describe("store", () => {
     );
   });
 
-  it("selecting sends to the engine, persists, and clears the exit filter", () => {
+  it("the airspace is fixed to ZME: selecting another does nothing", () => {
     useStore.getState().setExitFilter("ZKC");
-    useStore.getState().selectAirspace("KZME#dom");
-    expect(sent).toEqual([{ type: "select", airspace: "KZME#dom" }]);
+    useStore.getState().selectAirspace("KZNY#dom");
+    expect(sent).toEqual([]);
     expect(useStore.getState().settings.selectedAirspace).toBe("KZME#dom");
-    expect(useStore.getState().exitFilter).toBeNull();
+    expect(useStore.getState().exitFilter).toBe("ZKC");
   });
 
   it("an auto-select from My Position updates the saved selection", () => {
@@ -65,6 +68,7 @@ describe("store", () => {
           selectable: true,
         },
         autoSelected: "KZME#dom",
+        closedGone: [],
       },
       1,
     );
@@ -72,11 +76,122 @@ describe("store", () => {
     expect(useStore.getState().engine.staffed.has("KZME#dom")).toBe(true);
   });
 
+  it("closing an aircraft persists, reaches the engine, and reopening undoes it", () => {
+    useStore.getState().setClosed(7, true);
+    expect(useStore.getState().settings.closed).toEqual([7]);
+    const last = sent[sent.length - 1];
+    expect(last).toMatchObject({ type: "config", config: { closedCids: [7] } });
+    useStore.getState().setClosed(7, true); // no duplicates
+    expect(useStore.getState().settings.closed).toEqual([7]);
+    useStore.getState().setClosed(7, false);
+    expect(useStore.getState().settings.closed).toEqual([]);
+  });
+
+  it("closing the selected aircraft deselects it; closing another one doesn't", () => {
+    useStore.getState().selectAircraft(7, 1200);
+    useStore.getState().setClosed(8, true);
+    expect(useStore.getState().selection?.cid).toBe(7);
+    useStore.getState().setClosed(7, true);
+    expect(useStore.getState().selection).toBeNull();
+    expect(useStore.getState().settings.windows.fpr.open).toBe(false);
+    useStore.getState().setClosed(7, false);
+    useStore.getState().setClosed(8, false);
+  });
+
+  it("forgets closed aircraft the engine reports gone from the feed", () => {
+    useStore.getState().setClosed(7, true);
+    useStore.getState().setClosed(8, true);
+    useStore
+      .getState()
+      .engineMessage(
+        { type: "status", staffed: [], myPosition: null, autoSelected: null, closedGone: [7] },
+        1,
+      );
+    expect(useStore.getState().settings.closed).toEqual([8]);
+    useStore.getState().setClosed(8, false);
+  });
+
+  it("deselecting clears the selection and closes the readout", () => {
+    const s = useStore.getState();
+    s.selectAircraft(9, 1200);
+    expect(useStore.getState().settings.windows.fpr.open).toBe(true);
+    useStore.getState().clearSelection();
+    expect(useStore.getState().selection).toBeNull();
+    expect(useStore.getState().settings.windows.fpr.open).toBe(false);
+  });
+
+  it("a row click selects, acks an ACTIVE alert and opens the readout", () => {
+    const p = { cid: 7, callsign: "DAL123" } as Prediction;
+    const set = { outbound: [p], inbound: [], resident: [] } as unknown as PredictionSet;
+    const s = useStore.getState();
+    s.setWindows({ ...s.settings.windows, fpr: { ...s.settings.windows.fpr, open: false } });
+    s.engineMessage({ type: "predictions", set }, 1);
+    s.engineMessage(
+      { type: "alerts", alerts: [{ cid: 7, state: "ACTIVE" } as AlertEntry], tone: false },
+      2,
+    );
+    useStore.getState().selectAircraft(7, 1200);
+    expect(sent).toEqual([{ type: "ack", cid: 7 }]);
+    expect(useStore.getState().selection).toEqual({ cid: 7, last: p });
+    expect(useStore.getState().settings.windows.fpr.open).toBe(true);
+
+    // It follows the aircraft, and keeps the last data when it drops out of the lists.
+    const moved = { ...p, callsign: "DAL123", altitude: 1 };
+    useStore
+      .getState()
+      .engineMessage({ type: "predictions", set: { ...set, outbound: [moved] } }, 3);
+    expect(useStore.getState().selection?.last).toBe(moved);
+    useStore.getState().engineMessage({ type: "predictions", set: { ...set, outbound: [] } }, 4);
+    expect(useStore.getState().selection).toEqual({ cid: 7, last: moved });
+
+    // No ACTIVE alert: selecting sends nothing.
+    sent = [];
+    useStore.getState().engineMessage({ type: "alerts", alerts: [], tone: false }, 5);
+    useStore.getState().selectAircraft(7, 1200);
+    expect(sent).toEqual([]);
+  });
+
+  it("keeps the nav data status", () => {
+    useStore
+      .getState()
+      .engineMessage({ type: "nav", cycle: "2026-09-03", expires: "2026-10-01", error: null }, 1);
+    expect(useStore.getState().engine.nav).toEqual({
+      cycle: "2026-09-03",
+      expires: "2026-10-01",
+      error: null,
+    });
+  });
+
   it("config changes go to the engine with the CID parsed", () => {
     useStore.getState().setMyCid(" 1234567 ");
     expect(sent.at(-1)).toMatchObject({ type: "config", config: { myCid: 1234567 } });
     useStore.getState().setMyCid("abc");
     expect(sent.at(-1)).toMatchObject({ type: "config", config: { myCid: null } });
+  });
+
+  it("opening and closing LOAD tells the engine; other window changes don't", () => {
+    const st = useStore.getState();
+    st.patchWindow("load", { open: false });
+    sent = [];
+    st.patchWindow("load", { open: true });
+    expect(sent).toEqual([{ type: "config", config: expect.objectContaining({ loadOpen: true }) }]);
+    st.patchWindow("load", { x: 100 });
+    st.patchWindow("inbound", { open: true });
+    expect(sent).toHaveLength(1);
+    st.patchWindow("load", { open: false });
+    expect(sent.at(-1)).toMatchObject({ type: "config", config: { loadOpen: false } });
+  });
+
+  it("load thresholds are per airspace and validated", () => {
+    const st = useStore.getState();
+    st.setLoadThreshold("KZME#dom", 35);
+    st.setLoadThreshold("KZME#dom", 0);
+    st.setLoadThreshold("KZME#dom", 2.5);
+    st.setLoadThreshold("KZNY#dom", 5000);
+    expect(useStore.getState().settings.loadThresholds).toMatchObject({
+      "KZME#dom": 35,
+      "KZNY#dom": 999,
+    });
   });
 });
 

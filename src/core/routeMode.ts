@@ -154,6 +154,11 @@ export class RouteModeTracker {
   }
 
   /** Evaluate conformance for every eligible-for-tracking pilot in a new snapshot. */
+  /** Forget all RTE/DR state (after an idle-stop pause). */
+  clear(): void {
+    this.states.clear();
+  }
+
   update(pilots: readonly VatsimPilot[], tracks: TrackStore): void {
     const seen = new Set<number>();
     for (const p of pilots) {

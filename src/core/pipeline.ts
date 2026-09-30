@@ -1,10 +1,12 @@
-import { ARR_SUPPRESS_MARGIN_NM, MAX_GS_KT, MIN_GS_KT, STALE_PILOT_S } from "../config";
+import { ARR_APPROACH_PAD_S, MAX_GS_KT, MIN_GS_KT, STALE_PILOT_S } from "../config";
 import type {
   Airspace,
   BBox,
   FeedSnapshot,
   Prediction,
   PredictionSet,
+  ScopeTarget,
+  VatsimFlightPlan,
   VatsimPilot,
 } from "../data/types";
 import { containsRaw, prepareAirspace, type PreparedAirspace } from "./airspaceGeom";
@@ -16,14 +18,34 @@ import {
   type FacilityIndex,
   type Staffing,
 } from "./facilityLookup";
+import { buildTraconStaffing, findTraconHandoff, type TraconSet } from "./tracons";
 import { compass8, distanceNm, normalizeLonAround } from "./geo";
-import { buildDrPath, courseAt, pointAt } from "./path";
-import { summarizeCrossings, timeAlong } from "./predict";
+import {
+  buildLoad,
+  capIntervals,
+  occupancyFromCrossings,
+  type AltitudeFilter,
+  type LoadEntry,
+} from "./load";
+import { buildDrPath, courseAt, pathLength, pointAt, turnPoints, type PredictedPath } from "./path";
+import { findCrossings, summarizeCrossings, timeAlong } from "./predict";
 import type { RouteModeTracker } from "./routeMode";
 import { deriveTrack, parseFiledAltitudeFt, type TrackStore } from "./track";
 
 /** Route text kept on each prediction for the flight plan readout. */
 export const ROUTE_TEXT_MAX = 400;
+
+/** Stand-in for an aircraft with no filed flight plan: empty fields, so it flies DR. */
+const NO_PLAN: VatsimFlightPlan = {
+  flightRules: "",
+  aircraftFaa: "",
+  aircraftShort: "",
+  departure: "",
+  arrival: "",
+  altitude: "",
+  route: "",
+  assignedTransponder: "",
+};
 
 export type AirportIndex = Readonly<Record<string, readonly [number, number]>>;
 
@@ -33,14 +55,11 @@ export interface Registry extends FacilityIndex {
 
 /**
  * Pilots that can appear in lists, alerts and load (§5.1): moving (>= MIN_GS_KT), not stale
- * against the clock, and with a filed flight plan (IFR, or VFR with a plan).
+ * against the clock. Aircraft without a flight plan are included but never alert.
  */
 export function eligiblePilots(pilots: readonly VatsimPilot[], now: number): VatsimPilot[] {
   return pilots.filter(
-    (p) =>
-      p.groundspeed >= MIN_GS_KT &&
-      now - p.lastUpdated <= STALE_PILOT_S * 1000 &&
-      p.flightPlan !== null,
+    (p) => p.groundspeed >= MIN_GS_KT && now - p.lastUpdated <= STALE_PILOT_S * 1000,
   );
 }
 
@@ -55,6 +74,29 @@ export function prefilterBox(prepared: PreparedAirspace, horizonMin: number): BB
   const poleLat = Math.min(89, Math.max(Math.abs(minY), Math.abs(maxY)));
   const lonPad = Math.min(360, nm / (60 * Math.cos((poleLat * Math.PI) / 180)));
   return [minX - lonPad, minY - latPad, maxX + lonPad, maxY + latPad];
+}
+
+/**
+ * Distance to an arrival airport (§5.6): along the path to its vertex closest to the
+ * airport, then direct. An RTE path ending at the airport gives the route distance; one cut
+ * short by the horizon, or a DR path, is completed with the straight line from there.
+ */
+export function distanceToAirportNm(path: PredictedPath, lat: number, lon: number): number {
+  let best = Infinity;
+  let bestI = 0;
+  for (let i = 0; i < path.n; i++) {
+    const d = distanceNm(path.lat[i]!, path.lon[i]!, lat, lon);
+    if (d < best) {
+      best = d;
+      bestI = i;
+    }
+  }
+  return path.dist[bestI]! + best;
+}
+
+/** OUTBOUND sort/filter time: the exit, or the ETA for an arrival. */
+export function outboundTime(p: Prediction): number {
+  return p.eta?.t ?? p.exit!.t;
 }
 
 function inBox(b: BBox, lat: number, lon: number): boolean {
@@ -76,6 +118,8 @@ export interface PipelineInput {
   selected: SelectedAirspace;
   registry: Registry;
   airports: AirportIndex;
+  /** TRACON boundaries for approach handoffs; none = no handoff alerts into approach. */
+  tracons?: TraconSet | null;
   tracks: TrackStore;
   /** Clock time (server-corrected, or replay). */
   now: number;
@@ -83,6 +127,13 @@ export interface PipelineInput {
   horizonMin: number;
   /** Route-following (§5.10); null until nav data loads, then DR only is used. */
   routes?: RouteModeTracker | null;
+  /**
+   * Compute the load forecast (§5.11): only while LOAD is open, when `horizonMin` is
+   * already the load horizon. The altitude filter applies to load only here (§5.7).
+   */
+  load?: { altitude?: AltitudeFilter | null } | null;
+  /** Collect SCOPE targets (§7.5): only while the SCOPE window is open. */
+  scope?: boolean;
   /** Wall-clock timer for stats; injectable for tests. */
   perfNow?: () => number;
 }
@@ -100,12 +151,36 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     registry.getAirspace(k),
   );
 
+  const traconStaffing = input.tracons
+    ? buildTraconStaffing(snapshot.controllers, input.tracons)
+    : null;
+  // Handoff into a staffed approach control before the exit (or landing), for alerts.
+  const traconHandoff = (
+    p: VatsimPilot,
+    path: PredictedPath,
+    beforeNm?: number,
+  ): Prediction["tracon"] =>
+    input.tracons && traconStaffing
+      ? findTraconHandoff(
+          path,
+          p.flightPlan ? airports[p.flightPlan.arrival] : undefined,
+          input.tracons,
+          traconStaffing,
+          prepared.centerLon,
+          airspace.label,
+          p,
+          beforeNm,
+        )
+      : undefined;
+
   const eligible = eligiblePilots(snapshot.pilots, now);
   const box = prefilterBox(prepared, horizonMin);
   const outbound: Prediction[] = [];
   const inbound: Prediction[] = [];
   const resident: Prediction[] = [];
   const insideCids: number[] = [];
+  const loadEntries: LoadEntry[] = [];
+  const scope: ScopeTarget[] | null = input.scope ? [] : null;
   let prefiltered = 0;
 
   for (const p of eligible) {
@@ -117,11 +192,59 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     const path = input.routes
       ? input.routes.pathFor(p, derived.trackDeg, lengthNm, prepared.centerLon)
       : buildDrPath(p, derived.trackDeg, lengthNm, prepared.centerLon);
-    const summary = summarizeCrossings(path, prepared, p.groundspeed);
+    if (scope) {
+      const samples = tracks.get(p.cid)?.samples ?? [];
+      const trail: number[] = [];
+      // Every sample before the current report (the last one is the report itself).
+      for (const s of samples) if (s.t < p.lastUpdated) trail.push(s.lat, s.lon);
+      scope.push({
+        cid: p.cid,
+        callsign: p.callsign,
+        aircraftType: p.flightPlan ? p.flightPlan.aircraftShort || p.flightPlan.aircraftFaa : "",
+        arrival: p.flightPlan?.arrival ?? "",
+        lat: p.lat,
+        lon: p.lon,
+        altitude: p.altitude,
+        trend: derived.trend,
+        vsFpm: derived.vsFpm,
+        filedAltitudeFt: p.flightPlan ? parseFiledAltitudeFt(p.flightPlan.altitude) : null,
+        groundspeed: p.groundspeed,
+        trackDeg: derived.trackDeg,
+        lastUpdated: p.lastUpdated,
+        trail,
+        routeAhead: path.mode === "RTE" ? turnPoints(path) : null,
+      });
+    }
+    const crossings = findCrossings(path, prepared);
+    const summary = summarizeCrossings(path, prepared, p.groundspeed, crossings);
     if (summary.inside) insideCids.push(p.cid);
     if (summary.inside === false && !summary.entry) continue;
 
-    const fp = p.flightPlan!;
+    const fp = p.flightPlan ?? NO_PLAN;
+    if (input.load) {
+      const lenNm = pathLength(path);
+      // A path shorter than asked ended at the destination (RTE): the aircraft lands.
+      let dist = occupancyFromCrossings(summary.inside, crossings, lenNm, lenNm >= lengthNm - 0.5);
+      const apt = airports[fp.arrival];
+      // DR flies straight past a destination inside the airspace; it lands there (§5.6).
+      if (path.mode === "DR" && apt && containsRaw(prepared, apt[0], apt[1])) {
+        dist = capIntervals(dist, distanceNm(p.lat, p.lon, apt[0], apt[1]));
+      }
+      if (dist.length > 0) {
+        loadEntries.push({
+          cid: p.cid,
+          callsign: p.callsign,
+          aircraftType: fp.aircraftShort || fp.aircraftFaa,
+          altitude: p.altitude,
+          mode: path.mode,
+          inside: summary.inside,
+          intervals: dist.map(([a, b]) => [
+            timeAlong(p.lastUpdated, a, p.groundspeed),
+            b === Infinity ? Infinity : timeAlong(p.lastUpdated, b, p.groundspeed),
+          ]),
+        });
+      }
+    }
     const base: Prediction = {
       cid: p.cid,
       callsign: p.callsign,
@@ -144,15 +267,26 @@ export function computePredictions(input: PipelineInput): PredictionSet {
       squawk: p.transponder,
       assignedSquawk: fp.assignedTransponder,
       vfr: fp.flightRules === "V",
+      noPlan: p.flightPlan === null,
       turning: derived.turning,
       inside: summary.inside,
       arr: false,
-      arrSuppressed: false,
     };
 
     if (summary.inside) {
       const apt = airports[fp.arrival];
       base.arr = apt !== undefined && containsRaw(prepared, apt[0], apt[1]);
+      if (base.arr) {
+        // Landing inside: an ETA replaces the exit, listed whatever the horizon (§5.6).
+        const distNm = distanceToAirportNm(path, apt![0], apt![1]);
+        base.eta = {
+          t: timeAlong(p.lastUpdated, distNm, p.groundspeed) + ARR_APPROACH_PAD_S * 1000,
+          distNm,
+        };
+        base.tracon = traconHandoff(p, path, distNm);
+        outbound.push(base);
+        continue;
+      }
       if (!summary.exit) {
         resident.push(base);
         continue;
@@ -167,12 +301,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
         into: resolveExitInto(path, summary.exit.distNm, airspace.key, registry, staffing),
         clip: summary.exit.clip,
       };
-      // DR can't see the descent into the destination, so a straight-line "exit" past the
-      // airport alerts only if it clearly comes first (§5.6).
-      if (base.arr && apt && path.mode === "DR") {
-        const toApt = distanceNm(p.lat, p.lon, apt[0], apt[1]);
-        base.arrSuppressed = !(toApt > summary.exit.distNm + ARR_SUPPRESS_MARGIN_NM);
-      }
+      base.tracon = traconHandoff(p, path, summary.exit.distNm);
       outbound.push(base);
     } else if (summary.entry) {
       const at = pointAt(path, summary.entry.distNm);
@@ -193,7 +322,7 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     }
   }
 
-  outbound.sort((a, b) => a.exit!.t - b.exit!.t);
+  outbound.sort((a, b) => outboundTime(a) - outboundTime(b));
   inbound.sort((a, b) => a.entry!.t - b.entry!.t);
 
   return {
@@ -205,6 +334,8 @@ export function computePredictions(input: PipelineInput): PredictionSet {
     inbound,
     resident,
     insideCids,
+    load: input.load ? buildLoad(loadEntries, now, { altitude: input.load.altitude }) : null,
+    scope,
     stats: { eligible: eligible.length, prefiltered, ms: perfNow() - started },
   };
 }

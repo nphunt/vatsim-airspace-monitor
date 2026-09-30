@@ -7,22 +7,43 @@ import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
 // GitHub Pages serves a project site from /<repo-name>/ (PUBLISHING_PLAN §2.1).
-// Reading the name from GITHUB_REPOSITORY keeps forks and renames working.
+// Reading the name from GITHUB_REPOSITORY keeps forks and renames working. PAGES_SUBPATH
+// ("dev") puts a build in a folder of the site: the development build at /<repo>/dev/.
 function pagesBase(): string {
   if (!process.env.GITHUB_ACTIONS) return "/";
   const repo = process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "vatsim-airspace-monitor";
-  return `/${repo}/`;
+  const sub = process.env.PAGES_SUBPATH ?? "";
+  if (sub && !/^[a-z0-9-]+$/.test(sub)) throw new Error(`bad PAGES_SUBPATH ${sub}`);
+  return sub ? `/${repo}/${sub}/` : `/${repo}/`;
 }
 
 // Cache-busts public/data/** fetches, which Vite does not hash (PUBLISHING_PLAN §2.4).
+// The checked-out commit first: the deploy builds main and development in one run, so
+// GITHUB_SHA (the commit that triggered it) is not always the one being built.
 function buildId(): string {
-  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
   try {
     return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
       .toString()
       .trim();
   } catch {
-    return "dev";
+    return process.env.GITHUB_SHA?.slice(0, 7) ?? "dev";
+  }
+}
+
+/**
+ * Branch the build was made from: BUILD_BRANCH when the deploy sets it (it builds main
+ * and development in one run), else the pushed branch in CI (the PR's head branch for a
+ * pull request), else the local checkout. Only "main" is a production build.
+ */
+function buildBranch(): string {
+  const ci = process.env.BUILD_BRANCH || process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME;
+  if (ci) return ci;
+  try {
+    return execSync("git rev-parse --abbrev-ref HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return "unknown";
   }
 }
 
@@ -72,17 +93,45 @@ function replayFixtures(): Plugin {
   };
 }
 
+/**
+ * Writes dist/build.json ({ branch, id }): what the build was stamped with. The deploy
+ * checks it against the branch it meant to build before publishing anything.
+ */
+function buildInfo(branch: string, id: string): Plugin {
+  return {
+    name: "vam-build-info",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "build.json",
+        source: `${JSON.stringify({ branch, id })}\n`,
+      });
+    },
+  };
+}
+
+const BRANCH = buildBranch();
+const BUILD_ID = buildId();
+
 export default defineConfig({
   base: pagesBase(),
-  plugins: [react(), replayFixtures()],
+  plugins: [react(), replayFixtures(), buildInfo(BRANCH, BUILD_ID)],
+  server: {
+    // `npm run server` alongside `npm run dev` makes /api/* same-origin in development.
+    proxy: { "/api": "http://127.0.0.1:3001" },
+    // Dev server reachable through an ngrok tunnel (hostnames only, no scheme).
+    allowedHosts: ["amuck-yesterday-cilantro.ngrok-free.dev"],
+  },
   define: {
-    __BUILD_ID__: JSON.stringify(buildId()),
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+    __BUILD_BRANCH__: JSON.stringify(BRANCH),
   },
   worker: {
     format: "es",
   },
   test: {
-    include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "tests/**/*.test.ts", "server/**/*.test.ts"],
     environment: "node",
     // Vitest blanks CSS by default; colors.test.ts reads eram.css?raw.
     css: { include: /eram\.css/ },

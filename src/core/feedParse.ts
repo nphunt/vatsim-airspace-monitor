@@ -1,4 +1,5 @@
 import type { FeedSnapshot, VatsimController, VatsimFlightPlan, VatsimPilot } from "../data/types";
+import { TRANSITION_ALT_FT, STANDARD_ALTIMETER_INHG } from "../config";
 import { parseVatsimTime } from "./time";
 
 type Json = Record<string, unknown>;
@@ -23,6 +24,18 @@ function flightPlan(v: unknown): VatsimFlightPlan | null {
   };
 }
 
+/**
+ * The altitude ATC sees, from the feed's true altitude and the local altimeter setting
+ * (`qnh_i_hg`): at or above FL180 the pressure altitude (1000 ft per inHg from 29.92), as
+ * a flight level reads on the pilot's standard-set altimeter; below it the true altitude,
+ * as an altimeter on the local setting reads. Without a usable setting, true altitude.
+ */
+export function atcAltitude(trueAltFt: number, qnhInHg: unknown): number {
+  if (typeof qnhInHg !== "number" || !(qnhInHg >= 27 && qnhInHg <= 32)) return trueAltFt;
+  const pressureAlt = trueAltFt + (STANDARD_ALTIMETER_INHG - qnhInHg) * 1000;
+  return pressureAlt >= TRANSITION_ALT_FT ? Math.round(pressureAlt) : trueAltFt;
+}
+
 function pilot(v: unknown): VatsimPilot | null {
   if (!isObj(v)) return null;
   const p: VatsimPilot = {
@@ -30,7 +43,7 @@ function pilot(v: unknown): VatsimPilot | null {
     callsign: str(v.callsign),
     lat: num(v.latitude),
     lon: num(v.longitude),
-    altitude: num(v.altitude),
+    altitude: atcAltitude(num(v.altitude), v.qnh_i_hg),
     groundspeed: num(v.groundspeed),
     heading: num(v.heading),
     transponder: str(v.transponder),

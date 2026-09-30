@@ -51,9 +51,9 @@ export function summarizeCrossings(
   path: PredictedPath,
   a: PreparedAirspace,
   gsKt: number,
+  crossings: readonly Crossing[] = findCrossings(path, a),
 ): CrossingSummary {
   const inside = contains(a, path.lat[0]!, path.lon[0]!);
-  const crossings = findCrossings(path, a);
   const clipNm = (gsKt * CLIP_REENTRY_S) / 3600;
 
   if (inside) {
