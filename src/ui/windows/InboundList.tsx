@@ -58,6 +58,7 @@ export function InboundList() {
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>
                         {commonCell(c, p, {
+                          now,
                           facility: <FacilityCell f={entry.from} />,
                           time: formatCountdown(entry.t - now),
                           clip: entry.clip,

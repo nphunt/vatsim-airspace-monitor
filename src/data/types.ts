@@ -155,6 +155,10 @@ export interface Prediction {
   /** ft */
   altitude: number;
   trend: VerticalTrend;
+  /** Vertical rate, ft/min (signed, 0 when level). Never displayed; drives altitude projection. */
+  vsFpm: number;
+  /** Filed altitude in ft (null if unparseable); projected climbs stop here. */
+  filedAltitudeFt: number | null;
   groundspeed: number;
   trackDeg: number;
   lat: number;

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Prediction } from "../../data/types";
-import { formatAlt, type ListColumn } from "../format";
+import { formatAlt, projectAltitude, type ListColumn } from "../format";
 import { FlagsCell } from "./listCells";
 
 export const HEADERS: Record<ListColumn, (kind: "outbound" | "inbound") => string> = {
@@ -19,7 +19,14 @@ export const HEADERS: Record<ListColumn, (kind: "outbound" | "inbound") => strin
 export function commonCell(
   col: ListColumn,
   p: Prediction,
-  extra: { facility: ReactNode; time: ReactNode; dir?: ReactNode; clip: boolean; compact: boolean },
+  extra: {
+    now: number;
+    facility: ReactNode;
+    time: ReactNode;
+    dir?: ReactNode;
+    clip: boolean;
+    compact: boolean;
+  },
 ): ReactNode {
   switch (col) {
     case "callsign":
@@ -27,7 +34,7 @@ export function commonCell(
     case "type":
       return p.aircraftType;
     case "alt":
-      return formatAlt(p.altitude, p.trend);
+      return formatAlt(projectAltitude(p, extra.now), p.trend);
     case "facility":
       return extra.facility;
     case "dir":

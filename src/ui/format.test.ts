@@ -4,6 +4,7 @@ import {
   exitSummary,
   flagsOf,
   formatAlt,
+  projectAltitude,
   formatCountdown,
   formatUtcClock,
   formatZulu,
@@ -36,6 +37,33 @@ describe("formatCountdown", () => {
   });
 });
 
+describe("projectAltitude", () => {
+  const T = 1_000_000;
+  it("keeps climbing between refreshes", () => {
+    const p = pred({ altitude: 10_000, vsFpm: 1200, filedAltitudeFt: 35_000, lastUpdated: T });
+    expect(projectAltitude(p, T + 30_000)).toBe(10_600);
+  });
+  it("never passes the filed altitude", () => {
+    const p = pred({ altitude: 34_800, vsFpm: 1200, filedAltitudeFt: 35_000, lastUpdated: T });
+    expect(projectAltitude(p, T + 60_000)).toBe(35_000);
+  });
+  it("allows reported altitude already above the filed one", () => {
+    const p = pred({ altitude: 36_000, vsFpm: 500, filedAltitudeFt: 35_000, lastUpdated: T });
+    expect(projectAltitude(p, T + 30_000)).toBe(36_000);
+  });
+  it("descends but not below zero", () => {
+    const p = pred({ altitude: 100, vsFpm: -1000, filedAltitudeFt: 35_000, lastUpdated: T });
+    expect(projectAltitude(p, T + 30_000)).toBe(0);
+  });
+  it("stops extrapolating stale reports", () => {
+    const p = pred({ altitude: 10_000, vsFpm: 1200, filedAltitudeFt: null, lastUpdated: T });
+    expect(projectAltitude(p, T + 600_000)).toBe(10_000 + 1200 * 1.5);
+  });
+  it("leaves level flight alone", () => {
+    expect(projectAltitude(pred({ altitude: 35_012, lastUpdated: T }), T + 30_000)).toBe(35_012);
+  });
+});
+
 describe("formatAlt", () => {
   it.each([
     [35_012, "level", "350C"],
@@ -55,6 +83,8 @@ const pred = (over: Partial<Prediction> = {}): Prediction => ({
   arrival: "KMCI",
   altitude: 35000,
   trend: "level",
+  vsFpm: 0,
+  filedAltitudeFt: null,
   groundspeed: 450,
   trackDeg: 0,
   lat: 0,

@@ -88,6 +88,7 @@ export function OutboundList() {
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>
                         {commonCell(c, p, {
+                          now,
                           facility: <FacilityCell f={exit.into} />,
                           dir: exit.dir,
                           time: formatCountdown(exit.t - now),

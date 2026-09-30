@@ -20,7 +20,7 @@ import { compass8, distanceNm, normalizeLonAround } from "./geo";
 import { buildDrPath, courseAt, pointAt } from "./path";
 import { summarizeCrossings, timeAlong } from "./predict";
 import type { RouteModeTracker } from "./routeMode";
-import { deriveTrack, type TrackStore } from "./track";
+import { deriveTrack, parseFiledAltitudeFt, type TrackStore } from "./track";
 
 /** Route text kept on each prediction for the flight plan readout. */
 export const ROUTE_TEXT_MAX = 400;
@@ -130,6 +130,8 @@ export function computePredictions(input: PipelineInput): PredictionSet {
       arrival: fp.arrival,
       altitude: p.altitude,
       trend: derived.trend,
+      vsFpm: derived.vsFpm,
+      filedAltitudeFt: parseFiledAltitudeFt(fp.altitude),
       groundspeed: p.groundspeed,
       trackDeg: derived.trackDeg,
       lat: p.lat,

@@ -22,6 +22,8 @@ export const LOAD_TACTICAL_MIN = 60; // 5-min bins
 export const LOAD_THRESHOLD_DEFAULT = 20;
 export const DR_TRUST_MIN = 20; // load forecast: DR paths trusted this far only (§5.11)
 export const UI_TICK_MS = 1000;
+/** Altitude is projected from the last report for at most this long (stale data is not extrapolated). */
+export const ALT_EXTRAPOLATION_MAX_S = 90;
 export const WORKER_WATCHDOG_S = 5; // §4.3
 export const SERVER_OFFSET_WINDOW = 20; // polls used for the server-time offset max (§3.1)
 export const SETTINGS_SCHEMA_VERSION = 1;

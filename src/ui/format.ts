@@ -1,4 +1,5 @@
 import type { AlertEntry } from "../core/alerts";
+import { ALT_EXTRAPOLATION_MAX_S } from "../config";
 import type { Prediction, VerticalTrend } from "../data/types";
 
 /** Row class for alert styling: ACTIVE flashes, ACKED is steady (§6.2). */
@@ -35,6 +36,23 @@ export function formatCountdown(remainingMs: number): string {
     return `${h}+${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
   }
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Altitude for display: the last reported value advanced by the derived vertical rate for
+ * the time since the report, so a climbing or descending aircraft keeps moving between
+ * feed refreshes. A climb never passes the filed altitude (unless the reported altitude
+ * is already above it), nothing goes below 0, and stale reports are not extrapolated
+ * beyond ALT_EXTRAPOLATION_MAX_S. The next poll replaces the estimate with real data.
+ */
+export function projectAltitude(p: Prediction, nowMs: number): number {
+  if (p.vsFpm === 0) return p.altitude;
+  const ageS = Math.min(Math.max(0, (nowMs - p.lastUpdated) / 1000), ALT_EXTRAPOLATION_MAX_S);
+  let alt = p.altitude + (p.vsFpm * ageS) / 60;
+  if (p.vsFpm > 0 && p.filedAltitudeFt !== null) {
+    alt = Math.min(alt, Math.max(p.filedAltitudeFt, p.altitude));
+  }
+  return Math.max(0, alt);
 }
 
 const TREND: Record<VerticalTrend, string> = { level: "C", climb: "↑", descend: "↓" };

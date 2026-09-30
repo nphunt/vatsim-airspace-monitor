@@ -34,6 +34,8 @@ export interface DerivedTrack {
   trackSource: "derived" | "heading";
   turning: boolean;
   trend: VerticalTrend;
+  /** Vertical rate, ft/min (signed); 0 when level. Used only to project altitude between polls. */
+  vsFpm: number;
 }
 
 /**
@@ -102,16 +104,30 @@ export function deriveTrack(history: TrackHistory | undefined, headingDeg: numbe
     last !== null && prev !== null && Math.abs(angleDiff(prev, last)) > TURN_THRESHOLD_DEG;
 
   let trend: VerticalTrend = "level";
+  let vsFpm = 0;
   if (n >= 2) {
     const minutes = (s[n - 1]!.t - s[0]!.t) / 60_000;
     if (minutes > 0) {
       const fpm = (s[n - 1]!.altitude - s[0]!.altitude) / minutes;
       if (fpm > VERTICAL_RATE_FPM) trend = "climb";
       else if (fpm < -VERTICAL_RATE_FPM) trend = "descend";
+      if (trend !== "level") vsFpm = fpm;
     }
   }
 
   return last !== null
-    ? { trackDeg: last, trackSource: "derived", turning, trend }
-    : { trackDeg: headingDeg, trackSource: "heading", turning, trend };
+    ? { trackDeg: last, trackSource: "derived", turning, trend, vsFpm }
+    : { trackDeg: headingDeg, trackSource: "heading", turning, trend, vsFpm };
+}
+
+/**
+ * Filed altitude in ft from the flight-plan text ("35000", "FL350", "F350", "A050", "350").
+ * Values under 1000 are flight levels in hundreds of feet. Null when unparseable.
+ */
+export function parseFiledAltitudeFt(text: string): number | null {
+  const m = /^(?:FL|F|A)?\s*(\d{1,5})$/i.exec(text.trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!(n > 0)) return null;
+  return n < 1000 ? n * 100 : n;
 }
