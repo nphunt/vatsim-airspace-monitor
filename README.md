@@ -56,9 +56,17 @@ Nothing to install. It is a web page that reads the public VATSIM data feed.
 | `HORIZON 30` | How far ahead the lists look: 10, 20, 30 or 60 minutes |
 | `BRIGHT` `FONT` | Step list brightness and text size |
 | `MUTE` | Silence tones |
+| `SNOOZE` | Silence tones for 5 minutes (click again to cancel) |
+| `OVERLAY` | ALERTS in an always-on-top window over CRC (Chrome or Edge) |
+| `FIND` | Highlight a callsign in the lists; Enter selects it |
+| `?` | Keyboard shortcuts |
 | `SETTINGS` `ABOUT` | Everything else; versions, accuracy notes and credits |
 | `DATA 12s` | Age of the traffic data. Red past 60 s: the feed is late or the page lost its connection |
 | `NAV DATA EXPIRED` | The bundled FAA route data is out of date; routes may predict worse |
+
+**Over CRC:** `OVERLAY` (or the `⧉` button on any window) opens a small window that stays on top of CRC and other apps (Chrome or Edge; other browsers get a plain popup that does not stay on top). Browsers only allow this after a click or key press, so alerts cannot open it by themselves. With the overlay on, it re-opens on your first click or key press after a page load and then stays up, flashing its border while an alert needs action. SETTINGS → `ATTENTION` adds the alert count in the tab title and icon, and notifications for new alerts while the page is hidden.
+
+**Keys** (when not typing in a field): `A` acknowledge all, `M` mute, `S` snooze, `1`-`7` toggle windows, `[` `]` horizon, `F` or `/` find, `O` overlay, `?` list. SETTINGS → `LAYOUT` saves named layouts and exports or imports all settings.
 
 Each window can be minimized (`-`), undocked to float (`↗`) and closed (`X`). Drag a docked window's title bar **up or down** to move it within its stack: a line shows where it will land, and it snaps back in when you let go. Pull it **far to the side** and it pops out as a floating window (bring it back near the stack before letting go to keep it docked). Drop any window at the **left or right edge** of the page and it docks into a column on that side (a highlight shows where). Drop it on the **gap above, between or below docked windows** in any column (for example right under a docked SCOPE) and it docks there; a line shows the spot. Drop it anywhere else and it floats; floating windows snap their edges to the screen and to each other. Hold `Alt` while dragging to place a window freely. Drag the gaps between columns or windows to resize them; `↙` sends a floating window back to the main stack. Layout and settings are saved in this browser only.
 

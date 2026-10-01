@@ -30,7 +30,7 @@ import {
 import { buildDrPath, courseAt, pathLength, pointAt, turnPoints, type PredictedPath } from "./path";
 import { findCrossings, summarizeCrossings, timeAlong } from "./predict";
 import type { RouteModeTracker } from "./routeMode";
-import { deriveTrack, type TrackStore } from "./track";
+import { deriveTrack, parseFiledAltitudeFt, type TrackStore } from "./track";
 
 /** Route text kept on each prediction for the flight plan readout. */
 export const ROUTE_TEXT_MAX = 400;
@@ -59,9 +59,7 @@ export interface Registry extends FacilityIndex {
  */
 export function eligiblePilots(pilots: readonly VatsimPilot[], now: number): VatsimPilot[] {
   return pilots.filter(
-    (p) =>
-      p.groundspeed >= MIN_GS_KT &&
-      now - p.lastUpdated <= STALE_PILOT_S * 1000,
+    (p) => p.groundspeed >= MIN_GS_KT && now - p.lastUpdated <= STALE_PILOT_S * 1000,
   );
 }
 
@@ -208,6 +206,8 @@ export function computePredictions(input: PipelineInput): PredictionSet {
         lon: p.lon,
         altitude: p.altitude,
         trend: derived.trend,
+        vsFpm: derived.vsFpm,
+        filedAltitudeFt: p.flightPlan ? parseFiledAltitudeFt(p.flightPlan.altitude) : null,
         groundspeed: p.groundspeed,
         trackDeg: derived.trackDeg,
         lastUpdated: p.lastUpdated,
@@ -253,6 +253,8 @@ export function computePredictions(input: PipelineInput): PredictionSet {
       arrival: fp.arrival,
       altitude: p.altitude,
       trend: derived.trend,
+      vsFpm: derived.vsFpm,
+      filedAltitudeFt: parseFiledAltitudeFt(fp.altitude),
       groundspeed: p.groundspeed,
       trackDeg: derived.trackDeg,
       lat: p.lat,

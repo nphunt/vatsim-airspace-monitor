@@ -1,14 +1,9 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { DOCK_COLUMNS, type DockColumn, type WindowId } from "../../store/settings";
 import { useStore } from "../../store/store";
-import { AboutWindow } from "./AboutWindow";
-import { AirportsList, AirportsTitle } from "./AirportsList";
-import { AirspaceMenu, AirspaceMenuTitle } from "./AirspaceMenu";
-import { AlertsList, AlertsTitle } from "./AlertsList";
 import { EramWindow } from "./EramWindow";
-import { FlightPlanReadout, FlightPlanReadoutTitle } from "./FlightPlanReadout";
-import { InboundList, InboundTitle } from "./InboundList";
-import { LoadTitle, LoadWindow } from "./LoadWindow";
+import { WINDOWS } from "./registry";
+import { popOut } from "../popout/popout";
 import {
   MIN_COLUMN_W,
   clampAll,
@@ -21,24 +16,6 @@ import {
   splitWeights,
   toggleDock,
 } from "./layout";
-import { NeighborsList, NeighborsTitle } from "./NeighborsList";
-import { OutboundList, OutboundTitle } from "./OutboundList";
-import { ScopeTitle, ScopeWindow } from "./ScopeWindow";
-import { SettingsWindow } from "./SettingsWindow";
-
-const WINDOWS: Record<WindowId, { title: () => ReactNode; body: () => ReactNode }> = {
-  outbound: { title: () => <OutboundTitle />, body: () => <OutboundList /> },
-  alerts: { title: () => <AlertsTitle />, body: () => <AlertsList /> },
-  inbound: { title: () => <InboundTitle />, body: () => <InboundList /> },
-  load: { title: () => <LoadTitle />, body: () => <LoadWindow /> },
-  neighbors: { title: () => <NeighborsTitle />, body: () => <NeighborsList /> },
-  airports: { title: () => <AirportsTitle />, body: () => <AirportsList /> },
-  airspace: { title: () => <AirspaceMenuTitle />, body: () => <AirspaceMenu /> },
-  settings: { title: () => "SETTINGS", body: () => <SettingsWindow /> },
-  fpr: { title: () => <FlightPlanReadoutTitle />, body: () => <FlightPlanReadout /> },
-  scope: { title: () => <ScopeTitle />, body: () => <ScopeWindow /> },
-  about: { title: () => "ABOUT", body: () => <AboutWindow /> },
-};
 
 /** Starts a splitter drag; `onDelta` gets the pointer travel (px) along the drag axis. */
 function splitterDrag(
@@ -68,7 +45,15 @@ function splitterDrag(
  * column), or on a seam above, between or below the docked windows of any column.
  */
 export function WindowManager() {
-  const windows = useStore((s) => s.settings.windows);
+  const stored = useStore((s) => s.settings.windows);
+  const poppedIds = useStore((s) => s.popout?.ids);
+  // Windows popped out to the pop-out window are not drawn here (they stay open in settings).
+  const windows = poppedIds
+    ? {
+        ...stored,
+        ...Object.fromEntries(poppedIds.map((id) => [id, { ...stored[id], open: false }])),
+      }
+    : stored;
   const columnWeights = useStore((s) => s.settings.columns);
   const patchWindow = useStore((s) => s.patchWindow);
   const clearSelection = useStore((s) => s.clearSelection);
@@ -188,7 +173,8 @@ export function WindowManager() {
         zIndex={10 + zOrder.indexOf(id) + 1}
         onFocus={() => focus(id)}
         onMinimize={() => patchWindow(id, { minimized: !w.minimized })}
-        onToggleDock={() => setWindows(toggleDock(windows, id))}
+        onToggleDock={() => setWindows(toggleDock(stored, id))}
+        onPopOut={() => void popOut(id)}
         onClose={() => (id === "fpr" ? clearSelection() : patchWindow(id, { open: false }))}
         onGeometry={(g) => {
           focus(id);

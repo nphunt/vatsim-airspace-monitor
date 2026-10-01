@@ -33,6 +33,8 @@ const target = (over: Partial<ScopeTarget> = {}): ScopeTarget => ({
   lon: -90,
   altitude: 35_000,
   trend: "level",
+  vsFpm: 0,
+  filedAltitudeFt: null,
   groundspeed: 452,
   trackDeg: 0,
   lastUpdated: T0,

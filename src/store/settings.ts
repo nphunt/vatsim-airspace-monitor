@@ -6,12 +6,18 @@ import {
   EXIT_ALERT_S,
   FONT_SIZE_CHOICES_PX,
   FONT_SIZE_PX,
+  HANDOFF_ALERT_S,
+  HANDOFF_LEAD_CHOICES_S,
   HORIZON_CHOICES_MIN,
   HORIZON_MIN,
+  LAYOUTS_MAX,
   LOAD_THRESHOLD_DEFAULT,
   SETTINGS_SCHEMA_VERSION,
   STORAGE_PREFIX,
+  XFER_COMM_S,
+  XFER_LEAD_CHOICES_S,
 } from "../config";
+import type { AlertStage } from "../core/alerts";
 import { isDevBuild } from "../ui/devBuild";
 
 // Persisted user settings (§4.2, §8). One key under the app prefix, with a schema version;
@@ -68,6 +74,17 @@ export const SCOPE_VECTOR_CHOICES = [1, 2, 4, 8] as const;
 
 export type ToneId = "chime" | "high" | "low";
 export const TONE_IDS: readonly ToneId[] = ["chime", "high", "low"];
+
+/** Tone for one alert stage: the global TONE, a specific one, or silent. */
+export type StageTone = "default" | ToneId | "off";
+export const STAGE_TONE_IDS: readonly StageTone[] = ["default", ...TONE_IDS, "off"];
+export const ALERT_STAGES: readonly AlertStage[] = ["HANDOFF", "XFER", "ALERT"];
+
+/** A named window arrangement the user saved. */
+export interface SavedLayout {
+  windows: Record<WindowId, WindowState>;
+  columns: Record<DockColumn, number>;
+}
 
 /** Saved output device (§6.3): by id and label, since ids can change. */
 export interface AudioDevice {
@@ -135,6 +152,26 @@ export interface Settings {
    * datablock on the scope, alerts silent. Dropped once the pilot leaves the feed.
    */
   closed: number[];
+  /** Staffed exits: tag HANDOFF this many seconds before the boundary. */
+  handoffAlertS: number;
+  /** Staffed exits: XFER COMM this many seconds before the boundary. */
+  xferCommS: number;
+  /** Tone per alert stage; "default" = the TONE above. */
+  stageTones: Record<AlertStage, StageTone>;
+  /** Operating-system notification when a new alert needs action and the page is hidden. */
+  notifyAlerts: boolean;
+  /** Show the active-alert count and the first alert in the browser tab title and icon. */
+  tabAlerts: boolean;
+  /** Text and line cues on alert rows, so they don't depend on color alone. */
+  alertCues: boolean;
+  /** Color-blind-safe palette for alert colors on lists. */
+  highContrast: boolean;
+  /** The first-run hints were dismissed. */
+  onboarded: boolean;
+  /** Keep the always-on-top ALERTS overlay open (needs one click per page load). */
+  overlayAlerts: boolean;
+  /** Named layouts saved by the user. */
+  layouts: Record<string, SavedLayout>;
   /** Dock column widths as flex weights (only columns holding windows are shown). */
   columns: Record<DockColumn, number>;
   windows: Record<WindowId, WindowState>;
@@ -192,6 +229,16 @@ export const DEFAULT_SETTINGS: Settings = {
   bright: { list: 100, map: 100, datablock: 100 },
   idleStop: true,
   closed: [],
+  handoffAlertS: HANDOFF_ALERT_S,
+  xferCommS: XFER_COMM_S,
+  stageTones: { HANDOFF: "default", XFER: "default", ALERT: "default" },
+  notifyAlerts: false,
+  tabAlerts: true,
+  alertCues: false,
+  highContrast: false,
+  onboarded: false,
+  overlayAlerts: false,
+  layouts: {},
   columns: { left: 1, main: 1, right: 1 },
   windows: {
     // Default open: OUTBOUND and ALERTS (§7.2). Lists dock; menus float.
@@ -275,6 +322,43 @@ function readCids(v: unknown): number[] {
   return [...new Set(ok)].slice(-CLOSED_MAX);
 }
 
+/** Layout names: trimmed, uppercase, at most 20 characters; blank is invalid (null). */
+export function layoutName(raw: string): string | null {
+  const n = raw.trim().replace(/\s+/g, " ").toUpperCase().slice(0, 20);
+  return n === "" ? null : n;
+}
+
+function readWindows(v: unknown, d: Record<WindowId, WindowState>): Record<WindowId, WindowState> {
+  const w = isObj(v) ? v : {};
+  return Object.fromEntries(WINDOW_IDS.map((id) => [id, readWindow(w[id], d[id])])) as Record<
+    WindowId,
+    WindowState
+  >;
+}
+
+function readLayouts(v: unknown, d: Settings): Record<string, SavedLayout> {
+  if (!isObj(v)) return {};
+  const out: Record<string, SavedLayout> = {};
+  for (const [name, l] of Object.entries(v).slice(0, LAYOUTS_MAX)) {
+    if (!isObj(l) || layoutName(name) !== name) continue;
+    out[name] = {
+      windows: readWindows(l.windows, d.windows),
+      columns: readColumns(l.columns, d.columns),
+    };
+  }
+  return out;
+}
+
+function readStageTones(
+  v: unknown,
+  d: Record<AlertStage, StageTone>,
+): Record<AlertStage, StageTone> {
+  const t = isObj(v) ? v : {};
+  const one = (k: AlertStage): StageTone =>
+    (STAGE_TONE_IDS as readonly unknown[]).includes(t[k]) ? (t[k] as StageTone) : d[k];
+  return { HANDOFF: one("HANDOFF"), XFER: one("XFER"), ALERT: one("ALERT") };
+}
+
 /** Validates a parsed blob field by field against the defaults. */
 export function parseSettings(raw: unknown): Settings {
   const d = DEFAULT_SETTINGS;
@@ -313,10 +397,18 @@ export function parseSettings(raw: unknown): Settings {
     bright: readBright(raw.bright, d.bright),
     idleStop: bool(raw.idleStop, d.idleStop),
     closed: readCids(raw.closed),
+    handoffAlertS: oneOf(HANDOFF_LEAD_CHOICES_S, raw.handoffAlertS, d.handoffAlertS),
+    xferCommS: oneOf(XFER_LEAD_CHOICES_S, raw.xferCommS, d.xferCommS),
+    stageTones: readStageTones(raw.stageTones, d.stageTones),
+    notifyAlerts: bool(raw.notifyAlerts, d.notifyAlerts),
+    tabAlerts: bool(raw.tabAlerts, d.tabAlerts),
+    alertCues: bool(raw.alertCues, d.alertCues),
+    highContrast: bool(raw.highContrast, d.highContrast),
+    onboarded: bool(raw.onboarded, d.onboarded),
+    overlayAlerts: bool(raw.overlayAlerts, d.overlayAlerts),
+    layouts: readLayouts(raw.layouts, d),
     columns: readColumns(raw.columns, d.columns),
-    windows: Object.fromEntries(
-      WINDOW_IDS.map((id) => [id, readWindow(windows[id], d.windows[id])]),
-    ) as Record<WindowId, WindowState>,
+    windows: readWindows(windows, d.windows),
   };
 }
 

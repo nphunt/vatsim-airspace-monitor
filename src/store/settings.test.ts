@@ -5,6 +5,7 @@ import {
   SETTINGS_KEY,
   settingsKey,
   loadSettings,
+  layoutName,
   loadThreshold,
   parseSettings,
   saveSettings,
@@ -165,5 +166,57 @@ describe("settings persistence", () => {
     } as unknown as Storage;
     expect(loadSettings(throwing)).toEqual(DEFAULT_SETTINGS);
     expect(() => saveSettings(DEFAULT_SETTINGS, throwing)).not.toThrow();
+  });
+});
+
+describe("new alert, attention and layout settings", () => {
+  it("old blobs without them get the defaults", () => {
+    const old = { ...structuredClone(DEFAULT_SETTINGS) } as Record<string, unknown>;
+    for (const k of [
+      "handoffAlertS",
+      "xferCommS",
+      "stageTones",
+      "layouts",
+      "notifyAlerts",
+      "onboarded",
+    ])
+      delete old[k];
+    const s = parseSettings(old);
+    expect(s.handoffAlertS).toBe(240);
+    expect(s.xferCommS).toBe(60);
+    expect(s.stageTones).toEqual({ HANDOFF: "default", XFER: "default", ALERT: "default" });
+    expect(s.layouts).toEqual({});
+    expect(s.onboarded).toBe(false);
+  });
+
+  it("rejects lead times and tones that are not offered", () => {
+    const s = parseSettings({
+      ...structuredClone(DEFAULT_SETTINGS),
+      handoffAlertS: 17,
+      xferCommS: 45,
+      stageTones: { HANDOFF: "bogus", XFER: "off" },
+    });
+    expect(s.handoffAlertS).toBe(240);
+    expect(s.xferCommS).toBe(45);
+    expect(s.stageTones).toEqual({ HANDOFF: "default", XFER: "off", ALERT: "default" });
+  });
+
+  it("keeps valid saved layouts and drops badly named ones", () => {
+    const layout = {
+      windows: structuredClone(DEFAULT_SETTINGS.windows),
+      columns: { left: 1, main: 2, right: 1 },
+    };
+    const s = parseSettings({
+      ...structuredClone(DEFAULT_SETTINGS),
+      layouts: { "BESIDE CRC": layout, lower: layout, "": layout, junk: 5 },
+    });
+    expect(Object.keys(s.layouts)).toEqual(["BESIDE CRC"]);
+    expect(s.layouts["BESIDE CRC"]!.columns.main).toBe(2);
+  });
+
+  it("layoutName trims, uppercases and limits", () => {
+    expect(layoutName("  two   monitors ")).toBe("TWO MONITORS");
+    expect(layoutName("   ")).toBeNull();
+    expect(layoutName("x".repeat(40))).toHaveLength(20);
   });
 });

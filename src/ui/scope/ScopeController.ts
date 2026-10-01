@@ -57,6 +57,11 @@ export interface ScopeOptions {
 export class ScopeController {
   private view: View | null = null;
   private map: ScopeMap | null = null;
+  /** The window this canvas is in: the page or the pop-out, for frames and pixel ratio. */
+  private get win(): Window {
+    return this.canvas.ownerDocument.defaultView ?? window;
+  }
+
   private opts: ScopeOptions = {
     vectorMin: 2,
     showRoutes: false,
@@ -81,7 +86,8 @@ export class ScopeController {
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(container);
     const unsub = useStore.subscribe(() => this.schedule());
-    const id = setInterval(() => this.schedule(), IDLE_REDRAW_MS);
+    const timers = this.win;
+    const id = timers.setInterval(() => this.schedule(), IDLE_REDRAW_MS);
     const onWheel = (e: WheelEvent) => this.onWheel(e);
     // Non-passive, so zooming doesn't scroll the page.
     canvas.addEventListener("wheel", onWheel, { passive: false });
@@ -92,7 +98,7 @@ export class ScopeController {
     this.cleanup.push(
       () => ro.disconnect(),
       unsub,
-      () => clearInterval(id),
+      () => timers.clearInterval(id),
       () => canvas.removeEventListener("wheel", onWheel),
       () => canvas.removeEventListener("dblclick", onDblClick),
       () => canvas.removeEventListener("contextmenu", onContextMenu),
@@ -104,7 +110,7 @@ export class ScopeController {
 
   destroy(): void {
     for (const fn of this.cleanup) fn();
-    if (this.frame !== null) cancelAnimationFrame(this.frame);
+    if (this.frame !== null) this.win.cancelAnimationFrame(this.frame);
     this.frame = null;
   }
 
@@ -128,7 +134,7 @@ export class ScopeController {
 
   schedule(): void {
     if (this.frame !== null) return;
-    this.frame = requestAnimationFrame(() => {
+    this.frame = this.win.requestAnimationFrame(() => {
       this.frame = null;
       this.draw();
     });
@@ -137,7 +143,7 @@ export class ScopeController {
   private resize(): void {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = this.win.devicePixelRatio || 1;
     this.size = { w, h };
     this.canvas.width = Math.max(1, Math.round(w * dpr));
     this.canvas.height = Math.max(1, Math.round(h * dpr));
@@ -202,7 +208,7 @@ export class ScopeController {
         .filter((a) => a.kind !== "entry" && a.state === "ACTIVE")
         .map((a) => a.other.key),
     );
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = this.win.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawScope(ctx, m, v, this.scene, {
       width: w,
@@ -278,9 +284,13 @@ export class ScopeController {
     const { charPx, linePx } = this.metrics;
     const t = menuTargetAt(this.scene, e.offsetX, e.offsetY, charPx, linePx);
     if (t) {
-      useStore
-        .getState()
-        .openMenu({ cid: t.cid, callsign: t.callsign, x: e.clientX, y: e.clientY });
+      useStore.getState().openMenu({
+        cid: t.cid,
+        callsign: t.callsign,
+        x: e.clientX,
+        y: e.clientY,
+        popout: this.canvas.ownerDocument !== document,
+      });
     }
   }
 

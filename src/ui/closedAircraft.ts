@@ -10,7 +10,9 @@ export function useClosed(): ReadonlySet<number> {
 /** Right-click handler for a list row: opens the aircraft menu at the pointer. */
 export function onAircraftContextMenu(e: MouseEvent, cid: number, callsign: string): void {
   e.preventDefault();
-  useStore.getState().openMenu({ cid, callsign, x: e.clientX, y: e.clientY });
+  // A click in the pop-out window is in another document: its menu belongs there.
+  const popout = e.currentTarget.ownerDocument !== document;
+  useStore.getState().openMenu({ cid, callsign, x: e.clientX, y: e.clientY, popout });
 }
 
 /**

@@ -1,4 +1,4 @@
-import { NEIGHBOR_CHANGE_HIGHLIGHT_S } from "../config";
+import { ALT_EXTRAPOLATION_MAX_S, NEIGHBOR_CHANGE_HIGHLIGHT_S } from "../config";
 import type { AlertEntry } from "../core/alerts";
 import type { Prediction, PredictionSet, VerticalTrend } from "../data/types";
 
@@ -26,10 +26,14 @@ export function alertAction(a: AlertEntry): string {
   return a.kind === "exit" ? "TERM CTL" : to;
 }
 
-/** Adds the selected-row class (§7.3) to a row's alert/dim class. */
-export function rowClass(base: string | undefined, selected: boolean): string | undefined {
-  if (!selected) return base;
-  return base ? `${base} selected` : "selected";
+/** Adds the selected-row (§7.3) and FIND-match classes to a row's alert/dim class. */
+export function rowClass(
+  base: string | undefined,
+  selected: boolean,
+  found = false,
+): string | undefined {
+  const parts = [base, selected ? "selected" : undefined, found ? "found" : undefined];
+  return parts.filter(Boolean).join(" ") || undefined;
 }
 
 /** Toolbar UTC clock, ERAM style: "HHMM SS". */
@@ -58,6 +62,26 @@ export function formatCountdown(remainingMs: number): string {
     return `${h}+${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
   }
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Altitude for display: the last reported value advanced by the derived vertical rate for
+ * the time since the report, so a climbing or descending aircraft keeps moving between
+ * feed refreshes. A climb never passes the filed altitude (unless the reported altitude
+ * is already above it), nothing goes below 0, and stale reports are not extrapolated
+ * beyond ALT_EXTRAPOLATION_MAX_S. The next poll replaces the estimate with real data.
+ */
+export function projectAltitude(
+  p: Pick<Prediction, "altitude" | "vsFpm" | "filedAltitudeFt" | "lastUpdated">,
+  nowMs: number,
+): number {
+  if (p.vsFpm === 0) return p.altitude;
+  const ageS = Math.min(Math.max(0, (nowMs - p.lastUpdated) / 1000), ALT_EXTRAPOLATION_MAX_S);
+  let alt = p.altitude + (p.vsFpm * ageS) / 60;
+  if (p.vsFpm > 0 && p.filedAltitudeFt !== null) {
+    alt = Math.min(alt, Math.max(p.filedAltitudeFt, p.altitude));
+  }
+  return Math.max(0, alt);
 }
 
 /**

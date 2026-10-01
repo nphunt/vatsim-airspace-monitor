@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FeedSnapshot, VatsimPilot } from "../data/types";
 import { destination } from "./geo";
-import { TrackStore, deriveTrack } from "./track";
+import { TrackStore, deriveTrack, parseFiledAltitudeFt } from "./track";
 
 const T0 = Date.UTC(2026, 8, 27, 18, 0, 0);
 
@@ -89,6 +89,7 @@ describe("deriveTrack", () => {
       trackSource: "heading",
       turning: false,
       trend: "level",
+      vsFpm: 0,
     });
   });
 });
@@ -138,5 +139,20 @@ describe("TrackStore", () => {
     );
     expect(store.get(1)).toBeDefined();
     expect(store.get(2)).toBeUndefined();
+  });
+});
+
+describe("parseFiledAltitudeFt", () => {
+  it.each([
+    ["35000", 35_000],
+    ["FL350", 35_000],
+    ["F350", 35_000],
+    ["A050", 5_000],
+    ["350", 35_000],
+    ["5000", 5_000],
+    ["", null],
+    ["VFR", null],
+  ] as const)("%s -> %s", (t, ft) => {
+    expect(parseFiledAltitudeFt(t)).toBe(ft);
   });
 });

@@ -26,6 +26,8 @@ function outbound(
     arrival: "KMCI",
     altitude: 35000,
     trend: "level",
+    vsFpm: 0,
+    filedAltitudeFt: null,
     groundspeed: 450,
     trackDeg: 0,
     lat: 36,

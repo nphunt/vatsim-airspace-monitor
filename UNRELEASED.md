@@ -26,6 +26,24 @@ Changes on `development` that are not on `main` yet. At release, move these into
 - An aircraft **filed to an airport inside a staffed TRACON** now gets the HANDOFF (4:00) and XFER COMM (1:00) alerts into the approach controller, at the point where it will cross into the TRACON: `ZME→M03 APP`, `HANDOFF MEM_APP 119.100`. A TRACON counts as staffed while an `_APP` or `_DEP` controller (APP preferred) with a matching callsign prefix is online; with nobody on there is no alert. This applies to `ARR` aircraft too, so the "arrivals never alert" rule above no longer holds for them when their approach is staffed. The crossing must come before the aircraft's exit from the airspace, and an aircraft already inside the TRACON doesn't alert.
 - `.gitignore` now anchors `data`, `site` and `.sites-build` to the repository root, so it no longer ignores `public/data/`.
 
+### Alerts reach you behind CRC
+
+- **`OVERLAY`** (or `O`) puts ALERTS in a small **always-on-top window** over CRC and other apps (Document Picture-in-Picture: Chrome or Edge 116+). Any window can do the same with its `⧉` button; they share that one window, stacked, with `↙` to send one back. The window's border flashes while an alert needs action, and keys, right-click menus and countdowns work there. Other browsers get an ordinary popup that does not stay on top. Browsers only open such a window in response to a click or key press, so an alert cannot open it by itself: with the overlay on, it re-opens on your first click or key press after a page load, and stays up from then on.
+- **Browser tab**: the title and icon carry the active-alert count (`(2) HANDOFF DAL123 +1`). SETTINGS → `ATTENTION`.
+- **Notifications** (off by default, SETTINGS → `ATTENTION`): an operating-system notification for each new alert that needs action while the page is hidden. Works with sound off. Clicking it brings the page forward.
+- **`SNOOZE`** (or `S`) silences tones for 5 minutes; flashing and notifications go on. Click again to cancel.
+- **Stale data banner**: a red `TRAFFIC DATA …: LISTS AND ALERTS MAY BE LATE OR MISSING` bar, and one low tone, when the feed is more than 60 s old or the engine stops.
+- **Alert timing**: `HANDOFF AT` (2:00 to 6:00) and `XFER AT` (0:30 to 1:30) in SETTINGS. A tone per stage (`DEFAULT`, `CHIME`, `HIGH`, `LOW` or `OFF`), so you can, say, mute only the handoff tone.
+- **Alert text cues** (`H` / `X` / `T` and underline styles) and a **color-blind-safe palette** for alert rows, in SETTINGS.
+
+### Keyboard, search and layouts
+
+- **Shortcuts**: `A` acknowledge all, `M` mute, `S` snooze, `1`-`7` toggle OUTBOUND, ALERTS, INBOUND, LOAD, NBR, APT, SCOPE, `[` `]` horizon, `F` or `/` find, `O` overlay, `?` for the list. Single keys, active while you are not typing in a field; they work in the pop-out window too.
+- **`FIND`** in the toolbar highlights matching callsigns in the lists; Enter selects the first match (flight plan readout, highlighted on the SCOPE).
+- **Layouts**: SETTINGS → `LAYOUT` saves named window arrangements (up to 8), loads and deletes them, resets to the default layout, and exports or imports every setting as a JSON file.
+- Right-click an aircraft with an alert → **`COPY HANDOFF`** copies `DAL123 HANDOFF KC_12_CTR 127.900`.
+- A short **first-run hint** dialog appears once after the audio prompt.
+
 ### Closing aircraft
 
 - **Right-click** an aircraft in OUTBOUND, INBOUND or ALERTS, or its target or datablock on the SCOPE, for a menu with **CLOSE**. A closed aircraft is drawn **dim** in the lists, drops to a **limited datablock** (callsign, altitude, destination) with no exit marker on the scope, and its alerts stay listed but **silent**: they come up acknowledged, never tone or flash, and a HANDOFF doesn't re-sound at XFER. Closing an aircraft with a flashing alert acknowledges it.

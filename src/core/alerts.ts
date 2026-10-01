@@ -257,7 +257,8 @@ export class AlertMachine {
       consider("exit", p, x.t, x.into, x.clip, c.exitAlertS, x.dir);
     }
     for (const p of set.outbound) {
-      if (p.tracon && !p.noPlan) consider("tracon", p, p.tracon.t, p.tracon.into, false, c.handoffAlertS);
+      if (p.tracon && !p.noPlan)
+        consider("tracon", p, p.tracon.t, p.tracon.into, false, c.handoffAlertS);
     }
     if (c.entryAlerts) {
       for (const p of set.inbound) {

@@ -38,6 +38,10 @@ export interface EngineConfig {
   scopeOpen: boolean;
   /** Alert this many seconds before a predicted exit/entry (§6.1, default 120). */
   alertThresholdS: number;
+  /** Staffed exits: HANDOFF stage lead time, seconds. */
+  handoffAlertS: number;
+  /** Staffed exits: XFER COMM stage lead time, seconds. */
+  xferCommS: number;
   /** Altitude filter (§5.7), hundreds of feet; null = no bound. */
   altFloor: number | null;
   altCeiling: number | null;

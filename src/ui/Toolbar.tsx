@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { SNOOZE_MIN } from "../config";
 import { alertAudio } from "../audio/alertAudio";
 import { BRIGHT_CHOICES_PCT, FONT_SIZE_CHOICES_PX, HORIZON_CHOICES_MIN } from "../config";
 import { parseCid } from "../core/myPosition";
@@ -8,7 +9,9 @@ import { AccountButtons } from "./AccountButtons";
 import { formatUtcClock, recentlyChanged } from "./format";
 import { useLocalNow } from "./hooks";
 import { dataIndicator, isEngineStalled, isNavExpired } from "./status";
-import { openWindow } from "./windows/layout";
+import { popoutCanStayOnTop, toggleOverlay } from "./popout/popout";
+import { findAircraft } from "./search";
+import { toggleWindow } from "./windows/toggle";
 
 function WindowButton({
   id,
@@ -22,11 +25,7 @@ function WindowButton({
   caution?: boolean;
 }) {
   const open = useStore((s) => s.settings.windows[id].open);
-  const toggle = () => {
-    const { settings, setWindows, patchWindow } = useStore.getState();
-    if (open) patchWindow(id, { open: false });
-    else setWindows(openWindow(settings.windows, id, window.innerWidth));
-  };
+  const toggle = () => toggleWindow(id);
   return (
     <button
       type="button"
@@ -44,6 +43,43 @@ function cycle(choices: readonly number[], current: number): number {
   return choices[(choices.indexOf(current) + 1) % choices.length]!;
 }
 
+/** FIND: highlights matching callsigns in the lists; Enter selects the first match. */
+function FindBox() {
+  const search = useStore((s) => s.search);
+  const setSearch = useStore((s) => s.setSearch);
+  const focusTick = useStore((s) => s.findFocus);
+  const predictions = useStore((s) => s.engine.predictions);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusTick === 0) return; // not on page load
+    ref.current?.focus();
+    ref.current?.select();
+  }, [focusTick]);
+  const match = search.trim() === "" ? null : findAircraft(predictions, search);
+  return (
+    <input
+      ref={ref}
+      className="eram-find"
+      value={search}
+      placeholder="FIND"
+      title="Find a callsign. Enter selects it; Esc clears. Shortcut: F or /"
+      aria-label="Find a callsign"
+      aria-invalid={search.trim() !== "" && !match}
+      spellCheck={false}
+      autoComplete="off"
+      onChange={(e) => setSearch(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          setSearch("");
+          e.currentTarget.blur();
+        } else if (e.key === "Enter" && match) {
+          useStore.getState().selectAircraft(match.cid, window.innerWidth);
+        }
+      }}
+    />
+  );
+}
+
 /** Master Toolbar (§7.2). Buttons for later milestones are shown disabled. */
 export function Toolbar() {
   const localNow = useLocalNow();
@@ -55,6 +91,9 @@ export function Toolbar() {
   const audio = useStore((s) => s.audio);
   const activeAlerts = engine.alerts.filter((a) => a.state === "ACTIVE").length;
   const paused = useStore((s) => s.paused);
+  const snoozeUntil = useStore((s) => s.snoozeUntil);
+  const toggleSnooze = useStore((s) => s.toggleSnooze);
+  const setHelpOpen = useStore((s) => s.setHelpOpen);
   // While paused the staffing is stale, so the button shows no count.
   const neighbors = paused ? [] : engine.neighbors;
   const neighborsOnline = neighbors.filter((n) => n.staffed).length;
@@ -83,6 +122,9 @@ export function Toolbar() {
   const cidInvalid = parseCid(settings.myCid).kind === "invalid";
   const replay = engine.replay;
 
+  const snoozeLeftS = Math.max(0, Math.ceil((snoozeUntil - localNow) / 1000));
+  const popout = useStore((s) => s.popout);
+  const overlayArmed = settings.overlayAlerts && !popout?.ids.includes("alerts");
   const failures = engine.feed?.consecutiveFailures ?? 0;
   const dataTitle = stalled
     ? "Engine worker not responding"
@@ -141,7 +183,47 @@ export function Toolbar() {
       >
         MUTE
       </button>
+      <button
+        type="button"
+        className={`eram-tb-btn${snoozeLeftS > 0 ? " caution" : ""}`}
+        aria-pressed={snoozeLeftS > 0}
+        title={
+          snoozeLeftS > 0
+            ? "Tones are snoozed. Click to cancel. Shortcut: S"
+            : `Silence tones for ${SNOOZE_MIN} minutes. Shortcut: S`
+        }
+        onClick={() => toggleSnooze(Date.now())}
+      >
+        {snoozeLeftS > 0
+          ? `SNOOZE ${Math.floor(snoozeLeftS / 60)}:${String(snoozeLeftS % 60).padStart(2, "0")}`
+          : "SNOOZE"}
+      </button>
+      <button
+        type="button"
+        data-overlay-toggle
+        className={`eram-tb-btn${overlayArmed ? " caution" : ""}`}
+        aria-pressed={!!popout?.ids.includes("alerts")}
+        title={
+          popoutCanStayOnTop()
+            ? overlayArmed
+              ? "Click to open the always-on-top ALERTS window (browsers need a click after each page load)"
+              : "ALERTS in a small window that stays on top of CRC. Shortcut: O"
+            : "ALERTS in a separate window (this browser cannot keep it on top; use Chrome or Edge)"
+        }
+        onClick={() => void toggleOverlay()}
+      >
+        OVERLAY
+      </button>
+      <FindBox />
       <WindowButton id="settings" label="SETTINGS" />
+      <button
+        type="button"
+        className="eram-tb-btn"
+        title="Keyboard shortcuts (?)"
+        onClick={() => setHelpOpen(true)}
+      >
+        ?
+      </button>
       <WindowButton id="about" label="ABOUT" />
       {audio.state === "suspended" && (
         <button

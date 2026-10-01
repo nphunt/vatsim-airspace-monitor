@@ -4,6 +4,7 @@ import { useStore } from "../../store/store";
 import { alertClass, formatCrossing, listColumns, rowClass } from "../format";
 import { onAircraftContextMenu, onListBackgroundClick, useClosed } from "../closedAircraft";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
+import { useSearchMatch } from "../search";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
 
@@ -39,6 +40,7 @@ export function InboundList() {
   const selectedCid = useStore((s) => s.selection?.cid ?? null);
   const selectAircraft = useStore((s) => s.selectAircraft);
   const closed = useClosed();
+  const isFound = useSearchMatch();
   // Entry alerts (§6.1, optional) style the row like exit alerts do in OUTBOUND.
   const alertByCid = new Map(alerts.filter((a) => a.kind === "entry").map((a) => [a.cid, a]));
 
@@ -69,6 +71,7 @@ export function InboundList() {
                         ? "dim"
                         : (alertClass(alertByCid.get(p.cid)) ?? (entry.clip ? "dim" : undefined)),
                       p.cid === selectedCid,
+                      isFound(p.callsign),
                     )}
                     onClick={() => selectAircraft(p.cid, window.innerWidth)}
                     onContextMenu={(e) => onAircraftContextMenu(e, p.cid, p.callsign)}
@@ -76,6 +79,7 @@ export function InboundList() {
                     {layout.columns.map((c) => (
                       <td key={c} className={`col-${c}`}>
                         {commonCell(c, p, {
+                          now,
                           facility: <FacilityCell f={entry.from} />,
                           time: formatCrossing(entry.t, now),
                           clip: entry.clip,

@@ -16,18 +16,22 @@ export function IdleController() {
   const paused = useStore((s) => s.paused);
   const replay = useStore((s) => s.engine.replay !== null);
   const setPaused = useStore((s) => s.setPaused);
+  const popout = useStore((s) => s.popout?.win ?? null);
   const lastInput = useRef(0);
 
+  // Input in the pop-out window counts too: acknowledging alerts there is use of the page.
   useEffect(() => {
     const onInput = () => {
       lastInput.current = Date.now();
     };
     onInput(); // page load counts as input
-    for (const ev of INPUT_EVENTS) window.addEventListener(ev, onInput, { passive: true });
+    const targets = popout ? [window, popout] : [window];
+    for (const t of targets)
+      for (const ev of INPUT_EVENTS) t.addEventListener(ev, onInput, { passive: true });
     return () => {
-      for (const ev of INPUT_EVENTS) window.removeEventListener(ev, onInput);
+      for (const t of targets) for (const ev of INPUT_EVENTS) t.removeEventListener(ev, onInput);
     };
-  }, []);
+  }, [popout]);
 
   useEffect(() => {
     if (!idleStop || replay) return;

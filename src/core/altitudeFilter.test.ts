@@ -14,6 +14,8 @@ function pred(cid: number, altitude: number, exitInS: number | null): Prediction
     arrival: "KMCI",
     altitude,
     trend: "level",
+    vsFpm: 0,
+    filedAltitudeFt: null,
     groundspeed: 450,
     trackDeg: 0,
     lat: 36,

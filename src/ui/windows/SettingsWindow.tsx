@@ -6,18 +6,25 @@ import {
   ALT_FILTER_MAX_HFT,
   BRIGHT_CHOICES_PCT,
   FONT_SIZE_CHOICES_PX,
+  HANDOFF_LEAD_CHOICES_S,
   HORIZON_CHOICES_MIN,
   IDLE_STOP_MIN,
   LOAD_THRESHOLD_DEFAULT,
+  XFER_LEAD_CHOICES_S,
 } from "../../config";
 import { parseCid } from "../../core/myPosition";
+import type { AlertStage } from "../../core/alerts";
 import {
+  ALERT_STAGES,
   INBOUND_LIMIT_CHOICES,
   LOAD_THRESHOLD_MAX,
   SCOPE_VECTOR_CHOICES,
+  STAGE_TONE_IDS,
   TONE_IDS,
+  layoutName,
   loadThreshold,
   type Brightness,
+  type StageTone,
 } from "../../store/settings";
 import { useStore } from "../../store/store";
 
@@ -116,6 +123,131 @@ function IntField({
   );
 }
 
+const STAGE_LABEL: Record<AlertStage, string> = {
+  HANDOFF: "HANDOFF TONE",
+  XFER: "XFER TONE",
+  ALERT: "TERM CTL TONE",
+};
+
+const STAGE_TONE_LABEL: Record<StageTone, string> = {
+  default: "DEFAULT",
+  chime: "CHIME",
+  high: "HIGH",
+  low: "LOW",
+  off: "OFF",
+};
+
+/** Turns on OS notifications, asking the browser for permission first. */
+async function enableNotifications(on: boolean): Promise<string | null> {
+  const st = useStore.getState();
+  if (!on) {
+    st.patchSettings({ notifyAlerts: false });
+    return null;
+  }
+  if (typeof Notification === "undefined") return "THIS BROWSER HAS NO NOTIFICATIONS";
+  const permission =
+    Notification.permission === "default"
+      ? await Notification.requestPermission()
+      : Notification.permission;
+  if (permission !== "granted") return "NOTIFICATIONS ARE BLOCKED FOR THIS SITE IN THE BROWSER";
+  st.patchSettings({ notifyAlerts: true });
+  return null;
+}
+
+/** LAYOUT: named window arrangements, reset, and export/import of every setting. */
+function LayoutSection() {
+  const layouts = useStore((s) => s.settings.layouts);
+  const st = useStore.getState();
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const fileId = useId();
+  const names = Object.keys(layouts);
+
+  const exportSettings = () => {
+    const blob = new Blob([JSON.stringify(useStore.getState().settings, null, 2)], {
+      type: "application/json",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "airspace-monitor-settings.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const importFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const ok = useStore.getState().importSettings(JSON.parse(await file.text()));
+      setMessage(ok ? "SETTINGS IMPORTED" : "NOT A SETTINGS EXPORT FROM THIS VERSION");
+    } catch {
+      setMessage("COULD NOT READ THAT FILE");
+    }
+  };
+
+  return (
+    <>
+      <h3>LAYOUT</h3>
+      <div className="row">
+        <input
+          value={name}
+          placeholder="NAME"
+          aria-label="Layout name"
+          maxLength={20}
+          spellCheck={false}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <button
+          type="button"
+          disabled={layoutName(name) === null}
+          onClick={() => {
+            const ok = st.saveLayout(name);
+            setMessage(ok ? `SAVED ${layoutName(name)}` : "TOO MANY LAYOUTS: DELETE ONE FIRST");
+            if (ok) setName("");
+          }}
+        >
+          SAVE CURRENT
+        </button>
+        <button type="button" onClick={() => st.resetLayout()}>
+          RESET LAYOUT
+        </button>
+      </div>
+      {names.map((n) => (
+        <div className="row" key={n}>
+          <span>{n}</span>
+          <button type="button" onClick={() => st.loadLayout(n)}>
+            LOAD
+          </button>
+          <button type="button" onClick={() => st.deleteLayout(n)}>
+            DELETE
+          </button>
+        </div>
+      ))}
+      <div className="row">
+        <button type="button" onClick={exportSettings}>
+          EXPORT SETTINGS
+        </button>
+        <label htmlFor={fileId} className="dim">
+          IMPORT
+        </label>
+        <input
+          id={fileId}
+          type="file"
+          accept="application/json,.json"
+          onChange={(e) => {
+            void importFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+        />
+      </div>
+      {message && <p className="note caution">{message}</p>}
+      <p className="dim note">
+        LAYOUTS KEEP WHICH WINDOWS ARE OPEN AND WHERE. EXPORT SAVES EVERY SETTING TO A FILE TO MOVE
+        TO ANOTHER COMPUTER OR TO /DEV/.
+      </p>
+    </>
+  );
+}
+
 /** SETTINGS (§8). Everything here is saved in this browser only. */
 export function SettingsWindow() {
   const settings = useStore((s) => s.settings);
@@ -125,6 +257,7 @@ export function SettingsWindow() {
   const cidId = useId();
   const volId = useId();
   const devId = useId();
+  const [notifyError, setNotifyError] = useState<string | null>(null);
   const cid = parseCid(settings.myCid);
   const selectedKey = settings.selectedAirspace;
   const selectedLabel =
@@ -191,6 +324,37 @@ export function SettingsWindow() {
         onPick={st.setAlertThreshold}
         format={mmss}
       />
+      <Choices
+        label="HANDOFF AT"
+        choices={HANDOFF_LEAD_CHOICES_S}
+        value={settings.handoffAlertS}
+        onPick={(v) => st.patchSettings({ handoffAlertS: v })}
+        format={mmss}
+      />
+      <Choices
+        label="XFER AT"
+        choices={XFER_LEAD_CHOICES_S}
+        value={settings.xferCommS}
+        onPick={(v) => st.patchSettings({ xferCommS: v })}
+        format={mmss}
+      />
+      {ALERT_STAGES.map((stage) => (
+        <div className="row" role="group" aria-label={STAGE_LABEL[stage]} key={stage}>
+          <span>{STAGE_LABEL[stage]}</span>
+          {STAGE_TONE_IDS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={settings.stageTones[stage] === t}
+              onClick={() =>
+                st.patchSettings({ stageTones: { ...settings.stageTones, [stage]: t } })
+              }
+            >
+              {STAGE_TONE_LABEL[t]}
+            </button>
+          ))}
+        </div>
+      ))}
       <div className="row">
         <label htmlFor={volId}>VOLUME</label>
         <input
@@ -253,6 +417,53 @@ export function SettingsWindow() {
           ALSO ALERT {mmss(settings.alertThresholdS)} BEFORE ENTRY
         </label>
       </div>
+
+      <h3>ATTENTION</h3>
+      <div className="row">
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.tabAlerts}
+            onChange={(e) => st.patchSettings({ tabAlerts: e.target.checked })}
+          />{" "}
+          ALERT COUNT IN THE BROWSER TAB TITLE AND ICON
+        </label>
+      </div>
+      <div className="row">
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.notifyAlerts}
+            onChange={(e) => void enableNotifications(e.target.checked).then(setNotifyError)}
+          />{" "}
+          NOTIFICATIONS FOR NEW ALERTS WHILE THIS PAGE IS HIDDEN
+        </label>
+      </div>
+      {notifyError && <p className="note caution">{notifyError}</p>}
+      <div className="row">
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.alertCues}
+            onChange={(e) => st.patchSettings({ alertCues: e.target.checked })}
+          />{" "}
+          ALERT TEXT CUES (H / X / T AND LINE STYLE, NOT JUST COLOR)
+        </label>
+      </div>
+      <div className="row">
+        <label>
+          <input
+            type="checkbox"
+            checked={settings.highContrast}
+            onChange={(e) => st.patchSettings({ highContrast: e.target.checked })}
+          />{" "}
+          COLOR-BLIND-SAFE ALERT COLORS (LISTS)
+        </label>
+      </div>
+      <p className="dim note">
+        NOTIFICATIONS AND THE TAB TITLE WORK WITH SOUND OFF. TO PUT ALERTS OVER CRC, USE THE OVERLAY
+        BUTTON (CHROME OR EDGE KEEP IT ON TOP).
+      </p>
 
       <h3>LISTS</h3>
       <Choices
@@ -356,6 +567,8 @@ export function SettingsWindow() {
         AIRCRAFT COUNT THAT TURNS A LOAD BAR RED, PER AIRSPACE (ALSO SET IN THE LOAD WINDOW).
         DEFAULT {LOAD_THRESHOLD_DEFAULT}; BLANK RESETS.
       </p>
+
+      <LayoutSection />
 
       <h3>DATA</h3>
       <div className="row">
