@@ -1,0 +1,52 @@
+# systemd unit for the Airspace Monitor server, behind deploy/nginx.conf.
+#
+# 1. Make a user to run it:   sudo useradd --system --home /var/www/vatsim-airspace-monitor vam
+# 2. Check out the repo at /var/www/vatsim-airspace-monitor (or change the paths below),
+#    then `npm ci` and `npm run build:sites`. node_modules stays: the server serves the
+#    fonts from it. Node 22.18 or newer must be at /usr/bin/node.
+# 3. Copy .env.example to .env and fill it in (PUBLIC_URL=https://<domain>, PORT=3000,
+#    VATSIM_AUTH_BASE=https://auth.vatsim.net, the client ID and secret, SESSION_SECRET).
+#    Then `sudo chown vam: .env && sudo chmod 600 .env`, and `sudo chown -R vam: data`.
+# 4. Install as /etc/systemd/system/airspace-monitor.service, then
+#    `sudo systemctl daemon-reload && sudo systemctl enable --now airspace-monitor`.
+#    Logs: `journalctl -u airspace-monitor`.
+#
+# After `npm run build:sites` the new build is served right away; restart only after
+# changing the server code or .env (`sudo systemctl restart airspace-monitor`).
+
+[Unit]
+Description=Airspace Monitor server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vam
+Group=vam
+WorkingDirectory=/var/www/vatsim-airspace-monitor
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node --env-file-if-exists=.env server/index.ts
+Restart=on-failure
+RestartSec=5
+# index.ts exits 0 on SIGTERM after closing the listener.
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# The server only writes the access lists (DATA_DIR, default data/); everything else is
+# read-only to it.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/www/vatsim-airspace-monitor/data
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
