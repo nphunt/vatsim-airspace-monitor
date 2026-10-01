@@ -11,7 +11,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "server": "node --env-file-if-exists=.env server/index.ts",
+    "server": "npx tsx --env-file-if-exists=.env server/index.ts",
     "server:dev": "node --env-file-if-exists=.env --watch server/index.ts",
     "build:sites": "node scripts/build-sites.mjs",
     "test": "vitest run",
@@ -34,6 +34,7 @@
     "express": "^5.2.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tsx": "^4.23.15",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
