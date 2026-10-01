@@ -1,7 +1,8 @@
 import { useStore } from "../../store/store";
-import { alertAction, alertClass, formatCrossing } from "../format";
+import { alertAction, alertClass, formatCrossing, rowClass } from "../format";
 import { onAircraftContextMenu, onListBackgroundClick, useClosed } from "../closedAircraft";
 import { useEngineNow } from "../hooks";
+import { useSearchMatch } from "../search";
 
 export function AlertsTitle() {
   const alerts = useStore((s) => s.engine.alerts);
@@ -25,6 +26,7 @@ export function AlertsList() {
   const selectable = useStore((s) => s.engine.ready?.selectable);
   const ack = useStore((s) => s.ack);
   const closed = useClosed();
+  const isFound = useSearchMatch();
   const now = useEngineNow();
   const own = selectable?.find((a) => a.key === selectedKey)?.label ?? "---";
 
@@ -47,7 +49,11 @@ export function AlertsList() {
             return (
               <tr
                 key={a.key}
-                className={a.state === "EXITED" || closed.has(a.cid) ? "dim" : alertClass(a)}
+                className={rowClass(
+                  a.state === "EXITED" || closed.has(a.cid) ? "dim" : alertClass(a),
+                  false,
+                  isFound(a.callsign),
+                )}
                 tabIndex={a.state === "ACTIVE" ? 0 : -1}
                 onClick={onAck}
                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onAck()}

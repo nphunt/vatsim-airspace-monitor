@@ -39,6 +39,13 @@ export const ALT_EXTRAPOLATION_MAX_S = 90;
 
 // User-selectable settings (§8, M9).
 export const ALERT_THRESHOLD_CHOICES_S = [60, 90, 120, 180, 300] as const;
+/** Staffed exits: HANDOFF (tag handoff) lead times, then XFER COMM lead times, seconds. */
+export const HANDOFF_LEAD_CHOICES_S = [120, 180, 240, 300, 360] as const;
+export const XFER_LEAD_CHOICES_S = [30, 45, 60, 90] as const;
+/** SNOOZE button: silence tones this many minutes. */
+export const SNOOZE_MIN = 5;
+/** Most named layouts a user can save. */
+export const LAYOUTS_MAX = 8;
 export const FONT_SIZE_PX = 13;
 export const FONT_SIZE_CHOICES_PX = [11, 12, 13, 14, 16, 18] as const;
 /** BRIGHT (§7.1): percent, per element group. */

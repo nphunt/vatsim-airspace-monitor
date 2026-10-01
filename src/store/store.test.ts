@@ -3,7 +3,8 @@ import type { AlertEntry } from "../core/alerts";
 import type { FeedStatus } from "../data/feed";
 import type { Prediction, PredictionSet } from "../data/types";
 import type { ToEngine } from "../worker/protocol";
-import { engineConfig, engineNow, setEngineSender, useStore } from "./store";
+import { DEFAULT_SETTINGS } from "./settings";
+import { engineConfig, engineNow, setEngineSender, setTonePlayer, useStore } from "./store";
 
 const feed: FeedStatus = {
   lastUpdateTimestamp: 1_000,
@@ -211,5 +212,89 @@ describe("engineConfig", () => {
     const s = useStore.getState().settings;
     expect(engineConfig({ ...s, myCid: "" }).myCid).toBeNull();
     expect(engineConfig({ ...s, myCid: "x1" }).myCid).toBeNull();
+  });
+});
+
+describe("alert tones", () => {
+  const entry = (cid: number, stage: AlertEntry["stage"], lastToneAt: number) =>
+    ({ key: `exit:${cid}`, cid, stage, state: "ACTIVE", lastToneAt }) as AlertEntry;
+  let played: (string | undefined)[] = [];
+
+  beforeEach(() => {
+    played = [];
+    setTonePlayer((t) => played.push(t));
+    useStore.getState().engineStarted(0);
+    useStore.setState({ snoozeUntil: 0 });
+    useStore.getState().patchSettings({ stageTones: { ...DEFAULT_SETTINGS.stageTones } });
+  });
+
+  it("plays the toned stage's own tone", () => {
+    const st = useStore.getState();
+    st.patchSettings({ stageTones: { HANDOFF: "low", XFER: "off", ALERT: "default" } });
+    st.engineMessage({ type: "alerts", alerts: [entry(1, "HANDOFF", 5)], tone: true }, 1);
+    st.engineMessage({ type: "alerts", alerts: [entry(1, "XFER", 9)], tone: true }, 2);
+    expect(played).toEqual(["low"]); // XFER is OFF
+  });
+
+  it("stays silent while snoozed, and toggles the snooze", () => {
+    const st = useStore.getState();
+    st.toggleSnooze(Date.now());
+    expect(useStore.getState().snoozeUntil).toBeGreaterThan(Date.now());
+    st.engineMessage({ type: "alerts", alerts: [entry(1, "HANDOFF", 5)], tone: true }, 1);
+    expect(played).toEqual([]);
+    st.toggleSnooze(Date.now());
+    expect(useStore.getState().snoozeUntil).toBe(0);
+  });
+});
+
+describe("layouts and settings import", () => {
+  it("saves, loads, deletes and resets named layouts", () => {
+    const st = useStore.getState();
+    st.resetLayout();
+    st.patchWindow("scope", { open: true, docked: false, x: 300 });
+    expect(st.saveLayout("  two screens ")).toBe(true);
+    expect(Object.keys(useStore.getState().settings.layouts)).toEqual(["TWO SCREENS"]);
+    st.resetLayout();
+    expect(useStore.getState().settings.windows.scope.open).toBe(false);
+    st.loadLayout("TWO SCREENS");
+    expect(useStore.getState().settings.windows.scope).toMatchObject({ open: true, x: 300 });
+    st.deleteLayout("TWO SCREENS");
+    expect(useStore.getState().settings.layouts).toEqual({});
+    expect(st.saveLayout("   ")).toBe(false);
+  });
+
+  it("caps the number of layouts but still lets one be overwritten", () => {
+    const st = useStore.getState();
+    for (let i = 0; i < 8; i++) expect(st.saveLayout(`L${i}`)).toBe(true);
+    expect(st.saveLayout("ONE MORE")).toBe(false);
+    expect(st.saveLayout("L3")).toBe(true);
+    for (let i = 0; i < 8; i++) st.deleteLayout(`L${i}`);
+  });
+
+  it("imports an exported file, keeping the closed list, and refuses anything else", () => {
+    const st = useStore.getState();
+    st.setClosed(11, true);
+    const exported = JSON.parse(
+      JSON.stringify({ ...useStore.getState().settings, horizonMin: 60, closed: [] }),
+    );
+    expect(st.importSettings(exported)).toBe(true);
+    expect(useStore.getState().settings.horizonMin).toBe(60);
+    expect(useStore.getState().settings.closed).toEqual([11]);
+    expect(st.importSettings({ schemaVersion: 99 })).toBe(false);
+    expect(st.importSettings("nope")).toBe(false);
+    expect(st.importSettings(null)).toBe(false);
+  });
+});
+
+describe("alert lead times reach the engine", () => {
+  it("sends HANDOFF and XFER lead times in the config", () => {
+    const sentHere: ToEngine[] = [];
+    setEngineSender((m) => sentHere.push(m));
+    useStore.getState().patchSettings({ handoffAlertS: 300, xferCommS: 90 });
+    const cfg = sentHere.find((m) => m.type === "config");
+    expect(cfg && cfg.type === "config" && cfg.config).toMatchObject({
+      handoffAlertS: 300,
+      xferCommS: 90,
+    });
   });
 });

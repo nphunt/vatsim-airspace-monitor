@@ -7,6 +7,8 @@ import type { NeighborStatus } from "../core/neighbors";
 import type { MyPositionStatus } from "../core/myPosition";
 import type { FeedStatus } from "../data/feed";
 import type { Prediction, PredictionSet } from "../data/types";
+import { tonedAlerts, toneForAlerts } from "../ui/attention";
+import { LAYOUTS_MAX, SNOOZE_MIN } from "../config";
 import { findPrediction } from "../ui/format";
 import { openWindow } from "../ui/windows/layout";
 import type {
@@ -18,11 +20,14 @@ import type {
 } from "../worker/protocol";
 import type { ReplayStatus } from "../worker/replay";
 import {
+  DEFAULT_SETTINGS,
   loadSettings,
+  parseSettings,
   saveSettings,
   CLOSED_MAX,
   LOAD_THRESHOLD_MAX,
   altBounds,
+  layoutName,
   type AudioDevice,
   type Brightness,
   type LoadViewId,
@@ -77,6 +82,21 @@ export interface AircraftMenu {
   callsign: string;
   x: number;
   y: number;
+  /** Opened in the pop-out window rather than the page. */
+  popout?: boolean;
+}
+
+/**
+ * The external window holding popped-out windows: a Document Picture-in-Picture window
+ * (always on top of other apps, Chrome/Edge) or an ordinary popup.
+ */
+export interface PopoutState {
+  win: Window;
+  /** Element in the pop-out document that the windows render into. */
+  root: HTMLElement;
+  ids: WindowId[];
+  /** True for Picture-in-Picture, so the UI can say it stays on top. */
+  onTop: boolean;
 }
 
 export interface AudioView {
@@ -99,6 +119,16 @@ interface AppState {
   paused: boolean;
   /** Open right-click menu, or null. Not persisted. */
   menu: AircraftMenu | null;
+  /** Tones are silenced until this local time (ms); 0 = not snoozed. Not persisted. */
+  snoozeUntil: number;
+  /** Callsign being searched for (FIND). Not persisted. */
+  search: string;
+  /** Bumped to move focus to the FIND box. */
+  findFocus: number;
+  /** Shortcut help overlay open. Not persisted. */
+  helpOpen: boolean;
+  /** Pop-out window, or null. Not persisted. */
+  popout: PopoutState | null;
 
   engineStarted(localNow: number): void;
   engineMessage(msg: FromEngine, localNow: number): void;
@@ -149,6 +179,22 @@ interface AppState {
   setIdleStop(on: boolean): void;
   setPaused(paused: boolean): void;
   patchAudio(patch: Partial<AudioView>): void;
+
+  /** Any persisted setting, for the plain on/off and choice settings. */
+  patchSettings(patch: Partial<Settings>): void;
+  /** Snooze tones for SNOOZE_MIN minutes, or cancel a running snooze. */
+  toggleSnooze(localNow: number): void;
+  setSearch(q: string): void;
+  focusFind(): void;
+  setHelpOpen(open: boolean): void;
+  setPopout(p: PopoutState | null): void;
+  /** Named layouts (windows and column widths). */
+  saveLayout(name: string): boolean;
+  loadLayout(name: string): void;
+  deleteLayout(name: string): void;
+  resetLayout(): void;
+  /** Replace settings from an exported file; false when it is not a settings export. */
+  importSettings(raw: unknown): boolean;
 }
 
 const initialEngine: EngineView = {
@@ -177,8 +223,8 @@ export function setEngineSender(fn: (msg: ToEngine) => void): void {
 }
 
 // Likewise the audio player, so the store never imports Web Audio.
-let playTone: () => void = () => {};
-export function setTonePlayer(fn: () => void): void {
+let playTone: (tone?: ToneId) => void = () => {};
+export function setTonePlayer(fn: (tone?: ToneId) => void): void {
   playTone = fn;
 }
 
@@ -193,6 +239,8 @@ export function engineConfig(s: Settings): EngineConfig {
     loadOpen: s.windows.load.open,
     scopeOpen: s.windows.scope.open,
     alertThresholdS: s.alertThresholdS,
+    handoffAlertS: s.handoffAlertS,
+    xferCommS: s.xferCommS,
     altFloor: s.altFloor,
     altCeiling: s.altCeiling,
     closedCids: s.closed,
@@ -231,6 +279,11 @@ export const useStore = create<AppState>()((set, get) => {
     selection: null,
     paused: false,
     menu: null,
+    snoozeUntil: 0,
+    search: "",
+    findFocus: 0,
+    helpOpen: false,
+    popout: null,
 
     engineStarted: (localNow) => set({ engine: { ...initialEngine, startedAt: localNow } }),
 
@@ -267,10 +320,15 @@ export const useStore = create<AppState>()((set, get) => {
           if (sel && found) set({ selection: { cid: sel.cid, last: found.p } });
           break;
         }
-        case "alerts":
+        case "alerts": {
+          const toned = tonedAlerts(e.alerts, msg.alerts);
           e.alerts = msg.alerts;
-          if (msg.tone) playTone();
+          if (msg.tone && Date.now() >= get().snoozeUntil) {
+            const tone = toneForAlerts(toned, get().settings);
+            if (tone) playTone(tone);
+          }
           break;
+        }
         case "nav":
           // A load error also arrives as an "error" message, for the errors list.
           e.nav = { cycle: msg.cycle, expires: msg.expires, error: msg.error };
@@ -354,5 +412,45 @@ export const useStore = create<AppState>()((set, get) => {
       send({ type: "pause", paused });
     },
     patchAudio: (patch) => set({ audio: { ...get().audio, ...patch } }),
+
+    patchSettings: (patch) => updateSettings(patch),
+    toggleSnooze: (localNow) =>
+      set({ snoozeUntil: get().snoozeUntil > localNow ? 0 : localNow + SNOOZE_MIN * 60_000 }),
+    setSearch: (search) => set({ search: search.slice(0, 12) }),
+    focusFind: () => set({ findFocus: get().findFocus + 1 }),
+    setHelpOpen: (helpOpen) => set({ helpOpen }),
+    setPopout: (popout) => set({ popout }),
+    saveLayout: (raw) => {
+      const name = layoutName(raw);
+      const { layouts, windows, columns } = get().settings;
+      if (!name || (!(name in layouts) && Object.keys(layouts).length >= LAYOUTS_MAX)) return false;
+      updateSettings({
+        layouts: { ...layouts, [name]: structuredClone({ windows, columns }) },
+      });
+      return true;
+    },
+    loadLayout: (name) => {
+      const l = get().settings.layouts[name];
+      if (l) updateSettings(structuredClone({ windows: l.windows, columns: l.columns }));
+    },
+    deleteLayout: (name) => {
+      const layouts = Object.fromEntries(
+        Object.entries(get().settings.layouts).filter(([k]) => k !== name),
+      );
+      updateSettings({ layouts });
+    },
+    resetLayout: () =>
+      updateSettings(
+        structuredClone({ windows: DEFAULT_SETTINGS.windows, columns: DEFAULT_SETTINGS.columns }),
+      ),
+    importSettings: (raw) => {
+      const ok =
+        typeof raw === "object" &&
+        raw !== null &&
+        (raw as { schemaVersion?: unknown }).schemaVersion === DEFAULT_SETTINGS.schemaVersion;
+      if (!ok) return false;
+      updateSettings({ ...parseSettings(raw), closed: get().settings.closed });
+      return true;
+    },
   };
 });

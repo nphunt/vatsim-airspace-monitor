@@ -10,8 +10,8 @@ import { setTonePlayer, useStore } from "../store/store";
 
 /**
  * Wires aural alerts (§6.3): tone playback for engine alerts, AudioContext state, the
- * output device (re-resolved when devices change), the "click to enable" overlay, and
- * the `A` key to acknowledge all ACTIVE alerts.
+ * output device (re-resolved when devices change) and the "click to enable" overlay.
+ * (Key shortcuts, `A` to acknowledge among them, are in ShortcutController.)
  */
 export function AudioController() {
   const state = useStore((s) => s.audio.state);
@@ -51,18 +51,6 @@ export function AudioController() {
       navigator.mediaDevices?.removeEventListener("devicechange", refresh);
     };
   }, [saved, state, patchAudio]);
-
-  // `A` acknowledges every ACTIVE alert (§6.1 "click row or press key").
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "a" || e.ctrlKey || e.metaKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t?.closest("input, textarea, select, [contenteditable]")) return;
-      useStore.getState().ack(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   if (state !== "locked") return null;
   return (

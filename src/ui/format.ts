@@ -26,10 +26,14 @@ export function alertAction(a: AlertEntry): string {
   return a.kind === "exit" ? "TERM CTL" : to;
 }
 
-/** Adds the selected-row class (§7.3) to a row's alert/dim class. */
-export function rowClass(base: string | undefined, selected: boolean): string | undefined {
-  if (!selected) return base;
-  return base ? `${base} selected` : "selected";
+/** Adds the selected-row (§7.3) and FIND-match classes to a row's alert/dim class. */
+export function rowClass(
+  base: string | undefined,
+  selected: boolean,
+  found = false,
+): string | undefined {
+  const parts = [base, selected ? "selected" : undefined, found ? "found" : undefined];
+  return parts.filter(Boolean).join(" ") || undefined;
 }
 
 /** Toolbar UTC clock, ERAM style: "HHMM SS". */

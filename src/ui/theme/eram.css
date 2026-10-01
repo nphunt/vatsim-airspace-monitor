@@ -808,3 +808,140 @@ a.eram-tb-btn {
   text-align: left;
   padding: 3px 6px;
 }
+
+/* ---- FIND (callsign search) ---- */
+
+.eram-find {
+  width: 9ch;
+  padding: 2px 4px;
+}
+
+.eram-find[aria-invalid="true"] {
+  border-color: var(--eram-alert);
+  color: var(--eram-alert);
+}
+
+.eram-list tr.found td {
+  outline: 1px solid var(--eram-toolbar-active);
+  outline-offset: -1px;
+}
+
+/* ---- Alert cues that don't depend on color (SETTINGS > ALERT TEXT CUES) ---- */
+
+html[data-cues] .eram-list tr.handoff-active td:first-child::before,
+html[data-cues] .eram-list tr.handoff-acked td:first-child::before {
+  content: "H ";
+}
+
+html[data-cues] .eram-list tr.xfer-active td:first-child::before,
+html[data-cues] .eram-list tr.xfer-acked td:first-child::before {
+  content: "X ";
+}
+
+html[data-cues] .eram-list tr.alert-active td:first-child::before,
+html[data-cues] .eram-list tr.alert-acked td:first-child::before {
+  content: "T ";
+}
+
+html[data-cues] .eram-list tr.handoff-active td,
+html[data-cues] .eram-list tr.handoff-acked td {
+  text-decoration: underline;
+}
+
+html[data-cues] .eram-list tr.xfer-active td,
+html[data-cues] .eram-list tr.xfer-acked td {
+  text-decoration: underline double;
+}
+
+html[data-cues] .eram-list tr.alert-active td,
+html[data-cues] .eram-list tr.alert-acked td {
+  text-decoration: overline;
+}
+
+/* Color-blind-safe alert colors (Okabe-Ito): orange, sky blue, vermillion-pink. */
+html[data-contrast] {
+  --eram-handoff: #e69f00;
+  --eram-caution: #56b4e9;
+  --eram-alert: #f0428a;
+}
+
+/* ---- Stale data banner ---- */
+
+.eram-stale {
+  flex: none;
+  margin: 0;
+  background: var(--eram-alert);
+  color: var(--eram-bg);
+  padding: 3px 6px;
+  animation: eram-blink 1s steps(1) infinite;
+}
+
+/* ---- Shortcut help and first-run hints ---- */
+
+.eram-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.75);
+  padding: 16px;
+}
+
+.eram-dialog-box {
+  max-width: 460px;
+  max-height: 100%;
+  overflow: auto;
+  border: 1px solid var(--eram-window-border);
+  background: var(--eram-bg);
+  padding: 8px 12px;
+}
+
+.eram-dialog-box h2 {
+  font-size: 1em;
+  margin: 0 0 6px;
+  color: var(--eram-toolbar-active);
+}
+
+.eram-dialog-box table {
+  border-collapse: collapse;
+}
+
+.eram-dialog-box td {
+  padding: 1px 12px 1px 0;
+  vertical-align: top;
+}
+
+.eram-dialog-box td:first-child {
+  color: var(--eram-toolbar-active);
+  white-space: nowrap;
+}
+
+.eram-dialog-box ul {
+  margin: 0 0 8px;
+  padding-left: 16px;
+}
+
+/* ---- Pop-out window (Picture-in-Picture or popup) ---- */
+
+.eram-popout {
+  height: 100vh;
+}
+
+.eram-popout .eram-window.popped {
+  flex: 1 1 0;
+  min-height: 60px;
+}
+
+.eram-popout.attn {
+  outline: 3px solid var(--eram-handoff);
+  outline-offset: -3px;
+  animation: eram-outline-blink 1s steps(1) infinite;
+}
+
+@keyframes eram-outline-blink {
+  50% {
+    outline-color: transparent;
+  }
+}

@@ -12,6 +12,7 @@ import {
 } from "../format";
 import { onAircraftContextMenu, onListBackgroundClick, useClosed } from "../closedAircraft";
 import { useCharWidth, useElementWidth, useEngineNow } from "../hooks";
+import { useSearchMatch } from "../search";
 import { FacilityCell } from "./listCells";
 import { HEADERS, commonCell } from "./listColumns";
 
@@ -57,6 +58,7 @@ export function OutboundList() {
   const selectedCid = useStore((s) => s.selection?.cid ?? null);
   const selectAircraft = useStore((s) => s.selectAircraft);
   const closed = useClosed();
+  const isFound = useSearchMatch();
   const alertByCid = new Map(alerts.filter((a) => a.kind === "exit").map((a) => [a.cid, a]));
 
   const summary = exitSummary(rows);
@@ -107,6 +109,7 @@ export function OutboundList() {
                       // Closed (right-click CLOSE): dim, whatever its alert state.
                       closed.has(p.cid) ? "dim" : (alertClass(alert) ?? (clip ? "dim" : undefined)),
                       p.cid === selectedCid,
+                      isFound(p.callsign),
                     )}
                     onClick={() => selectAircraft(p.cid, window.innerWidth)}
                     onContextMenu={(e) => onAircraftContextMenu(e, p.cid, p.callsign)}

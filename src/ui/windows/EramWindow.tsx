@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent, type ReactNode } from "react";
 import type { WindowState } from "../../store/settings";
+import { popoutCanStayOnTop } from "../popout/popout";
 import { clampFloating, dockDragMode, magnetSnap, type DockDragMode, type Rect } from "./layout";
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
   onFocus(): void;
   onMinimize(): void;
   onToggleDock(): void;
+  /** Move this window to the pop-out window (stays on top of other apps in Chrome/Edge). */
+  onPopOut(): void;
   onClose(): void;
   /** Move/resize finished away from the edges: commit floating geometry. */
   onGeometry(patch: Pick<WindowState, "x" | "y" | "w" | "h">): void;
@@ -215,6 +218,17 @@ export function EramWindow(props: Props) {
           onClick={props.onToggleDock}
         >
           {state.docked ? "↗" : "↙"}
+        </button>
+        <button
+          type="button"
+          title={
+            popoutCanStayOnTop()
+              ? "Pop out: a separate window that stays on top of CRC"
+              : "Pop out to a separate window"
+          }
+          onClick={props.onPopOut}
+        >
+          ⧉
         </button>
         <button type="button" title="Close" onClick={props.onClose}>
           X

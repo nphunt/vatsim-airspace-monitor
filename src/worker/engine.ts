@@ -1,10 +1,12 @@
-import { FIXED_AIRSPACE_KEY } from "../config";
 import {
   EXIT_ALERT_S,
   FALLBACK_FEED_URL,
+  FIXED_AIRSPACE_KEY,
+  HANDOFF_ALERT_S,
   HORIZON_MIN,
   LOAD_STRATEGIC_MIN,
   UI_TICK_MS,
+  XFER_COMM_S,
 } from "../config";
 import { AlertMachine, DEFAULT_ALERT_CONFIG, type AlertConfig } from "../core/alerts";
 import { ServerOffsetEstimator, createLiveClock, type Clock } from "../core/clock";
@@ -65,6 +67,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
   loadOpen: false,
   scopeOpen: false,
   alertThresholdS: EXIT_ALERT_S,
+  handoffAlertS: HANDOFF_ALERT_S,
+  xferCommS: XFER_COMM_S,
   altFloor: null,
   altCeiling: null,
   closedCids: [],
@@ -84,6 +88,8 @@ function alertConfig(c: EngineConfig): AlertConfig {
     repeatToneS: c.repeatTone ? REPEAT_TONE_S : null,
     entryAlerts: c.entryAlerts,
     exitAlertS: c.alertThresholdS,
+    handoffAlertS: c.handoffAlertS,
+    xferCommS: c.xferCommS,
     entryAlertS: c.alertThresholdS,
   };
 }

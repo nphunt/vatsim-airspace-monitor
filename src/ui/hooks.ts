@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from "react";
 import { engineNow, useStore } from "../store/store";
+import { useOwnerWindow } from "./popout/OwnerWindow";
 
 /**
  * Engine clock (server-corrected, or replay virtual time) for display, re-rendering every
@@ -8,21 +9,23 @@ import { engineNow, useStore } from "../store/store";
  */
 export function useEngineNow(intervalMs = 250): number {
   const clock = useStore((s) => s.engine.clock);
+  const win = useOwnerWindow();
   const [local, setLocal] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setLocal(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
+    const id = win.setInterval(() => setLocal(Date.now()), intervalMs);
+    return () => win.clearInterval(id);
+  }, [intervalMs, win]);
   return engineNow(clock, local);
 }
 
 /** Local wall time, re-rendering every second (watchdog). */
 export function useLocalNow(): number {
+  const win = useOwnerWindow();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+    const id = win.setInterval(() => setNow(Date.now()), 1000);
+    return () => win.clearInterval(id);
+  }, [win]);
   return now;
 }
 

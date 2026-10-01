@@ -82,7 +82,7 @@ export function LoadWindow() {
     const style = getComputedStyle(canvas);
     const fontPx = parseFloat(style.fontSize) || 13;
     const layout = chartLayout(view, threshold, width, ch, fontPx);
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = canvas.ownerDocument.defaultView?.devicePixelRatio || 1;
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(layout.height * dpr);
     canvas.style.width = `${width}px`;
