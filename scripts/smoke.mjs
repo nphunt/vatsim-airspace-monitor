@@ -74,6 +74,20 @@ try {
     return route.abort();
   });
 
+  // The sign-in server is not running here (the preview proxies /api to nothing), so the
+  // page's GET /api/me is answered as a signed-in controller. This also renders the account
+  // buttons, so a crash in them would show up as a page error.
+  await context.route("**/api/me", (route) =>
+    route.fulfill({
+      json: {
+        cid: 100000,
+        name: "Smoke Test",
+        pages: { dev: false, admin: false },
+        superadmin: false,
+      },
+    }),
+  );
+
   context.on("request", (r) => requests.push(r.url()));
   context.on("response", (r) => {
     if (r.status() >= 400) problems.push(`${r.status()} ${r.url()}`);
