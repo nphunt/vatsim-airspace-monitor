@@ -1,9 +1,9 @@
 # Caddy in front of the Airspace Monitor server (server/README.md, "Moving to a VPS").
 #
 # 1. Point your domain's DNS A/AAAA record at the VPS.
-# 2. Replace airspace.example.com below with that domain. Use the same origin as
-#    PUBLIC_URL in .env and as the redirect URL registered with VATSIM Connect
-#    (https://<domain>/auth/callback).
+# 2. The site address below is airspace-monitor.memphisartcc.com. If you move, replace it
+#    with the new domain. Use the same origin as PUBLIC_URL in .env and as the redirect URL
+#    registered with VATSIM Connect (https://<domain>/auth/callback).
 # 3. Open ports 80 and 443 on the firewall, and keep 3000 closed: the server listens on
 #    127.0.0.1 only (HOST in .env).
 # 4. Install as /etc/caddy/Caddyfile and run `sudo systemctl reload caddy`.
@@ -12,7 +12,7 @@
 # the original Host header and X-Forwarded-For to the server. The server already sends the
 # CSP and Strict-Transport-Security headers, so they aren't repeated here.
 
-airspace.example.com {
+airspace-monitor.memphisartcc.com {
 	encode zstd gzip
 
 	header {
