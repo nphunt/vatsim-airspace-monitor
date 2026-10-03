@@ -42,7 +42,7 @@ describe("sign-in config", () => {
   });
 
   it("only returns to paths on this site", () => {
-    expect(safeReturn("/dev/?x=1")).toBe("/dev/?x=1");
+    expect(safeReturn("/admin/?x=1")).toBe("/admin/?x=1");
     expect(safeReturn("//evil.example")).toBe("/");
     expect(safeReturn("/\\evil.example")).toBe("/");
     expect(safeReturn("https://evil.example")).toBe("/");
@@ -103,7 +103,7 @@ describe("server", () => {
   beforeAll(async () => {
     vatsim = await listen(fakeVatsim());
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vam-server-"));
-    for (const which of ["live", "dev"]) {
+    for (const which of ["live"]) {
       fs.mkdirSync(path.join(tmp, "site", which, "assets"), { recursive: true });
       fs.writeFileSync(path.join(tmp, "site", which, "index.html"), `<p>${which} site</p>`);
       fs.writeFileSync(path.join(tmp, "site", which, "assets", "app-abc123.js"), "1");
@@ -153,7 +153,7 @@ describe("server", () => {
     fetch(`${site.url}${p}`, { redirect: "manual", headers: { cookie, accept } });
 
   /** Starts a sign-in and comes back from VATSIM with `query` (e.g. "code=1234567"). */
-  async function callback(query: string, returnTo = "/dev/"): Promise<Response> {
+  async function callback(query: string, returnTo = "/admin/"): Promise<Response> {
     const login = await get(`/auth/login?return=${encodeURIComponent(returnTo)}`);
     expect(login.status).toBe(302);
     const auth = new URL(login.headers.get("location")!);
@@ -166,7 +166,7 @@ describe("server", () => {
   }
 
   /** Runs the sign-in as `cid` and returns the session cookie. */
-  async function signIn(cid: number | string, returnTo = "/dev/"): Promise<string> {
+  async function signIn(cid: number | string, returnTo = "/admin/"): Promise<string> {
     const cb = await callback(`code=${cid}`, returnTo);
     if (cb.status !== 302) return "";
     expect(cb.headers.get("location")).toBe(returnTo);
@@ -176,12 +176,12 @@ describe("server", () => {
   }
 
   it("sends a signed-out page load straight to sign-in, and refuses other files", async () => {
-    for (const p of ["/", "/?replay=x", "/dev/", "/admin/"]) {
+    for (const p of ["/", "/?replay=x", "/admin/"]) {
       const page = await get(p);
       expect(page.status).toBe(302);
       expect(page.headers.get("location")).toBe(`/auth/login?return=${encodeURIComponent(p)}`);
     }
-    for (const p of ["/assets/app-abc123.js", "/dev/assets/app-abc123.js", "/dev/index.html"]) {
+    for (const p of ["/assets/app-abc123.js", "/admin/admin.js", "/admin/index.html"]) {
       expect((await get(p, "", "*/*")).status).toBe(401);
     }
     // What the sign-in and error pages need stays open.
@@ -196,42 +196,36 @@ describe("server", () => {
     expect(await res.text()).toContain("live site");
     const asset = await get("/assets/app-abc123.js", anyone, "*/*");
     expect(asset.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
-    expect((await get("/dev/", anyone)).status).toBe(403);
+    expect((await get("/admin/", anyone)).status).toBe(403);
   });
 
-  it("signs a listed CID in to /dev/, and denies everyone else", async () => {
+  it("opens the admin page for admins and listed CIDs, and denies everyone else", async () => {
     const outsider = await signIn(1234567);
-    const denied = await get("/dev/", outsider);
+    const denied = await get("/admin/", outsider);
     expect(denied.status).toBe(403);
     expect(await denied.text()).toContain("ACCESS DENIED: CID 1234567");
-    expect((await get("/dev/assets/app-abc123.js", outsider, "*/*")).status).toBe(403);
+    expect((await get("/admin/index.html", outsider, "*/*")).status).toBe(403);
 
     const admin = await signIn(10000010, "/admin/");
     const me = await (await get("/api/me", admin, "application/json")).json();
-    expect(me).toMatchObject({
-      cid: 10000010,
-      superadmin: true,
-      pages: { dev: true, admin: true },
-    });
+    expect(me).toMatchObject({ cid: 10000010, superadmin: true, pages: { admin: true } });
     expect((await get("/admin/", admin)).status).toBe(200);
 
-    // The admin lets 1234567 into /dev/; it works on their next request, same session.
+    // The admin lets 1234567 in; it works on their next request, same session.
     const save = await fetch(`${site.url}/api/access`, {
       method: "PUT",
       headers: { cookie: admin, "content-type": "application/json", origin: site.url },
-      body: JSON.stringify({ baseVersion: 0, pages: { dev: [1234567], admin: [] } }),
+      body: JSON.stringify({ baseVersion: 0, pages: { admin: [1234567] } }),
     });
     expect(save.status).toBe(200);
     expect(await save.json()).toMatchObject({ version: 1, updatedBy: 10000010 });
-    const open = await get("/dev/", outsider);
+    const open = await get("/admin/", outsider);
     expect(open.status).toBe(200);
-    expect(await open.text()).toContain("dev site");
     expect(open.headers.get("cache-control")).toMatch(/private/);
-    expect((await get("/admin/", outsider)).status).toBe(403);
 
     // Saved to disk.
     const disk = JSON.parse(fs.readFileSync(path.join(config.dataDir, "access.json"), "utf8"));
-    expect(disk.pages.dev).toEqual([1234567]);
+    expect(disk.pages.admin).toEqual([1234567]);
   });
 
   it("refuses stale, cross-origin and non-admin saves", async () => {
@@ -242,7 +236,7 @@ describe("server", () => {
         headers: { cookie, "content-type": "application/json", origin },
         body: JSON.stringify(body),
       });
-    const lists = { dev: [], admin: [] };
+    const lists = { admin: [] };
     expect((await put(admin, { baseVersion: 0, pages: lists })).status).toBe(200);
     const stale = await put(admin, { baseVersion: 0, pages: lists });
     expect(stale.status).toBe(409);
@@ -257,7 +251,7 @@ describe("server", () => {
   });
 
   it("shows why a sign-in failed, and signs no one in", async () => {
-    const login = await get("/auth/login?return=/dev/");
+    const login = await get("/auth/login?return=/admin/");
     const state = new URL(login.headers.get("location")!).searchParams.get("state");
     const cases: [Response, number, string][] = [
       [await get(`/auth/callback?code=1234567&state=${state}`), 400, "SIGN-IN EXPIRED"],
@@ -303,18 +297,18 @@ describe("server", () => {
 
   it("moves a sign-in started on another host name to PUBLIC_URL", async () => {
     const alias = site.url.replace("127.0.0.1", "localhost");
-    const res = await fetch(`${alias}/auth/login?return=/dev/`, { redirect: "manual" });
+    const res = await fetch(`${alias}/auth/login?return=/admin/`, { redirect: "manual" });
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe(`${site.url}/auth/login?return=/dev/`);
+    expect(res.headers.get("location")).toBe(`${site.url}/auth/login?return=/admin/`);
   });
 
   it("signs out", async () => {
-    const res = await fetch(`${site.url}/auth/logout?return=/dev/`, {
+    const res = await fetch(`${site.url}/auth/logout?return=/admin/`, {
       method: "POST",
       redirect: "manual",
     });
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/dev/");
+    expect(res.headers.get("location")).toBe("/admin/");
     expect(res.headers.get("set-cookie")).toMatch(/vam_session=;.*Max-Age=0/);
   });
 
@@ -327,7 +321,7 @@ describe("server", () => {
       };
     };
     expect((await prompt("/auth/login?return=/")).prompt).toBeNull();
-    expect((await prompt("/auth/login?switch=1&return=/dev/")).prompt).toBe("login");
+    expect((await prompt("/auth/login?switch=1&return=/admin/")).prompt).toBe("login");
 
     const out = await fetch(`${site.url}/auth/logout`, { method: "POST", redirect: "manual" });
     const flag = out.headers.getSetCookie().find((c) => c.startsWith("vam_signed_out="));

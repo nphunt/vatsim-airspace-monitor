@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Removed the development site at `/dev/`: the server no longer serves it, the toolbar `DEV`/`LIVE` buttons and the admin page's dev list are gone, and `npm run build:sites` builds only `main`.
+
 ## v2.0 — 2026-10-01
 
 Alerts that find you, and a site that knows who you are: an always-on-top alerts overlay, tab and desktop notifications and tunable timing; handoffs into approach control; arrivals; and the site behind VATSIM sign-in.

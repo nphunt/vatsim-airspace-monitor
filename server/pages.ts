@@ -184,7 +184,7 @@ export function privacyPage(): string {
       <h3>What we store</h3>
       <ul>
         <li><b>A sign-in cookie</b> (signed, HttpOnly) holding your CID and name, so you stay signed in. It expires on its own and is removed when you sign out. Two short-lived helper cookies are used while signing in and after signing out.</li>
-        <li><b>Access lists</b>: CIDs that an administrator has allowed onto the development site or the admin page. Only administrators change them.</li>
+        <li><b>Access lists</b>: CIDs that an administrator has allowed onto the admin page. Only administrators change them.</li>
         <li><b>Server logs</b>: when you sign in or are refused, the server logs your CID (and rating, for a successful sign-in) with the time. Administrator changes to the access lists are logged with the administrator's CID. The web server in front of it also logs each request (time, IP address, page, and browser type); those logs are deleted after 30 days. Logs stay on the server host and are not shared.</li>
         <li><b>In your browser only</b>: your settings, including the CID you enter for My Position, are saved in this browser's local storage. They are never sent to our server.</li>
       </ul>

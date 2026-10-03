@@ -23,21 +23,20 @@ describe("signed tokens", () => {
 });
 
 describe("access rules", () => {
-  it("admins open every page; others only what they're listed for", () => {
-    const a = { ...emptyAccess(), pages: { dev: [10], admin: [20] } };
-    expect(pagesFor(10, a, [1])).toEqual({ dev: true, admin: false });
-    expect(pagesFor(20, a, [1])).toEqual({ dev: true, admin: true });
-    expect(pagesFor(1, a, [1])).toEqual({ dev: true, admin: true });
-    expect(pagesFor(99, a, [1])).toEqual({ dev: false, admin: false });
+  it("admins open the admin page; others can't", () => {
+    const a = { ...emptyAccess(), pages: { admin: [20] } };
+    expect(pagesFor(20, a, [1])).toEqual({ admin: true });
+    expect(pagesFor(1, a, [1])).toEqual({ admin: true });
+    expect(pagesFor(99, a, [1])).toEqual({ admin: false });
   });
 
   it("validates updates into sorted, unique lists", () => {
-    expect(parseUpdate({ baseVersion: 0, pages: { dev: [3, 1, 3], admin: [] } })).toEqual({
+    expect(parseUpdate({ baseVersion: 0, pages: { admin: [3, 1, 3] } })).toEqual({
       baseVersion: 0,
-      pages: { dev: [1, 3], admin: [] },
+      pages: { admin: [1, 3] },
     });
-    expect(parseUpdate({ baseVersion: 0, pages: { dev: ["1"], admin: [] } })).toMatch(/not a CID/);
-    expect(parseUpdate({ pages: { dev: [], admin: [] } })).toMatch(/baseVersion/);
+    expect(parseUpdate({ baseVersion: 0, pages: { admin: ["1"] } })).toMatch(/not a CID/);
+    expect(parseUpdate({ pages: { admin: [] } })).toMatch(/baseVersion/);
     expect(parseUpdate(null)).toMatch(/JSON object/);
   });
 });

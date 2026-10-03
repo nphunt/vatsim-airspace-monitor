@@ -1,14 +1,12 @@
 #!/usr/bin/env node
-// Builds the two sites the Express server serves (server/README.md), each from its own
-// branch in a git worktree, so the checkout you're working in is never touched:
+// Builds the site the Express server serves (server/README.md) from its branch in a git
+// worktree, so the checkout you're working in is never touched:
 //
 //   main        -> site/live   (served at /)
-//   development -> site/dev    (served at /dev/)
 //
-//   npm run build:sites              both
-//   npm run build:sites -- live      just one (live or dev)
+//   npm run build:sites
 //
-// LIVE_REF / DEV_REF build another branch, tag or commit instead (e.g. origin/main).
+// LIVE_REF builds another branch, tag or commit instead (e.g. origin/main).
 // The worktrees are kept in .sites-build/ and reused; `npm ci` only runs again when a
 // branch's package-lock.json changes. A site is swapped in only after its build passes,
 // so a broken build leaves the one being served alone.
@@ -25,7 +23,6 @@ const SITE = path.resolve(ROOT, process.env.SITE_DIR || "site");
 
 const TARGETS = {
   live: { ref: process.env.LIVE_REF || "main", branch: "main", base: "/" },
-  dev: { ref: process.env.DEV_REF || "development", branch: "development", base: "/dev/" },
 };
 
 const NPM = process.platform === "win32" ? "npm.cmd" : "npm";

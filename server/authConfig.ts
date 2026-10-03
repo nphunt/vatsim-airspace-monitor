@@ -16,7 +16,7 @@ export interface AuthConfig {
   sessionTtlS: number;
   /** Built-in admins plus SUPERADMIN_CIDS. */
   superadmins: number[];
-  /** Holds live/ (served at /) and dev/ (served at /dev/). */
+  /** Holds live/ (served at /). */
   siteDir: string;
   /** Holds access.json. */
   dataDir: string;

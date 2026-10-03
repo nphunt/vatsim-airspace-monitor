@@ -111,7 +111,7 @@ A build with `GITHUB_ACTIONS=true` uses the GitHub Pages base path `/<repo-name>
 
 ### Server (VATSIM sign-in)
 
-`npm run server` runs an Express server that hosts everything behind VATSIM Connect sign-in: the live site at `/` (any VATSIM account) and the development site at `/dev/` (allowed CIDs only), with an admin page at `/admin/` for the access lists. `npm run build:sites` builds `main` and `development` for it. Setup, ngrok and VPS notes are in [server/README.md](server/README.md).
+`npm run server` runs an Express server that hosts everything behind VATSIM Connect sign-in: the live site at `/` (any VATSIM account), with an admin page at `/admin/` for the admin access list. `npm run build:sites` builds `main` and `development` for it. Setup, ngrok and VPS notes are in [server/README.md](server/README.md).
 
 ### Data
 
@@ -164,7 +164,6 @@ The feed poller and clock run in a Web Worker so they keep going when the page i
 The site is served by the Express server (see [server/README.md](server/README.md)) behind VATSIM Connect sign-in. It has two copies:
 
 - **Live:** `/`, built from `main`.
-- **Development:** `/dev/`, built from `development` and open only to listed CIDs, for testing before a release. It shows a `DEVELOPMENT BUILD … SOME THINGS MAY BREAK` notice and keeps its own settings (`vam-dev:v1:settings`), so testing there never changes anyone's live layout.
 
 GitHub Pages is no longer used: the old `deploy.yml` and `build-site.yml` workflows are removed, so turn off Settings → Pages if it is still on. Workflows in `.github/workflows/`:
 
@@ -189,6 +188,6 @@ GitHub Pages is no longer used: the old `deploy.yml` and `build-site.yml` workfl
 
 **Data PRs:** merge them by hand; a boundary change can move exit-into results. GitHub disables scheduled workflows after 60 days without repo activity, so don't let them pile up.
 
-**Settings changes:** users keep old settings in `localStorage` forever (key `vam:v1:settings`; `vam-dev:v1:settings` on `/dev/`). Adding a field is safe (old blobs get its default); changing an existing field's meaning or type needs a `SETTINGS_SCHEMA_VERSION` bump with a migration and a test that loads the old blob.
+**Settings changes:** users keep old settings in `localStorage` forever (key `vam:v1:settings`). Adding a field is safe (old blobs get its default); changing an existing field's meaning or type needs a `SETTINGS_SCHEMA_VERSION` bump with a migration and a test that loads the old blob.
 
 # This Project is built entirely by Claude Opus 5.5 and Claude Sonnet 5.
