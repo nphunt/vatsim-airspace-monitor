@@ -7,7 +7,7 @@ server adds what a browser alone cannot do well.
 > `.env.example`) and the server requires VATSIM Connect sign-in: `auth.ts` mounts the
 > sign-in routes, `/api/me` and `/api/access`, the feed and vNAS APIs answer 401 without a
 > session (`/api/health` and `/healthz` stay open), and the site is served from
-> `SITE_DIR/live` (any signed-in CID) and `SITE_DIR/dev` and `/admin/` (CIDs on their lists;
+> `SITE_DIR/live` (any signed-in CID) and `/admin/` (CIDs on its list;
 > build with `npm run build:sites`). `VAM_STATIC_DIR` is ignored then. Set none of the three
 > and the server runs open, as the API-only backend described below. Setting only some is an
 > error. `authConfig.ts` reads the settings; `access.ts`, `session.ts`, `vatsim.ts`,

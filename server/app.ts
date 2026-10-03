@@ -26,7 +26,7 @@ export function createApp({ config, feed, vnas, access }: AppDeps): Express {
   app.set("trust proxy", "loopback");
 
   // With sign-in on: its routes and headers first, then everything but /api/health needs a
-  // session, and the site itself comes from the live/dev builds behind their gates.
+  // session, and the site itself comes from the live build behind its gate.
   if (config.auth && !access) throw new Error("sign-in needs an AccessStore");
   const auth = config.auth ? mountAuth(app, config.auth, access!) : null;
 

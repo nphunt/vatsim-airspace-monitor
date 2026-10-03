@@ -12,7 +12,7 @@
  *                                     again, to sign in as someone else)
  *   GET  /auth/callback            -> VATSIM Connect redirect target
  *   POST /auth/logout?return=<path>
- *   GET  /api/me                   -> { cid, name, pages: { dev, admin }, superadmin }
+ *   GET  /api/me                   -> { cid, name, pages: { admin }, superadmin }
  *   GET  /api/access               -> the per-page CID lists (admins only)
  *   PUT  /api/access               -> replace them (admins only; { pages, baseVersion })
  *   GET  /admin/                   -> the page that edits the lists (admins only)
@@ -107,7 +107,7 @@ function wantsHtml(req: Request): boolean {
 export interface Auth {
   /** Answers 401 unless the request carries a valid session: for the data APIs. */
   apiGuard: RequestHandler;
-  /** Serves the fonts, admin page, /dev/ and the live build behind their gates. Mount last. */
+  /** Serves the fonts, admin page and the live build behind their gates. Mount last. */
   mountPages(): void;
 }
 
@@ -354,7 +354,7 @@ export function mountAuth(app: Express, config: AuthConfig, store: AccessStore):
 
     const missing = (which: string) => (req: Request, res: Response, next: NextFunction) => {
       if (wantsHtml(req) && !fs.existsSync(path.join(config.siteDir, which, "index.html"))) {
-        return res.status(503).send(noBuildPage(which === "live" ? "LIVE" : "DEVELOPMENT"));
+        return res.status(503).send(noBuildPage("LIVE"));
       }
       next();
     };
@@ -362,7 +362,6 @@ export function mountAuth(app: Express, config: AuthConfig, store: AccessStore):
     app.use("/_vam/fonts", serve(FONTS, false));
     app.use("/_vam", serve(path.join(HERE, "static"), false));
     app.use("/admin", gate("admin"), serve(path.join(HERE, "admin"), true));
-    app.use("/dev", gate("dev"), missing("dev"), serve(path.join(config.siteDir, "dev"), true));
     app.use(gate("live"), missing("live"), serve(path.join(config.siteDir, "live"), true));
   };
 

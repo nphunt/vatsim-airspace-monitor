@@ -2,16 +2,15 @@
 // Plain browser JavaScript so it ships with the server, not with either site build.
 // The server only serves /admin/ to admins; /api/access checks again on every call.
 
-/** @typedef {"dev" | "admin"} AccessPage */
+/** @typedef {"admin"} AccessPage */
 /** @typedef {Record<AccessPage, number[]>} Lists */
 
 /** @type {AccessPage[]} */
-const PAGES = ["dev", "admin"];
+const PAGES = ["admin"];
 
-const TITLES = { dev: "DEVELOPMENT SITE (/dev/)", admin: "ADMIN PAGE" };
+const TITLES = { admin: "ADMIN PAGE" };
 
 const NOTES = {
-  dev: "CIDS THAT MAY OPEN THE DEVELOPMENT SITE. ADMINS ALWAYS CAN.",
   admin: "CIDS THAT MAY OPEN THIS PAGE AND EDIT THESE LISTS. ADMINS CAN OPEN EVERY PAGE.",
 };
 

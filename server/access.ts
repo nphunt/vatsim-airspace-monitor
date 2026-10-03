@@ -5,11 +5,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 /** Pages whose access is a CID list the admins edit. */
-export const ACCESS_PAGES = ["dev", "admin"] as const;
+export const ACCESS_PAGES = ["admin"] as const;
 export type AccessPage = (typeof ACCESS_PAGES)[number];
 
 export const PAGE_TITLES: Record<AccessPage, string> = {
-  dev: "DEVELOPMENT SITE (/dev/)",
   admin: "ADMIN PAGE",
 };
 
@@ -53,7 +52,7 @@ export interface AccessUpdate {
 }
 
 export function emptyAccess(): StoredAccess {
-  return { pages: { dev: [], admin: [] }, version: 0, updatedAt: null, updatedBy: null };
+  return { pages: { admin: [] }, version: 0, updatedAt: null, updatedBy: null };
 }
 
 /** Pages a CID may open. Admins (and superadmins) can open everything. */
